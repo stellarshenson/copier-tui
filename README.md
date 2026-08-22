@@ -46,8 +46,9 @@ focused field - and every dependent answer recalculates as soon as it is changed
 
 ![the review screen](docs/assets/review.svg)
 
-Confirming hands the answers to copier and reports its verdict. A `--pretend` run says plainly
-that nothing was written.
+Confirming hands the answers to copier and reports its verdict on the line that has been
+narrating the run - mint on success with the destination, rose with copier's own message on
+failure. A `--pretend` run says plainly that nothing was written.
 
 ![the execution screen](docs/assets/execution.svg)
 
