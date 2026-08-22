@@ -20,11 +20,12 @@ from copier._cli import (
     CopierUpdateSubApp,
 )
 from copier._tools import try_enum
+from copier.errors import UnsafeTemplateError
 from plumbum import colors
 
 from copier_tui import __version__
 from copier_tui.app import run_survey
-from copier_tui.errors import EXIT_FAILURE, NotATerminalError
+from copier_tui.errors import EXIT_CANCELLED, EXIT_FAILURE, EXIT_UNSAFE, NotATerminalError
 from copier_ui import CopierUIError, Operation, TemplateUI
 
 
@@ -39,8 +40,15 @@ class _TuiSubcommand:
     """Shared launch path for the subcommands that open a survey."""
 
     def _headless(self) -> bool:
-        """True when copier's own non-interactive flags were given: --defaults, --force, --quiet."""
-        return bool(self.defaults or self.quiet or getattr(self, "force", False))
+        """True when copier's own flags say the survey is not the one asking.
+
+        `--defaults` answers everything, and `--force` implies it. `--quiet` is not one of
+        them: it suppresses status output and still asks. `--ask` is - it asks its questions
+        again at render time whatever answers were supplied, so the survey would collect an
+        answer only for copier to prompt for it on the render thread with the terminal held.
+        A user who asked for copier's own prompting gets copier's own prompting.
+        """
+        return bool(self.defaults or self.ask or getattr(self, "force", False))
 
     def _copier_kwargs(self) -> dict[str, Any]:
         """The subcommand's flags, as keyword arguments for copier's run_* function."""
@@ -60,7 +68,7 @@ class _TuiSubcommand:
     def _launch(self, src: str | None, destination_path: str, operation: Operation) -> int:
         """Check for a tty, load the template, run the survey; report load failures and exit."""
         if not (sys.stdin.isatty() and sys.stdout.isatty()):
-            message = "copier-tui needs a terminal; use --defaults or --quiet to run headless"
+            message = "copier-tui needs a terminal; use --defaults or --force to run headless"
             print(colors.red | str(NotATerminalError(message)), file=sys.stderr)
             return EXIT_FAILURE
         dst = Path(destination_path)
@@ -72,12 +80,18 @@ class _TuiSubcommand:
                 dst=dst,
                 data=self.data,
                 operation=operation,
+                unsafe=self.unsafe,
             )
         except CopierUIError as error:
             print(colors.red | str(error), file=sys.stderr)
+            if isinstance(error.__cause__, UnsafeTemplateError):
+                return EXIT_UNSAFE
             return EXIT_FAILURE
         with ui:
-            return run_survey(ui, dst, self._copier_kwargs())
+            code = run_survey(ui, dst, self._copier_kwargs())
+        if code == EXIT_CANCELLED:
+            print(colors.yellow | f"cancelled - nothing written to {dst}", file=sys.stderr)
+        return code
 
 
 @CopierTuiApp.subcommand("copy")

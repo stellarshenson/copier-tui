@@ -37,20 +37,27 @@ class TemplateUI:
     def from_template(
         cls,
         src: str | Path | None,
-        vcs_ref: str | None = None,
-        answers_file: str | Path | None = None,
         *,
         dst: str | Path = ".",
-        data: Mapping[str, Any] | None = None,
         operation: Operation = "copy",
+        vcs_ref: str | None = None,
+        answers_file: str | Path | None = None,
+        data: Mapping[str, Any] | None = None,
+        unsafe: bool = False,
     ) -> TemplateUI:
-        """Load a local path or git URL, seed answers, and compute the first state."""
+        """Load a local path or git URL, seed answers, and compute the first state.
+
+        A template declaring `_jinja_extensions` or `_tasks` is refused with a
+        `TemplateLoadError` unless `unsafe` is true or the template is trusted in copier's own
+        settings, matching what plain copier does before it imports anything.
+        """
         adapter = TemplateAdapter.open(
             src,
             Path(dst),
             vcs_ref=vcs_ref,
             answers_file=None if answers_file is None else Path(answers_file),
             operation=operation,
+            unsafe=unsafe,
         )
         try:
             schema = Schema(questions=adapter.questions())

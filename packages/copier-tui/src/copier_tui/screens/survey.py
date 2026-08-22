@@ -1,4 +1,4 @@
-"""The survey screen: every visible question as one scrolling form."""
+"""The survey screen: every visible question as one compact scrolling form."""
 
 from __future__ import annotations
 
@@ -6,19 +6,18 @@ from dataclasses import replace
 from typing import ClassVar
 
 from rich.text import Text
-from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import VerticalScroll
 from textual.css.query import NoMatches
-from textual.screen import ModalScreen, Screen
+from textual.message import Message
+from textual.screen import Screen
 from textual.widget import Widget
 from textual.widgets import Footer, OptionList, Select, SelectionList, Static, TextArea
-from textual.widgets.option_list import Option
 
-from copier_tui.theme import CYAN_BRIGHT, SURFACE_BG, TEXT_MUTED
-from copier_tui.widgets import FieldRow, HeaderBar, display_value
-from copier_ui import Schema, State, TemplateUI
+from copier_tui.theme import ROSE, TEXT_MUTED, TEXT_SUBTLE
+from copier_tui.widgets import FieldRow, HeaderBar
+from copier_ui import State, TemplateUI
 
 _ACTION_KEY = {
     "confirm": "enter",
@@ -28,25 +27,63 @@ _ACTION_KEY = {
 }
 """Screen action to the key it is bound to, for check_action."""
 
-_ARROW_OWNERS = (Select, SelectionList, TextArea)
-"""Controls that move a cursor of their own with up and down."""
+_ENTER_OWNERS = (OptionList, TextArea)
+"""Controls with nothing else that does enter's job: an open menu picks, an editor breaks
+the line. Everything else leaves enter alone, so one key confirms from anywhere in the form.
+
+A Switch and a collapsed Select are deliberately absent - space already toggles the one and
+opens the other. Handing them enter as well would cost the user the confirm key on every
+boolean and every choice, and the menu's own enter would close onto the Select that opened
+it, so a survey could never be confirmed from a choice field at all.
+"""
+
+_ARROW_OWNERS = (OptionList, TextArea)
+"""Controls that move a cursor of their own with up and down, at anything but their edge.
+
+SelectionList and the Select overlay are both OptionList subclasses, so both are covered.
+"""
+
+OPEN_HINT = "space opens the list"
+"""Shown while a collapsed choice control has focus, because enter confirms instead."""
+
+CANCEL_HINT = "press escape again to discard every answer and quit"
+"""Shown by the first escape; a second one within the arming window quits."""
+
+CANCEL_WINDOW = 3.0
+"""Seconds an armed escape stays armed. After that the safety goes back on by itself."""
 
 
-class SurveyScreen(Screen[bool]):
-    """The whole visible survey, scrollable, navigable in any order."""
+class SurveyScreen(Screen[None]):
+    """The whole visible survey, scrollable, navigable in any order.
 
-    DEFAULT_CSS = """
-    #survey-form {
+    It never dismisses itself. Review is stacked on top and popped off again, so the form
+    underneath keeps its scroll offset and its focused field for the whole run.
+    """
+
+    class Confirmed(Message):
+        """Every answer is valid and the user asked to move on."""
+
+    class Cancelled(Message):
+        """The user confirmed the second escape and wants out."""
+
+    DEFAULT_CSS = f"""
+    #survey-form {{
         width: 100%;
         height: 1fr;
-        padding: 1 1 0 1;
-    }
+        padding: 1 2 0 0;
+        scrollbar-size-vertical: 1;
+    }}
+    #survey-hint {{
+        height: 1;
+        width: 100%;
+        padding: 0 1;
+        color: {TEXT_MUTED};
+    }}
     """
 
     BINDINGS: ClassVar[list[Binding]] = [
         Binding("enter", "confirm", "Review", priority=True),
         Binding("escape", "cancel", "Cancel", priority=True),
-        Binding("f2", "jump", "Overview"),
         Binding("down", "focus_next", "Next field", show=False, priority=True),
         Binding("up", "focus_previous", "Previous field", show=False, priority=True),
     ]
@@ -55,14 +92,14 @@ class SurveyScreen(Screen[bool]):
         """Hold the template UI the rows are built from."""
         super().__init__(id="survey-screen")
         self.ui = ui
-        self._warn = Static(id="warn-box")
-        self._focus_before_warning: object = None
+        self._hint = Static(id="survey-hint")
+        self._armed = False
 
     def compose(self) -> ComposeResult:
-        """Header, the scrolling form, the blocking warning popup, footer."""
+        """Header, the scrolling form, the one reserved hint line, footer."""
         yield HeaderBar("survey")
         yield VerticalScroll(id="survey-form")
-        yield self._warn
+        yield self._hint
         yield Footer()
 
     def on_mount(self) -> None:
@@ -70,29 +107,47 @@ class SurveyScreen(Screen[bool]):
         self._refresh_rows()
         self.call_after_refresh(self._focus_first)
 
+    def on_screen_resume(self) -> None:
+        """Coming back from review: re-read the state, keeping scroll and focus as they were."""
+        self._refresh_rows()
+
     def on_field_row_changed(self, message: FieldRow.Changed) -> None:
         """Push the new value into copier_ui and refresh every row from the new state."""
         message.stop()
+        self._disarm()
         self.ui.set(message.field_id, message.value)
         self._refresh_rows()
+
+    def on_descendant_focus(self) -> None:
+        """The hint line and the header position follow the focus."""
+        self._disarm()
+        self._show_hint()
+        self._show_position()
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         """Give a key back to the control that owns it.
 
-        Enter opens a Select's menu, which then picks with enter and closes with escape;
-        up and down move the cursor inside a menu, a multiselect or an editor. Elsewhere
-        up and down step between fields, over the scrolling form's own arrow bindings.
-        Greying the screen binding is what lets the key reach the control instead.
+        Returning None greys the screen's binding for this key, which is what lets the key
+        reach the focused control instead. Enter belongs to the open menu, the editor and
+        the switch; up and down belong to a cursor that still has somewhere to go, so a
+        control hands the focus on at its own first and last line rather than trapping it.
         """
         key = _ACTION_KEY.get(action)
-        if key is None or self._warn.display:
+        if key is None:
             return True
+        if key == "enter":
+            return self._focused_owner(_ENTER_OWNERS) is None
         if key in ("up", "down"):
-            return True if self._focused_owner(_ARROW_OWNERS) is None else None
+            owner = self._focused_owner(_ARROW_OWNERS)
+            return True if owner is None else _at_edge(owner, key)
+        if key == "escape":
+            return None if self._open_menu() else True
+        return True
+
+    def _open_menu(self) -> bool:
+        """True while a choice menu is showing: escape closes that before it arms a quit."""
         select = self._focused_owner((Select,))
-        if select is None:
-            return True
-        return None if key == "enter" or select.expanded else True
+        return isinstance(select, Select) and select.expanded
 
     def _focused_owner(self, types: tuple[type[Widget], ...]) -> Widget | None:
         """The focused control, or the control enclosing it, when it is one of these."""
@@ -103,33 +158,16 @@ class SurveyScreen(Screen[bool]):
             return focused
         return next((node for node in focused.ancestors if isinstance(node, types)), None)
 
-    def on_key(self, event: events.Key) -> None:
-        """Any key dismisses the blocking warning popup."""
-        if self._warn.display:
-            event.stop()
-            self._dismiss_warning()
-
-    def action_jump(self) -> None:
-        """Open the overview and focus the chosen field."""
-        if self._warn.display:
-            self._dismiss_warning()
-            return
-        self.app.push_screen(JumpScreen(self.ui.state(), self.ui.schema()), self._focus_field)
-
     def action_confirm(self) -> None:
-        """Dismiss with True to advance to the review screen."""
-        focused = self.focused
-        if isinstance(focused, TextArea):
-            focused.insert("\n")
-            return
-        if self._warn.display:
-            self._dismiss_warning()
-            return
+        """Advance to review, or point at the first field that is not ready."""
         errors = self.ui.validate()
         if errors:
-            self._show_warning(errors)
+            self._refresh_rows()
+            field_id, messages = next(iter(errors.items()))
+            self._focus_field(field_id)
+            self._hint.update(Text(f"{field_id} - {messages[0]}", style=ROSE))
             return
-        self.dismiss(True)
+        self.post_message(self.Confirmed())
 
     def action_focus_next(self) -> None:
         """Move to the next field. Screen has no focus_next action of its own."""
@@ -140,11 +178,20 @@ class SurveyScreen(Screen[bool]):
         self.focus_previous()
 
     def action_cancel(self) -> None:
-        """Dismiss with False, leaving the destination untouched."""
-        if self._warn.display:
-            self._dismiss_warning()
+        """Arm on the first escape, quit on the second - a survey is too costly to lose."""
+        if self._armed:
+            self.post_message(self.Cancelled())
             return
-        self.dismiss(False)
+        self._armed = True
+        self._hint.update(Text(CANCEL_HINT, style=ROSE))
+        self.set_timer(CANCEL_WINDOW, self._disarm)
+
+    def _disarm(self) -> None:
+        """Put the safety back on: an armed escape never stands past its window."""
+        if not self._armed:
+            return
+        self._armed = False
+        self._show_hint()
 
     def _refresh_rows(self) -> None:
         """Add, remove and update rows so they match the state's visible, non-preset fields."""
@@ -170,6 +217,31 @@ class SurveyScreen(Screen[bool]):
             else:
                 row.update(field)
             previous = row
+        self._show_hint()
+        self._show_position()
+
+    def _show_hint(self) -> None:
+        """Write the focused field's problem, or its help, or how to open its list."""
+        if self._armed:
+            return
+        row = self._focused_owner((FieldRow,))
+        if not isinstance(row, FieldRow):
+            self._hint.update(Text(""))
+            return
+        if row.field.errors:
+            self._hint.update(Text(row.field.errors[0], style=ROSE))
+            return
+        if isinstance(self.focused, Select) and not self.focused.expanded:
+            self._hint.update(Text(OPEN_HINT, style=TEXT_SUBTLE))
+            return
+        self._hint.update(Text(row.question.help, style=TEXT_MUTED))
+
+    def _show_position(self) -> None:
+        """The header says which field of how many, so the eye has an anchor while scrolling."""
+        rows = list(self.query(FieldRow))
+        row = self._focused_owner((FieldRow,))
+        place = f"{rows.index(row) + 1} of {len(rows)}" if row in rows else f"{len(rows)} fields"
+        self.query_one(HeaderBar).set_context(f"survey - {place}")
 
     def _focus_first(self) -> None:
         """Put the cursor in the first field."""
@@ -188,76 +260,24 @@ class SurveyScreen(Screen[bool]):
         control.focus()
         control.scroll_visible()
 
-    def _show_warning(self, errors: dict[str, list[str]]) -> None:
-        """Block the advance and name the fields that need attention."""
-        names = ", ".join(errors)
-        self._warn.update(Text(f"{len(errors)} field(s) need attention\n{names}"))
-        self._warn.display = True
-        self._focus_before_warning = self.focused
-        self.set_focus(None)
 
-    def _dismiss_warning(self) -> None:
-        """Hide the popup and give focus back."""
-        self._warn.display = False
-        if self._focus_before_warning is not None:
-            self.set_focus(self._focus_before_warning)
-            self._focus_before_warning = None
+def _at_edge(owner: Widget, key: str) -> bool | None:
+    """True when the cursor is against the control's end and the key should leave it.
 
-
-class JumpScreen(ModalScreen[str | None]):
-    """Overview of visible questions and their current values."""
-
-    DEFAULT_CSS = f"""
-    #jump-list {{
-        width: 100%;
-        height: 1fr;
-    }}
-    #jump-title {{
-        padding: 1 1 0 1;
-        color: {CYAN_BRIGHT};
-    }}
-    #jump-empty {{
-        padding: 1;
-        color: {TEXT_MUTED};
-        background: {SURFACE_BG};
-    }}
+    None keeps the key inside the control. This is what stops a multi-line editor or a
+    long option list from swallowing the arrow that was meant to walk the form.
     """
-
-    BINDINGS: ClassVar[list[Binding]] = [
-        Binding("escape", "close", "Close", priority=True),
-    ]
-
-    def __init__(self, state: State, schema: Schema) -> None:
-        """Hold the state and the questions the overview lists."""
-        super().__init__(id="jump-screen")
-        self.state = state
-        self.schema = schema
-
-    def compose(self) -> ComposeResult:
-        """Header, one option per visible question, footer."""
-        yield HeaderBar("overview")
-        yield Static("jump to a question", id="jump-title")
-        options = [
-            Option(
-                Text(f"{field_id}  =  {display_value(self.state.fields[field_id])}"),
-                id=field_id,
-            )
-            for field_id in askable_ids(self.state)
-        ]
-        if options:
-            yield OptionList(*options, id="jump-list")
-        else:
-            yield Static("no questions to jump to", id="jump-empty")
-        yield Footer()
-
-    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
-        """Return the chosen field id."""
-        event.stop()
-        self.dismiss(event.option.id)
-
-    def action_close(self) -> None:
-        """Return without choosing."""
-        self.dismiss(None)
+    if isinstance(owner, TextArea):
+        row = owner.cursor_location[0]
+        last = owner.document.line_count - 1
+        return True if (row == 0 if key == "up" else row >= last) else None
+    if isinstance(owner, SelectionList):
+        index = owner.highlighted
+        if index is None:
+            return True
+        last = owner.option_count - 1
+        return True if (index == 0 if key == "up" else index >= last) else None
+    return None
 
 
 def askable_ids(state: State) -> list[str]:

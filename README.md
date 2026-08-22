@@ -38,7 +38,7 @@ copier-tui copy gh:stellarshenson/copier-data-science ./my-project
 copier-tui update
 ```
 
-Flags keep copier's semantics rather than being re-implemented: values passed with `--data` are seeded and not asked for, and `--defaults` or `--quiet` skip the survey entirely and run headless.
+Flags keep copier's semantics rather than being re-implemented: values passed with `--data` are seeded and not asked for, and `--defaults` or `-f/--force` skip the survey entirely and run headless. `--quiet` is not a non-interactive flag in copier - it only suppresses status output - so it keeps the TUI.
 
 ## Architecture
 
@@ -62,7 +62,9 @@ The hard rule: **`copier-ui` must never require a terminal, browser, or event lo
 | `multiselect` | multi-select |
 | `secret` | password input |
 | `integer` | numeric input |
+| `float` | numeric input |
 | `path` | path input |
+| `structured` | multiline editor |
 
 Sketch of the `copier-ui` surface:
 

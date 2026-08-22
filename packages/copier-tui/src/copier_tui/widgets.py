@@ -1,7 +1,8 @@
 """Kind to widget mapping and the field row.
 
 Holds no semantics: label, help, value, choices, errors and default-ness all come from
-copier_ui state.
+copier_ui state. Every field is one row - label gutter, control, one status glyph - so a
+long survey stays a short screen; the focused field's help goes to the screen's hint line.
 """
 
 from __future__ import annotations
@@ -12,16 +13,23 @@ from typing import Any
 
 from rich.text import Text
 from textual.app import ComposeResult
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal
 from textual.message import Message
 from textual.widget import Widget
 from textual.widgets import Input, Select, SelectionList, Static, Switch, TextArea
 
 from copier_tui import __version__
-from copier_tui.theme import AMBER, CYAN_BRIGHT, ROSE, TEXT_MUTED, TEXT_SUBTLE
+from copier_tui.theme import AMBER, CYAN_BRIGHT, LABEL_WIDTH, ROSE, TEXT_SUBTLE
 from copier_ui import Choice, FieldState, Kind, Question
 
 _INPUT_TYPE = {Kind.INTEGER: "integer", Kind.FLOAT: "number"}
+
+NO_CHOICE = "no answer yet"
+"""Shown by a choice control whose answer is not among its current choices.
+
+A recompute can narrow the choices out from under an answer, and this is the honest render
+of that: the field is blank, and picking the blank back is a no-op rather than an answer.
+"""
 
 
 def _as_text(value: Any) -> str:
@@ -36,9 +44,12 @@ def _as_text(value: Any) -> str:
 
 
 def display_value(field: FieldState) -> str:
-    """A field's value on one line, with secrets masked."""
+    """A field's value on one line: secrets masked, an unset one left blank."""
     if field.secret:
-        return "***"
+        return "***" if field.value else ""
+    for choice in field.choices:
+        if choice.value == field.value:
+            return choice.label
     return " ".join(_as_text(field.value).split())
 
 
@@ -60,6 +71,8 @@ class ChoiceSelect(Select[int]):
         super().__init__(
             [(choice.label, position) for position, choice in enumerate(choices)],
             value=Select.NULL if index is None else index,
+            prompt=NO_CHOICE,
+            compact=True,
             **kwargs,
         )
 
@@ -76,6 +89,7 @@ class ChoiceSelectionList(SelectionList[int]):
                 (choice.label, position, choice.value in selected)
                 for position, choice in enumerate(choices)
             ],
+            compact=True,
             **kwargs,
         )
 
@@ -113,13 +127,14 @@ def control_for(question: Question, field: FieldState) -> Widget:
     if widget is Switch:
         return Switch(value=bool(field.value), id=control_id)
     if widget is TextArea:
-        return TextArea(_as_text(field.value), soft_wrap=True, id=control_id)
+        return TextArea(_as_text(field.value), soft_wrap=True, compact=True, id=control_id)
     return Input(
         value=_as_text(field.value),
         placeholder=question.placeholder,
         password=question.secret,
         type=_INPUT_TYPE.get(question.kind, "text"),
         select_on_focus=False,
+        compact=True,
         id=control_id,
     )
 
@@ -140,7 +155,7 @@ def read_control(question: Question, control: Widget) -> Any:
 
 
 class HeaderBar(Horizontal):
-    """One-row header: app name left, version right."""
+    """One-row header: app name and context left, version right."""
 
     def __init__(self, context: str = "") -> None:
         """Build the header, optionally folding extra context into the title cell."""
@@ -149,25 +164,50 @@ class HeaderBar(Horizontal):
 
     def compose(self) -> ComposeResult:
         """The title cell and the version cell."""
-        title = f"copier-tui · {self._label_context}" if self._label_context else "copier-tui"
-        yield Static(title, id="hdr-title")
+        yield Static(self._title(), id="hdr-title")
         yield Static(f"v{__version__}", id="hdr-version")
 
+    def set_context(self, context: str) -> None:
+        """Rewrite the context: the survey keeps the field position here as focus moves."""
+        self._label_context = context
+        self.query_one("#hdr-title", Static).update(self._title())
 
-class FieldRow(Vertical):
-    """Label, help, control, default marker and inline error for one question."""
+    def _title(self) -> str:
+        """The title cell's text: the app name, and the screen's context after it."""
+        return f"copier-tui · {self._label_context}" if self._label_context else "copier-tui"
+
+
+class FieldRow(Horizontal):
+    """One question on one row: label gutter, control, status glyph."""
 
     DEFAULT_CSS = f"""
     FieldRow {{
         height: auto;
-        padding: 0 1 1 1;
+        max-height: 6;
     }}
-    .field-help {{
-        color: {TEXT_MUTED};
+    FieldRow:focus-within > .field-label {{
+        text-style: bold;
     }}
-    .field-error {{
-        color: {ROSE};
-        display: none;
+    FieldRow > .field-label {{
+        width: {LABEL_WIDTH};
+        height: 1;
+        padding: 0 1 0 0;
+        text-align: right;
+    }}
+    FieldRow > .field-flag {{
+        width: 2;
+        height: 1;
+        text-align: center;
+    }}
+    FieldRow > Input, FieldRow > Select, FieldRow > SelectionList, FieldRow > TextArea {{
+        width: 1fr;
+    }}
+    FieldRow > SelectionList, FieldRow > TextArea {{
+        height: auto;
+        max-height: 6;
+    }}
+    FieldRow > Switch {{
+        width: 4;
     }}
     """
 
@@ -189,34 +229,48 @@ class FieldRow(Vertical):
         super().__init__(id=f"row-{question.id}")
         self.question = question
         self._field = field
-        self._label = Static(_label_text(question, field), classes="field-label")
-        self._help = Static(Text(question.help), classes="field-help")
+        self._label = Static(classes="field-label")
         self._control = control_for(question, field)
-        self._error = Static(classes="field-error", id=f"err-{question.id}")
+        self._flag = Static(classes="field-flag", id=f"flag-{question.id}")
         self._last_value: Any = None
 
     def compose(self) -> ComposeResult:
-        """Label, help when there is any, the control, then the error line."""
+        """The label gutter, the control, then the one-cell status glyph."""
         yield self._label
-        if self.question.help:
-            yield self._help
         yield self._control
-        yield self._error
+        yield self._flag
 
     def on_mount(self) -> None:
-        """Apply the initial state to the control and the error line."""
-        self.update(self._field)
+        """Show the label and the glyph; the control already holds its constructed value."""
+        self._chrome(self._field)
+        self._last_value = self.value
+
+    @property
+    def field(self) -> FieldState:
+        """The state this row currently shows, for the screen's hint line."""
+        return self._field
 
     def update(self, field: FieldState) -> None:
-        """Apply new state: value, choices, default marker, errors."""
-        self._field = field
-        self._label.update(_label_text(self.question, field))
-        self._control.disabled = not field.enabled
-        if not self._control.has_focus:
+        """Apply new state: value, choices, default marker, errors.
+
+        A control that has not mounted yet is left alone. It was built from this same
+        state, so there is nothing to write - and writing anyway breaks Select, which
+        stores its value privately in the constructor and only assigns the reactive on
+        mount. An assignment that lands first leaves the reactive already equal to the
+        target, so the watcher that paints the label never fires and the control shows
+        its prompt over a value it is holding.
+        """
+        self._chrome(field)
+        if self._control.is_mounted and not self._control.has_focus:
             self._write_value(field)
         self._last_value = self.value
-        self._error.update(Text("\n".join(field.errors)))
-        self._error.display = bool(field.errors)
+
+    def _chrome(self, field: FieldState) -> None:
+        """Everything about a row that is not the control's value."""
+        self._field = field
+        self._label.update(_label_text(self.question, field))
+        self._flag.update(_flag_text(field))
+        self._control.disabled = not field.enabled
 
     def _write_value(self, field: FieldState) -> None:
         """Push the state's value into the control."""
@@ -275,8 +329,11 @@ class FieldRow(Vertical):
         self._emit()
 
     def on_select_changed(self, event: Select.Changed) -> None:
-        """A choice picked."""
+        """A choice picked. Rebuilding the options blanks the select for a beat - that is
+        our own write, not an answer of None, so it never becomes a change."""
         event.stop()
+        if event.value is Select.NULL:
+            return
         self._emit()
 
     def on_selection_list_selected_changed(self, event: SelectionList.SelectedChanged) -> None:
@@ -291,10 +348,19 @@ class FieldRow(Vertical):
 
 
 def _label_text(question: Question, field: FieldState) -> Text:
-    """The question label, marked when the value is still the computed default."""
-    text = Text(question.label, style=f"bold {CYAN_BRIGHT}")
-    if field.is_default:
-        text.append("  default", style=TEXT_SUBTLE)
-    if not field.enabled:
-        text.append("  unavailable", style=AMBER)
+    """The question label, dimmed while the value is still the computed default."""
+    style = TEXT_SUBTLE if field.is_default else f"bold {CYAN_BRIGHT}"
+    text = Text(question.label, style=style, no_wrap=True, overflow="ellipsis")
+    text.truncate(LABEL_WIDTH - 1, overflow="ellipsis")
     return text
+
+
+def _flag_text(field: FieldState) -> Text:
+    """One glyph for the row's standing: a problem, an unavailable field, or a default."""
+    if field.errors:
+        return Text("!", style=f"bold {ROSE}")
+    if not field.enabled:
+        return Text("-", style=AMBER)
+    if field.is_default:
+        return Text("·", style=TEXT_SUBTLE)
+    return Text(" ")

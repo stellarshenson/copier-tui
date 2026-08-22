@@ -9,8 +9,10 @@ from typing import Any
 
 import copier
 import pytest
+from textual.containers import VerticalScroll
 from textual.pilot import Pilot
-from textual.widgets import Static
+from textual.widgets import ProgressBar, Static
+from textual.widgets._progress_bar import Bar
 
 from copier_tui.app import SurveyApp
 from copier_tui.errors import EXIT_CANCELLED, EXIT_FAILURE, EXIT_OK
@@ -60,8 +62,8 @@ async def test_the_review_lists_every_answer_and_masks_secrets(tmp_path: Path) -
         lines = app.screen.query(".review-answer")
         assert [line.id for line in lines] == ["review-name", "review-advanced", "review-token"]
         text = "\n".join(str(line.visual) for line in lines)
-        assert "name  =  demo" in text
-        assert "token  =  ***" in text
+        assert "name" in text and "demo" in text
+        assert "token" in text and "***" in text
         assert "s3cret" not in text
 
 
@@ -79,9 +81,15 @@ async def test_going_back_from_the_review_returns_to_the_survey(tmp_path: Path) 
 
 
 async def test_cancelling_leaves_the_destination_untouched(tmp_path: Path) -> None:
-    """Quitting before confirmation writes nothing and exits non-zero."""
+    """Quitting before confirmation writes nothing and exits non-zero.
+
+    Escape is a two-press confirm on the survey, so an accidental key cannot lose a survey.
+    """
     dst = tmp_path / "out"
     async with running(dst) as (app, pilot):
+        await pilot.press("escape")
+        await pilot.pause()
+        assert app.is_running
         await pilot.press("escape")
         assert await wait_until(pilot, lambda: not app.is_running)
         assert app.return_value == EXIT_CANCELLED
@@ -97,10 +105,11 @@ async def test_a_confirmed_render_writes_the_project_and_exits_zero(tmp_path: Pa
         await pilot.press("enter")
         await pilot.pause()
         assert isinstance(app.screen, ExecutionScreen)
-        banner = app.screen.query_one("#banner-box", Static)
-        assert await wait_until(pilot, lambda: banner.display)
-        assert "render complete" in str(banner.visual)
+        status = app.screen.query_one("#exec-status", Static)
+        assert await wait_until(pilot, lambda: f"written to {dst}" in str(status.visual))
         assert (dst / "name.txt").read_text().strip() == "demo"
+        shown = "\n".join(str(widget.visual) for widget in app.screen.query(Static))
+        assert shown.count(str(dst)) == 1, "the destination belongs on the screen once"
 
         await pilot.press("space")
         assert await wait_until(pilot, lambda: not app.is_running)
@@ -127,10 +136,8 @@ async def test_a_failed_render_shows_the_message_and_keeps_partial_output(
             await pilot.pause()
             await pilot.press("enter")
             await pilot.pause()
-            banner = app.screen.query_one("#banner-box", Static)
-            assert await wait_until(pilot, lambda: banner.display)
-            assert "copier gave up" in str(banner.visual)
-            assert "copier gave up" in str(app.screen.query_one("#exec-status", Static).visual)
+            status = app.screen.query_one("#exec-status", Static)
+            assert await wait_until(pilot, lambda: "copier gave up" in str(status.visual))
 
             await pilot.press("space")
             assert await wait_until(pilot, lambda: not app.is_running)
@@ -147,8 +154,8 @@ async def test_a_template_with_no_questions_goes_straight_to_review(tmp_path: Pa
 
         await pilot.press("enter")
         await pilot.pause()
-        banner = app.screen.query_one("#banner-box", Static)
-        assert await wait_until(pilot, lambda: banner.display)
+        verdict = app.screen.query_one("#exec-verdict", Static)
+        assert await wait_until(pilot, lambda: str(verdict.visual).strip())
         await pilot.press("space")
         assert await wait_until(pilot, lambda: not app.is_running)
         assert app.return_value == EXIT_OK
@@ -190,7 +197,7 @@ async def test_recopy_opens_the_survey_seeded_from_the_answers_file(tmp_path: Pa
 async def test_an_unmodified_third_party_template_runs(tmp_path: Path) -> None:
     """A real template with conditional questions surveys and reviews with no changes to it."""
     dst = tmp_path / "demo-proj"
-    with TemplateUI.from_template(str(REFERENCE), dst=dst) as ui:
+    with TemplateUI.from_template(str(REFERENCE), dst=dst, unsafe=True) as ui:
         app = SurveyApp(ui, dst, {"quiet": True, "unsafe": True})
         async with app.run_test(size=(120, 40)) as pilot:
             await pilot.pause()
@@ -206,3 +213,100 @@ async def test_an_unmodified_third_party_template_runs(tmp_path: Path) -> None:
             await pilot.pause()
             assert isinstance(app.screen, ReviewScreen)
             assert not dst.exists()
+
+
+@pytest.mark.skipif(not REFERENCE.is_dir(), reason="the reference template is not checked out")
+async def test_review_and_back_keep_the_scroll_offset_and_the_focused_field(
+    tmp_path: Path,
+) -> None:
+    """The headline round trip: go to review, come back, carry on where you were.
+
+    Review is stacked over the survey rather than replacing it, so nothing is rebuilt. The
+    check is deliberately made on a form taller than its viewport and on a field far enough
+    down to have scrolled, because a rebuilt form would come back at offset zero.
+    """
+    dst = tmp_path / "demo-proj"
+    with TemplateUI.from_template(str(REFERENCE), dst=dst, unsafe=True) as ui:
+        app = SurveyApp(ui, dst, {"quiet": True, "unsafe": True})
+        async with app.run_test(size=(120, 24)) as pilot:
+            await pilot.pause()
+            survey = app.screen
+            assert isinstance(survey, SurveyScreen)
+
+            far = [row.question.id for row in survey.query(FieldRow)][-1]
+            survey._focus_field(far)
+            await pilot.pause()
+            offset = survey.query_one("#survey-form", VerticalScroll).scroll_offset.y
+            assert offset > 0, "the form did not scroll - the check would prove nothing"
+            assert app.focused.id == f"ctl-{far}"
+
+            await pilot.press("enter")
+            await pilot.pause()
+            assert isinstance(app.screen, ReviewScreen)
+
+            await pilot.press("escape")
+            await pilot.pause()
+            assert app.screen is survey
+            assert survey.query_one("#survey-form", VerticalScroll).scroll_offset.y == offset
+            assert app.focused.id == f"ctl-{far}"
+
+
+@pytest.mark.skipif(not REFERENCE.is_dir(), reason="the reference template is not checked out")
+async def test_an_answer_changed_after_coming_back_still_recomputes(tmp_path: Path) -> None:
+    """Coming back is not a read-only view - the form still recalculates the rest."""
+    dst = tmp_path / "demo-proj"
+    with TemplateUI.from_template(str(REFERENCE), dst=dst, unsafe=True) as ui:
+        app = SurveyApp(ui, dst, {"quiet": True, "unsafe": True})
+        async with app.run_test(size=(120, 24)) as pilot:
+            await pilot.pause()
+            survey = app.screen
+            assert not survey.query("#row-python_version_custom")
+
+            await pilot.press("enter")
+            await pilot.pause()
+            assert isinstance(app.screen, ReviewScreen)
+            await pilot.press("escape")
+            await pilot.pause()
+            assert app.screen is survey
+
+            ui.set("python_version_choice", "other")
+            survey._refresh_rows()
+            await pilot.pause()
+            assert survey.query("#row-python_version_custom")
+
+            await pilot.press("enter")
+            await pilot.pause()
+            assert app.screen.query("#review-python_version_custom")
+
+
+async def test_a_dry_run_says_nothing_was_written(tmp_path: Path) -> None:
+    """--pretend reports what copier would do, so the screen must not claim a render."""
+    dst = tmp_path / "out"
+    with TemplateUI.from_template(str(FIXTURES / "tui_flow"), dst=dst) as ui:
+        app = SurveyApp(ui, dst, {"quiet": True, "pretend": True})
+        async with app.run_test(size=(100, 40)) as pilot:
+            await pilot.pause()
+            await pilot.press("enter")
+            await pilot.pause()
+            await pilot.press("enter")
+            status = app.screen.query_one("#exec-status", Static)
+            assert await wait_until(pilot, lambda: "nothing written" in str(status.visual))
+            assert not dst.exists()
+
+
+async def test_the_progress_bar_takes_the_width_of_the_screen(tmp_path: Path) -> None:
+    """Both the widget and the bar it draws stretch - either left alone renders a stub.
+
+    ProgressBar defaults to `width: auto`, and the Bar inside it to a fixed 32 cells, so a
+    rule on only one of the two still leaves a bar that does not reach the edge.
+    """
+    dst = tmp_path / "out"
+    async with running(dst) as (app, pilot):
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        progress = app.screen.query_one("#exec-progress", ProgressBar)
+        bar = progress.query_one(Bar)
+        assert progress.size.width == app.screen.query_one("#exec-body").size.width
+        assert bar.size.width >= progress.size.width - 1

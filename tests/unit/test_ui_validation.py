@@ -54,3 +54,13 @@ def test_hidden_excluded_from_validation(tmp_path: Path) -> None:
         assert "port" in ui.validate()
         ui.set("use_docker", False)
         assert ui.validate() == {}
+
+
+def test_secret_values_never_appear_in_reported_messages(tmp_path: Path) -> None:
+    """Redaction: a secret answer is masked in the messages validation and evaluation return."""
+    with load("ui_secret", tmp_path / "dst") as ui:
+        ui.set("token", "SEKRET-9999")
+        messages = ui.validate()["token"] + list(ui.state().fields["probe"].errors)
+        assert len(messages) == 2
+        assert all("SEKRET-9999" not in message for message in messages)
+        assert all("***" in message for message in messages)

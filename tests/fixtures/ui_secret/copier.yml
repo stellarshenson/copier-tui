@@ -1,0 +1,8 @@
+token:
+  type: int
+  secret: true
+  default: 1
+
+probe:
+  type: str
+  default: "{{ [1] | select(token) | list }}"

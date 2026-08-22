@@ -18,7 +18,7 @@ import pytest
 
 from copier_tui import cli as cli_mod
 from copier_tui.cli import CopierTuiApp, TuiCopySubApp, TuiRecopySubApp, TuiUpdateSubApp
-from copier_tui.errors import EXIT_FAILURE, EXIT_OK
+from copier_tui.errors import EXIT_FAILURE, EXIT_OK, EXIT_UNSAFE
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 FLOW = str(FIXTURES / "tui_flow")
@@ -252,14 +252,13 @@ def test_unknown_flag_is_rejected_with_copier_s_text() -> None:
     assert "Unknown switch --nonsense" in output
 
 
-@pytest.mark.parametrize("flag", ["--defaults", "--quiet"])
+@pytest.mark.parametrize("flag", ["--defaults", "--force"])
 def test_non_interactive_flags_never_build_an_app(
     flag: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """--defaults and --quiet go straight to copier: no TemplateUI, no Textual app.
+    """--defaults and --force go straight to copier: no TemplateUI, no Textual app.
 
-    They are handed to copier as they are, so the outcome is copier's own - a rendered
-    project for --defaults, and whatever copier does with --quiet alone.
+    They are handed to copier as they are, so the outcome is copier's own.
     """
 
     def forbidden(*args: Any, **kwargs: Any) -> None:
@@ -273,6 +272,37 @@ def test_non_interactive_flags_never_build_an_app(
     _, copier_code = CopierApp.run(
         ["copier", "copy", flag, "--trust", FLOW, str(copier_dst)], exit=False
     )
+    assert code == copier_code
+
+
+def test_quiet_alone_still_opens_the_survey(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--quiet suppresses copier's status output; it answers nothing, so it still asks."""
+    opened: list[str] = []
+    monkeypatch.setattr(cli_mod, "run_survey", lambda *a, **k: opened.append("yes") or EXIT_OK)
+    _, code, _ = run_cli(
+        ["copier-tui", "copy", "--quiet", "--trust", FLOW, str(tmp_path / "out")], tty=True
+    )
+    assert opened == ["yes"]
+    assert code == EXIT_OK
+
+
+def test_ask_hands_the_run_to_copier_s_own_prompting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--ask re-asks its questions at render time, so it takes copier's path, not the survey.
+
+    copier tests the ask globs before the pre-supplied-answers short-circuit, so a question
+    named by --ask is prompted for even though the survey already answered it - on the render
+    worker, with Textual holding the terminal. The flag keeps copier's semantics instead.
+    """
+    monkeypatch.setattr(
+        cli_mod, "run_survey", lambda *a, **k: pytest.fail("the survey must not open")
+    )
+    argv = ["copy", "--defaults", "--ask", "*", "--trust", FLOW]
+    _, code, _ = run_cli(["copier-tui", *argv, str(tmp_path / "tui")], tty=True)
+    _, copier_code = CopierApp.run(["copier", *argv, str(tmp_path / "copier")], exit=False)
     assert code == copier_code
 
 
@@ -325,3 +355,16 @@ def test_template_load_failure_exits_before_the_survey(
     )
     assert code == EXIT_FAILURE
     assert output.strip()
+
+
+def test_an_untrusted_template_exits_with_copier_s_own_unsafe_code(tmp_path: Path) -> None:
+    """A template refused for an unsafe feature exits 4, as copier's own run does."""
+    template = tmp_path / "template"
+    template.mkdir()
+    (template / "copier.yml").write_text("_jinja_extensions: [jinja2_time.TimeExtension]\n")
+    (template / "README.md.jinja").write_text("hello\n")
+    argv = ["copy", str(template)]
+    _, code, output = run_cli(["copier-tui", *argv, str(tmp_path / "tui")], tty=True)
+    _, copier_code = CopierApp.run(["copier", *argv, str(tmp_path / "copier")], exit=False)
+    assert code == copier_code == EXIT_UNSAFE
+    assert "jinja_extensions" in output

@@ -12,9 +12,12 @@ from textual.containers import VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Footer, Static
 
-from copier_tui.theme import CYAN_BRIGHT, ROSE, TEXT_MUTED
+from copier_tui.theme import AMBER, CYAN_BRIGHT, LABEL_WIDTH, TEXT, TEXT_SUBTLE
 from copier_tui.widgets import HeaderBar, display_value
 from copier_ui import TemplateUI
+
+UNSET = "not set"
+"""Stands in for an answer with no value, so a blank line is never mistaken for one."""
 
 
 class ReviewScreen(Screen[bool]):
@@ -24,17 +27,21 @@ class ReviewScreen(Screen[bool]):
     #review-list {{
         width: 100%;
         height: 1fr;
-        padding: 1;
+        padding: 1 2 0 1;
+        scrollbar-size-vertical: 1;
     }}
     #review-warning {{
-        padding: 1;
-        color: {ROSE};
-    }}
-    #review-empty {{
-        color: {TEXT_MUTED};
+        height: 1;
+        width: 100%;
+        padding: 0 1;
+        color: {AMBER};
     }}
     .review-answer {{
-        height: auto;
+        height: 1;
+        width: 100%;
+    }}
+    #review-empty {{
+        color: {TEXT_SUBTLE};
     }}
     """
 
@@ -50,14 +57,10 @@ class ReviewScreen(Screen[bool]):
         self.dst = dst
 
     def compose(self) -> ComposeResult:
-        """Header, the destination warning, one line per answer, footer."""
+        """Header, one line per answer, the destination warning, footer."""
         yield HeaderBar(f"review · {self.dst}")
-        if _is_not_empty(self.dst):
-            yield Static(
-                Text(f"{self.dst} already exists and is not empty - files may be overwritten"),
-                id="review-warning",
-            )
         yield VerticalScroll(*self._answer_lines(), id="review-list")
+        yield Static(self._destination_note(), id="review-warning")
         yield Footer()
 
     def action_confirm(self) -> None:
@@ -68,15 +71,29 @@ class ReviewScreen(Screen[bool]):
         """Dismiss with False to return to the survey."""
         self.dismiss(False)
 
+    def _destination_note(self) -> Text:
+        """Warn when the destination already holds files the render could overwrite."""
+        if _is_not_empty(self.dst):
+            return Text(f"{self.dst} is not empty - existing files may be overwritten")
+        return Text("")
+
     def _answer_lines(self) -> list[Static]:
-        """One static per visible answer, secrets masked."""
+        """One static per visible answer, id gutter aligned, secrets masked."""
         state = self.ui.state()
         lines = []
         for field_id in state.visible_ids:
-            text = Text(field_id, style=f"bold {CYAN_BRIGHT}")
-            text.append("  =  ")
-            text.append(display_value(state.fields[field_id]))
-            lines.append(Static(text, classes="review-answer", id=f"review-{field_id}"))
+            field = state.fields[field_id]
+            value = display_value(field)
+            lines.append(
+                Static(
+                    Text.assemble(
+                        (field_id[: LABEL_WIDTH - 1].ljust(LABEL_WIDTH), f"bold {CYAN_BRIGHT}"),
+                        (value, TEXT) if value else (UNSET, TEXT_SUBTLE),
+                    ),
+                    classes="review-answer",
+                    id=f"review-{field_id}",
+                )
+            )
         if not lines:
             lines.append(Static(Text("this template asks nothing"), id="review-empty"))
         return lines

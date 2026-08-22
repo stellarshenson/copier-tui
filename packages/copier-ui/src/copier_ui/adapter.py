@@ -9,6 +9,8 @@ Internals to use, all documented in docs/design-notes.md:
 
 - `copier._main.Worker` - constructed, never run; owns the fetch, the Jinja env and the context
 - `Worker.template.questions_data`, `Worker.template.local_abspath`, `Worker.jinja_env`
+- `Worker.unsafe` and `Worker._check_unsafe(operation)` - the trust gate, config reads only,
+  called before `jinja_env` because that access imports every `_jinja_extensions` entry
 - `Worker.answers` (assign a fresh `copier._user_data.AnswersMap`) and `Worker._render_context()`
 - `copier._user_data.Question` - built fresh per evaluation; `_formatted_choices` is cached
 - `copier._types.MISSING` - the "no default" sentinel returned by `Question.get_default()`
@@ -63,19 +65,22 @@ class TemplateAdapter:
         vcs_ref: str | None = None,
         answers_file: Path | None = None,
         operation: Operation = "copy",
+        unsafe: bool = False,
     ) -> TemplateAdapter:
-        """Fetch the template and check it carries a copier config, or raise TemplateLoadError."""
+        """Fetch the template, gate its unsafe features, and check it carries a copier config."""
         worker = Worker(
             src_path=None if src is None else str(src),
             dst_path=Path(dst),
             vcs_ref=vcs_ref,
             answers_file=answers_file,
+            unsafe=unsafe,
         )
         adapter = cls(worker, operation)
         try:
             root = worker.template.local_abspath
             if not _config_paths(root):
                 raise TemplateLoadError(f"No copier configuration file in {root}")
+            worker._check_unsafe("update" if operation == "update" else "copy")
             _ = worker.jinja_env
             adapter.questions()
         except TemplateLoadError:
@@ -119,7 +124,11 @@ class TemplateAdapter:
                 default = question.get_default()
             except Exception as error:  # noqa: BLE001 - a failed expression is a value here
                 return Evaluation(
-                    visible=True, default=None, has_default=False, choices=(), error=str(error)
+                    visible=True,
+                    default=None,
+                    has_default=False,
+                    choices=(),
+                    error=_redact(str(error), self.questions(), answers),
                 )
         if default is MISSING:
             return Evaluation(
@@ -139,7 +148,7 @@ class TemplateAdapter:
                 question = self._copier_question(id, answers)
                 question.validate_answer(question.parse_answer(value))
             except Exception as error:  # noqa: BLE001 - user input problems are values
-                return (str(error),)
+                return (_redact(str(error), self.questions(), answers),)
         return ()
 
     def run(self, dst: Path, data: Mapping[str, Any], **copier_kwargs: Any) -> None:
@@ -250,6 +259,16 @@ class TemplateAdapter:
                 continue
             found |= meta.find_undeclared_variables(ast) & ids
         return tuple(sorted(found))
+
+
+def _redact(message: str, questions: tuple[Question, ...], answers: Mapping[str, Any]) -> str:
+    """Replace every secret answer's string form in a message with three asterisks."""
+    for question in questions:
+        if question.secret:
+            secret = str(answers.get(question.id, ""))
+            if secret:
+                message = message.replace(secret, "***")
+    return message
 
 
 def _config_paths(root: Path) -> list[Path]:

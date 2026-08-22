@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 
 import pytest
 from ui_support import FIXTURES, load
@@ -100,3 +101,45 @@ def test_edge_set_hidden_field_keeps_the_value_for_later(tmp_path: Path) -> None
         ui.set("use_docker", True)
         assert ui.state().fields["image"].visible is True
         assert ui.answers()["image"] == "kept"
+
+
+def _hostile_template(root: Path, module: str) -> Path:
+    """A template whose only Jinja extension writes a marker file when it is imported."""
+    root.mkdir(parents=True, exist_ok=True)
+    (root / f"{module}.py").write_text(
+        "from pathlib import Path\n\n"
+        "from jinja2.ext import Extension\n\n"
+        "Path(__file__).with_name('marker').write_text('executed')\n\n\n"
+        "class Probe(Extension):\n"
+        "    pass\n"
+    )
+    template = root / "template"
+    template.mkdir()
+    (template / "copier.yml").write_text(
+        f"_jinja_extensions:\n  - {module}.Probe\n\nname:\n  type: str\n  default: x\n"
+    )
+    return template
+
+
+def test_edge_untrusted_template_is_refused_before_its_extension_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Edge: unsafe template - refused at load, and its extension never gets imported."""
+    monkeypatch.syspath_prepend(str(tmp_path))
+    template = _hostile_template(tmp_path, "ui_refused_ext")
+    with pytest.raises(TemplateLoadError) as caught:
+        TemplateUI.from_template(str(template), dst=tmp_path / "dst")
+    assert "jinja_extensions" in str(caught.value)
+    assert not (tmp_path / "marker").exists()
+    assert "ui_refused_ext" not in sys.modules
+
+
+def test_edge_unsafe_flag_admits_a_template_with_extensions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Edge: unsafe template - explicit trust loads it, so the gate is a gate and not a wall."""
+    monkeypatch.syspath_prepend(str(tmp_path))
+    template = _hostile_template(tmp_path, "ui_trusted_ext")
+    with TemplateUI.from_template(str(template), dst=tmp_path / "dst", unsafe=True) as ui:
+        assert ui.schema().ids() == ("name",)
+    assert (tmp_path / "marker").exists()

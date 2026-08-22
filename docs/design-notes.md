@@ -65,7 +65,7 @@ Stable - public, safe to call directly:
 Unstable - internals the adapter uses, each one a single call site so a copier upgrade is a
 one-file fix:
 
-- `copier._main.Worker(src_path=..., dst_path=..., vcs_ref=..., answers_file=...)` - constructed but
+- `copier._main.Worker(src_path=..., dst_path=..., vcs_ref=..., answers_file=..., unsafe=...)` - constructed but
   never run. Used purely as the loader: it owns template fetch, the Jinja environment and the
   render context. Pydantic dataclass with `extra="forbid"`
 - `Worker.template` -> `copier._template.Template` - clones a git URL into a temp dir on first
@@ -75,6 +75,10 @@ one-file fix:
 - `Template.local_abspath: Path` - resolved template root, after cloning
 - `Worker.jinja_env: SandboxedEnvironment` - template `envops` and `_jinja_extensions` applied.
   Also the parser for dependency extraction
+- `Worker._check_unsafe(mode)` - raises `UnsafeTemplateError` when the template declares
+  `_jinja_extensions` or `_tasks` and neither `Worker.unsafe` nor copier's own trust settings
+  allow it. Reads config only; `mode` is `"update"` for the update operation and `"copy"`
+  otherwise, matching what `run_update` and `run_copy` pass
 - `Worker._render_context() -> dict` - the Jinja context: combined answers plus `_copier_conf`
   (with `src_path`, `dst_path`, `answers_file`), `_folder_name`, `_copier_python`, `_copier_phase`.
   Must be rebuilt after every answer change - it snapshots `Worker.answers.combined`
@@ -118,8 +122,12 @@ Behaviours worth knowing:
 - **Jinja extensions load eagerly** - the first `Worker.jinja_env` access imports every
   `_jinja_extensions` entry and raises `ExtensionNotFoundError` when one is missing. Loading
   copier-data-science needs `jinja2-time` installed; the adapter reports it as `TemplateLoadError`
+- **The trust gate has to precede that access** - importing an extension runs its module-level
+  code, so `_check_unsafe` is called before the first `jinja_env` access rather than at render
+  time, where copier's own `run_copy` / `run_update` place it. Deferring it would leave an
+  untrusted template executing code merely by being loaded into the survey
 
-Verified against copier-data-science on copier 9.17.2: 41 questions in declaration order,
+Verified against copier-data-science on copier 9.17.2: 35 questions in declaration order,
 `project_name` defaulting to `demo-proj` from `_copier_conf.dst_path.name`, `repo_name` recomputing
 to `my_proj` when `project_name` changes, `dependency_file` choices growing `environment.yml` when
 `environment_manager` flips to `conda`, `python_version_custom` becoming visible when
@@ -252,7 +260,7 @@ Pure state algorithms over `model`. No copier, no I/O. Evaluation arrives as cal
 The facade. Holds the adapter, the schema, the explicit answers and the preset ids; recomputes
 after every `set`.
 
-- `TemplateUI.from_template(src: str | Path | None, vcs_ref: str | None = None, answers_file: str | Path | None = None, *, dst: str | Path = ".", data: Mapping[str, Any] | None = None, operation: Operation = "copy") -> TemplateUI`
+- `TemplateUI.from_template(src: str | Path | None, *, dst: str | Path = ".", operation: Operation = "copy", vcs_ref: str | None = None, answers_file: str | Path | None = None, data: Mapping[str, Any] | None = None, unsafe: bool = False) -> TemplateUI` - raises `TemplateLoadError` for an untrusted template before importing any of its Jinja extensions
 - `TemplateUI.schema() -> Schema`
 - `TemplateUI.set(id: str, value: Any) -> None` - raises `UnknownFieldError`; accepted for a hidden
   field and retained
@@ -364,12 +372,13 @@ function.
 
 ## Decisions and deviations
 
-- **`from_template` takes `dst` and `operation`.** The criteria list
-  `from_template(src, vcs_ref=None, answers_file=None)`; that call still works. `dst` is not
+- **`from_template` takes `dst`, `operation` and `unsafe`, all keyword-only.** The criteria list
+  `from_template(src, vcs_ref=None, answers_file=None)`; only `src` stays positional. `dst` is not
   optional in practice - `_copier_conf.dst_path` is in the render context and copier-data-science's
   first question defaults to `{{ _copier_conf.dst_path.name }}`. `operation` decides answers-file
   seeding and which `run_*` executes, and `src=None` resolves the template from the destination's
-  answers file, as copier does for `update` and `recopy`
+  answers file, as copier does for `update` and `recopy`. `unsafe` is copier's `--trust`, applied
+  at load rather than at render because loading is where a template's code would run
 - **Kind precedence follows copier, not the criteria's reading order** - multiselect, then choice,
   then secret, then the base type; copier's own `get_questionary_structure` resolves it that way.
   `Question.secret` stays a separate flag, so a secret choice question is still masked

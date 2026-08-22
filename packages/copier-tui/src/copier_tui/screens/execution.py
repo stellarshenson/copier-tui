@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from rich.text import Text
 from textual import events
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Footer, ProgressBar, Static
 
-from copier_tui.theme import MINT, ORANGE, ROSE, SURFACE_BG, TEXT_MUTED
+from copier_tui.theme import MINT, ORANGE, ROSE, SURFACE_BG, TEXT_MUTED, TEXT_SUBTLE
 from copier_tui.widgets import HeaderBar
 from copier_ui import TemplateUI
 
@@ -27,11 +28,18 @@ class ExecutionScreen(Screen[bool]):
         padding: 1;
     }}
     #exec-status {{
+        height: 1;
         color: {TEXT_MUTED};
-        padding: 0 0 1 0;
+    }}
+    #exec-verdict {{
+        height: 1;
+        color: {TEXT_SUBTLE};
+    }}
+    #exec-progress {{
+        width: 100%;
     }}
     #exec-progress Bar {{
-        width: 100%;
+        width: 1fr;
     }}
     #exec-progress Bar > .bar--bar {{
         color: {ORANGE};
@@ -47,25 +55,36 @@ class ExecutionScreen(Screen[bool]):
     }}
     """
 
+    BINDINGS: ClassVar[list[Binding]] = [
+        Binding("enter", "close", "Close", priority=True),
+        Binding("escape", "close", "Close", priority=True, show=False),
+    ]
+
     def __init__(self, ui: TemplateUI, dst: Path, copier_kwargs: dict[str, Any]) -> None:
         """Hold the template UI, the destination and copier's own flags."""
         super().__init__(id="execution-screen")
         self.ui = ui
         self.dst = dst
         self.copier_kwargs = copier_kwargs
-        self._banner = Static(id="banner-box")
+        self.pretend = bool(copier_kwargs.get("pretend"))
         self._done = False
+        self._closed = False
         self._ok = False
 
     def compose(self) -> ComposeResult:
-        """Header, the status line and the progress bar, the verdict banner, footer."""
-        yield HeaderBar(f"render · {self.dst}")
+        """Header, the status line and the progress bar, the verdict banner, footer.
+
+        The destination is named once, in the header: the status line and the banner say
+        what happened to it, and repeating the path three times said nothing extra.
+        """
+        verb = "checking" if self.pretend else "rendering"
+        yield HeaderBar("dry run" if self.pretend else "render")
         yield Vertical(
-            Static(Text("rendering the template"), id="exec-status"),
+            Static(Text(f"{verb} the template"), id="exec-status"),
             ProgressBar(total=None, show_percentage=False, show_eta=False, id="exec-progress"),
+            Static(id="exec-verdict"),
             id="exec-body",
         )
-        yield self._banner
         yield Footer()
 
     def on_mount(self) -> None:
@@ -76,7 +95,14 @@ class ExecutionScreen(Screen[bool]):
         """Any key dismisses the verdict banner and ends the run."""
         if self._done:
             event.stop()
-            self.dismiss(self._ok)
+            self.action_close()
+
+    def action_close(self) -> None:
+        """End the run once the verdict is in; idempotent, any key reaches it too."""
+        if not self._done or self._closed:
+            return
+        self._closed = True
+        self.dismiss(self._ok)
 
     def _run_copier(self) -> None:
         """Call TemplateUI.render off the UI thread; report back with call_from_thread.
@@ -92,21 +118,26 @@ class ExecutionScreen(Screen[bool]):
         self.app.call_from_thread(self._finish, error)
 
     def _finish(self, error: BaseException | None) -> None:
-        """Show the verdict banner: mint on success, rose with copier's message on failure."""
+        """Put the verdict on the status line: mint on success, rose with copier's message.
+
+        A dry run says so - it reports what copier would write, and writes nothing. There is
+        no popup: the verdict belongs on the line that has been narrating the run, and the
+        destination is named once, by the status line, never also by the header.
+        """
         self._done = True
         self._ok = error is None
-        progress = self.query_one("#exec-progress", ProgressBar)
-        progress.update(total=1, progress=1)
+        self.query_one("#exec-progress", ProgressBar).update(total=1, progress=1)
         status = self.query_one("#exec-status", Static)
         if error is None:
-            status.update(Text(f"written to {self.dst}"))
-            self._banner.update(Text(f"render complete\n{self.dst}\n\npress any key"))
-            self._banner.styles.border = ("heavy", MINT)
+            done = (
+                "nothing written - this was a dry run"
+                if self.pretend
+                else f"written to {self.dst}"
+            )
+            status.update(Text(done, style=MINT))
         else:
-            status.update(Text(_message(error)))
-            self._banner.update(Text(f"render failed\n{_message(error)}\n\npress any key"))
-            self._banner.styles.border = ("heavy", ROSE)
-        self._banner.display = True
+            status.update(Text(f"failed - {_message(error)}", style=ROSE))
+        self.query_one("#exec-verdict", Static).update(Text("press any key to close"))
         self.set_focus(None)
 
 

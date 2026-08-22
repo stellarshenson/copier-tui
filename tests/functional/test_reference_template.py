@@ -16,7 +16,7 @@ def test_reference_template_renders(reference_template, tmp_path):
     src, ref = reference_template
     dst = tmp_path / "proj"
 
-    with TemplateUI.from_template(src, vcs_ref=ref, dst=dst) as ui:
+    with TemplateUI.from_template(src, vcs_ref=ref, dst=dst, unsafe=True) as ui:
         for question_id, value in ANSWERS.items():
             ui.set(question_id, value)
         assert ui.validate() == {}
@@ -32,7 +32,7 @@ def test_reference_template_renders(reference_template, tmp_path):
 def test_conditional_question_follows_its_controlling_answer(reference_template, tmp_path):
     src, ref = reference_template
 
-    with TemplateUI.from_template(src, vcs_ref=ref, dst=tmp_path / "proj") as ui:
+    with TemplateUI.from_template(src, vcs_ref=ref, dst=tmp_path / "proj", unsafe=True) as ui:
         assert "python_version_custom" not in ui.state().visible_ids
         ui.set("python_version_choice", "other")
         assert "python_version_custom" in ui.state().visible_ids

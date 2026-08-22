@@ -5,6 +5,8 @@ from __future__ import annotations
 EXIT_OK = 0
 EXIT_FAILURE = 1
 EXIT_CANCELLED = 2
+EXIT_UNSAFE = 0b100
+"""copier's own code for a template refused for an unsafe feature."""
 
 
 class TuiError(Exception):
