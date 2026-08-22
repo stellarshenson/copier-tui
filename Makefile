@@ -71,8 +71,8 @@ clean:
 	@find . -type d -name '.ruff_cache' -exec rm -r {} +
 	@echo "$(MSG_PREFIX) removing dist and build directories"
 	@rm -rf build dist packages/*/dist packages/*/build
-	@echo "$(MSG_PREFIX) removing logs and tmp directories"
-	@rm -rf logs tmp
+	@echo "$(MSG_PREFIX) removing the tmp directory"
+	@rm -rf tmp
 
 ## Restore .env from encrypted .env.enc (or create empty)
 .env:
