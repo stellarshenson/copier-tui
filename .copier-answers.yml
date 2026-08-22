@@ -1,0 +1,28 @@
+# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
+_commit: v1.3.18
+_src_path: https://github.com/stellarshenson/copier-data-science.git
+ai_assistant: none
+author_name: Stellars Henson <konrad.jelen+github@gmail.com>
+custom_config: ''
+dataset_storage: none
+dependency_file: pyproject.toml
+description: Project intents to build a wrapper copier-ui to copier for survey comprehension
+    and abstraction and copier-tui to use that abstraction to build nice ui, where
+    user can move back and forth until they are ready to finish and instantiate template
+docker_support: 'No'
+docs: none
+env_encryption: 'Yes'
+env_name: copier-tui
+environment_manager: uv
+git_init: 'Yes'
+github_actions: 'No'
+jupyter_kernel_support: 'Yes'
+linting_and_formatting: ruff
+module_name: copier_tui
+open_source_license: MIT
+package_repository: 'No'
+pydata_packages: none
+python_version_choice: '3.13'
+repo_name: copier-tui
+scaffold_agents: 'No'
+testing_framework: pytest

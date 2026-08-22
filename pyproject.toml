@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "copier_tui"
+version = "0.1.0"
+description = "Project intents to build a wrapper copier-ui to copier for survey comprehension and abstraction and copier-tui to use that abstraction to build nice ui, where user can move back and forth until they are ready to finish and instantiate template"
+authors = [
+    { name = "Stellars Henson \u003ckonrad.jelen+github@gmail.com\u003e" },
+]
+license = "MIT"
+readme = "README.md"
+requires-python = "~=3.13.0"
+classifiers = [
+    "Programming Language :: Python :: 3",
+]
+
+dependencies = [
+    "copier",
+    "loguru",
+    "python-dotenv",
+    "rich",
+    "textual",
+    "typer",
+]
+
+[project.optional-dependencies]
+dev = [
+    "build",
+    "ipykernel",
+    "ipython",
+    "nbdime",
+    "pip",
+    "pytest",
+    "pytest-cov",
+    "ruff",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["copier_tui*", "copier_ui*"]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 99
+src = ["src"]
+include = ["pyproject.toml", "src/**/*.py"]
+
+[tool.ruff.lint]
+extend-select = ["I"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["copier_tui", "copier_ui"]
+force-sort-within-sections = true
