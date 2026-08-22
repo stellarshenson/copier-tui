@@ -1,0 +1,295 @@
+"""Copier-facing layer.
+
+This is the ONLY module in copier_ui or copier_tui allowed to import copier. Everything it
+uses beyond `run_copy`, `run_recopy`, `run_update` and `Phase` is a copier internal that may
+move between copier releases; copier 9.17.2 is the version this was written against. Nothing
+outside this module may import `copier`.
+
+Internals to use, all documented in docs/design-notes.md:
+
+- `copier._main.Worker` - constructed, never run; owns the fetch, the Jinja env and the context
+- `Worker.template.questions_data`, `Worker.template.local_abspath`, `Worker.jinja_env`
+- `Worker.answers` (assign a fresh `copier._user_data.AnswersMap`) and `Worker._render_context()`
+- `copier._user_data.Question` - built fresh per evaluation; `_formatted_choices` is cached
+- `copier._types.MISSING` - the "no default" sentinel returned by `Question.get_default()`
+- `copier._subproject.Subproject.last_answers` - the destination's answers file
+- `copier.Phase.use(Phase.PROMPT)` - wraps every evaluation
+- `copier.run_copy` / `run_recopy` / `run_update` - the only public entry points
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator, Mapping
+from pathlib import Path
+import re
+from typing import Any
+
+from copier import Phase, run_copy, run_recopy, run_update
+from copier._main import Worker
+from copier._types import MISSING
+from copier._user_data import AnswersMap
+from copier._user_data import Question as CopierQuestion
+from jinja2 import TemplateSyntaxError, meta
+
+from copier_ui.errors import TemplateLoadError
+from copier_ui.model import Choice, Evaluation, Kind, Operation, Question
+
+_KIND_BY_TYPE = {
+    "str": Kind.STRING,
+    "bool": Kind.BOOL,
+    "int": Kind.INTEGER,
+    "float": Kind.FLOAT,
+    "path": Kind.PATH,
+    "json": Kind.STRUCTURED,
+    "yaml": Kind.STRUCTURED,
+}
+
+
+class TemplateAdapter:
+    """Loads a copier template and evaluates its questions against an answer set."""
+
+    def __init__(self, worker: Worker, operation: Operation) -> None:
+        """Wrap a constructed but unrun copier Worker."""
+        self._worker = worker
+        self._operation = operation
+        self._questions: tuple[Question, ...] | None = None
+
+    @classmethod
+    def open(
+        cls,
+        src: str | Path | None,
+        dst: Path,
+        *,
+        vcs_ref: str | None = None,
+        answers_file: Path | None = None,
+        operation: Operation = "copy",
+    ) -> TemplateAdapter:
+        """Fetch the template and check it carries a copier config, or raise TemplateLoadError."""
+        worker = Worker(
+            src_path=None if src is None else str(src),
+            dst_path=Path(dst),
+            vcs_ref=vcs_ref,
+            answers_file=answers_file,
+        )
+        adapter = cls(worker, operation)
+        try:
+            root = worker.template.local_abspath
+            if not _config_paths(root):
+                raise TemplateLoadError(f"No copier configuration file in {root}")
+            _ = worker.jinja_env
+            adapter.questions()
+        except TemplateLoadError:
+            worker._cleanup()
+            raise
+        except Exception as error:
+            worker._cleanup()
+            raise TemplateLoadError(str(error)) from error
+        return adapter
+
+    def questions(self) -> tuple[Question, ...]:
+        """Normalised questions in copier.yml declaration order."""
+        if self._questions is None:
+            self._questions = tuple(
+                self._normalise(id, details)
+                for id, details in self._worker.template.questions_data.items()
+            )
+        return self._questions
+
+    def last_answers(self) -> dict[str, Any]:
+        """The destination's answers file, with every underscore-prefixed key dropped."""
+        return {
+            key: value
+            for key, value in self._worker.subproject.last_answers.items()
+            if not key.startswith("_")
+        }
+
+    def evaluate(self, id: str, answers: Mapping[str, Any]) -> Evaluation:
+        """Resolve one question's visibility, default and choices against the given answers."""
+        load_error = self._load_error(id)
+        if load_error is not None:
+            return Evaluation(
+                visible=True, default=None, has_default=False, choices=(), error=load_error
+            )
+        details = dict(self._worker.template.questions_data[id], validator="")
+        with Phase.use(Phase.PROMPT):
+            try:
+                question = self._copier_question(id, answers, details)
+                visible = question.get_when()
+                choices = _choices_of(question)
+                default = question.get_default()
+            except Exception as error:  # noqa: BLE001 - a failed expression is a value here
+                return Evaluation(
+                    visible=True, default=None, has_default=False, choices=(), error=str(error)
+                )
+        if default is MISSING:
+            return Evaluation(
+                visible=visible, default=None, has_default=False, choices=choices, error=None
+            )
+        return Evaluation(
+            visible=visible, default=default, has_default=True, choices=choices, error=None
+        )
+
+    def validate(self, id: str, value: Any, answers: Mapping[str, Any]) -> tuple[str, ...]:
+        """Coerce and validate one value, returning messages instead of raising."""
+        load_error = self._load_error(id)
+        if load_error is not None:
+            return (load_error,)
+        with Phase.use(Phase.PROMPT):
+            try:
+                question = self._copier_question(id, answers)
+                question.validate_answer(question.parse_answer(value))
+            except Exception as error:  # noqa: BLE001 - user input problems are values
+                return (str(error),)
+        return ()
+
+    def run(self, dst: Path, data: Mapping[str, Any], **copier_kwargs: Any) -> None:
+        """Dispatch to run_copy, run_recopy or run_update with the answers as data."""
+        kwargs: dict[str, Any] = {
+            "vcs_ref": self._worker.vcs_ref,
+            "answers_file": self._worker.answers_file,
+            **copier_kwargs,
+        }
+        if self._operation == "copy":
+            run_copy(str(self._worker.template.url), dst, dict(data), **kwargs)
+        elif self._operation == "recopy":
+            run_recopy(dst, dict(data), **kwargs)
+        else:
+            run_update(dst, dict(data), **kwargs)
+
+    def close(self) -> None:
+        """Drop the template's temporary clone."""
+        self._worker._cleanup()
+
+    def _copier_question(
+        self,
+        id: str,
+        answers: Mapping[str, Any],
+        details: Mapping[str, Any] | None = None,
+    ) -> CopierQuestion:
+        """Build a fresh copier Question bound to a render context for these answers."""
+        if details is None:
+            details = self._worker.template.questions_data[id]
+        self._worker.answers = AnswersMap(user=dict(answers))
+        return CopierQuestion(
+            var_name=id,
+            answers=self._worker.answers,
+            context=self._worker._render_context(),
+            jinja_env=self._worker.jinja_env,
+            settings=self._worker.settings,
+            **details,
+        )
+
+    def _load_error(self, id: str) -> str | None:
+        """The load error of a question, or None when it was normalised cleanly."""
+        for question in self.questions():
+            if question.id == id:
+                return question.load_error
+        return None
+
+    def _normalise(self, id: str, details: Mapping[str, Any]) -> Question:
+        """Turn one raw copier.yml question block into a model Question."""
+        try:
+            with Phase.use(Phase.PROMPT):
+                question = self._copier_question(id, {}, details)
+                kind = _kind_of(
+                    question.get_type_name(),
+                    choices=bool(question.choices),
+                    multiselect=question.multiselect,
+                    secret=question.secret,
+                )
+                multiline = question.get_multiline()
+                placeholder = question.get_placeholder()
+        except Exception as error:  # noqa: BLE001 - a broken question is reported, not raised
+            return Question(
+                id=id,
+                kind=Kind.STRING,
+                label=id,
+                help="",
+                secret=False,
+                multiselect=False,
+                multiline=False,
+                placeholder="",
+                default_source=None,
+                choices_source=None,
+                when_source=True,
+                validator_source="",
+                dependencies=(),
+                load_error=f"{id}: {error}",
+            )
+        return Question(
+            id=id,
+            kind=kind,
+            label=id,
+            help=str(details.get("help", "")),
+            secret=question.secret,
+            multiselect=question.multiselect,
+            multiline=multiline,
+            placeholder=placeholder,
+            default_source=None if question.secret else details.get("default"),
+            choices_source=details.get("choices"),
+            when_source=details.get("when", True),
+            validator_source=str(details.get("validator", "")),
+            dependencies=tuple(
+                dependency
+                for dependency in self._dependencies(
+                    details.get("when"), details.get("default"), details.get("choices")
+                )
+                if dependency != id
+            ),
+            load_error=None,
+        )
+
+    def _dependencies(self, *sources: Any) -> tuple[str, ...]:
+        """Question ids referenced by the given Jinja sources, via jinja2.meta over the AST."""
+        ids = set(self._worker.template.questions_data)
+        found: set[str] = set()
+        for source in _templates(sources):
+            try:
+                ast = self._worker.jinja_env.parse(source)
+            except TemplateSyntaxError:
+                continue
+            found |= meta.find_undeclared_variables(ast) & ids
+        return tuple(sorted(found))
+
+
+def _config_paths(root: Path) -> list[Path]:
+    """The template's copier.yml / copier.yaml files, matching copier's own glob."""
+    return [
+        path
+        for path in root.glob("copier.*")
+        if path.is_file() and re.match(r"\.ya?ml", path.suffix, re.IGNORECASE)
+    ]
+
+
+def _templates(source: Any) -> Iterator[str]:
+    """Every string inside a raw copier.yml value, however deeply nested."""
+    if isinstance(source, str):
+        yield source
+    elif isinstance(source, Mapping):
+        for key, value in source.items():
+            yield from _templates(key)
+            yield from _templates(value)
+    elif isinstance(source, (list, tuple)):
+        for item in source:
+            yield from _templates(item)
+
+
+def _kind_of(type_name: str, *, choices: bool, multiselect: bool, secret: bool) -> Kind:
+    """Map a copier type name plus its modifiers to exactly one Kind."""
+    if multiselect:
+        return Kind.MULTISELECT
+    if choices:
+        return Kind.CHOICE
+    if secret:
+        return Kind.SECRET
+    return _KIND_BY_TYPE[type_name]
+
+
+def _choices_of(question: CopierQuestion) -> tuple[Choice, ...]:
+    """Render copier's formatted choices into ordered label/value pairs."""
+    if not question.choices:
+        return ()
+    return tuple(
+        Choice(label=str(choice.title), value=choice.value)
+        for choice in question._formatted_choices
+    )

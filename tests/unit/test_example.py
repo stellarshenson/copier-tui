@@ -6,6 +6,7 @@ This module shows how to structure tests with:
 - Docstrings for test documentation
 - Parametrized tests for multiple inputs
 """
+
 import pytest
 
 
@@ -33,11 +34,14 @@ def test_sample_data_structure(sample_data):
     assert isinstance(sample_data["count"], int)
 
 
-@pytest.mark.parametrize("input_value,expected", [
-    (1, True),
-    (0, False),
-    (-1, True),
-])
+@pytest.mark.parametrize(
+    "input_value,expected",
+    [
+        (1, True),
+        (0, False),
+        (-1, True),
+    ],
+)
 def test_parametrized_example(input_value, expected):
     """Test with multiple input values.
 

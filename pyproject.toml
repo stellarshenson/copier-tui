@@ -10,6 +10,9 @@ copier-ui = { workspace = true }
 [dependency-groups]
 dev = [
     "build",
+    # copier-data-science, the reference template used by the tests, eagerly loads
+    # jinja2_time.TimeExtension - a template's own extensions must be importable
+    "jinja2-time",
     "pytest",
     "pytest-cov",
     "pytest-asyncio",
@@ -24,7 +27,7 @@ asyncio_mode = "auto"
 [tool.ruff]
 line-length = 99
 src = ["packages/copier-ui/src", "packages/copier-tui/src"]
-include = ["pyproject.toml", "packages/*/src/**/*.py", "tests/**/*.py"]
+include = ["pyproject.toml", "packages/*/src/**/*.py", "tests/**/*.py", "scripts/**/*.py"]
 
 [tool.ruff.lint]
 extend-select = ["I"]
