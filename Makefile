@@ -118,7 +118,10 @@ test-functional: build
 		$(wildcard $(PROJECT_DIR)/packages/copier-tui/dist/*.whl) \
 		pytest pytest-asyncio jinja2-time
 	@echo "$(MSG_PREFIX) executing functional tests against the installed wheels"
-	$(FUNCTIONAL_VENV)/bin/pytest -v ./tests/functional
+	# the venv's bin goes first on PATH so a template's own post-generation task,
+	# which shells out to bare `python3`, resolves to the interpreter that has the
+	# template's dependencies - the same thing an activated venv gives a real user
+	PATH="$(FUNCTIONAL_VENV)/bin:$$PATH" $(FUNCTIONAL_VENV)/bin/pytest -v ./tests/functional
 	@echo "$(OK_STYLE)>>> functional tests passed against the built wheels$(NO_STYLE)"
 
 ## Capture TUI screenshots into docs/assets (SVG)
