@@ -7,8 +7,10 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from rich.text import Text
+from textual import events
 from textual.app import App, SystemCommand
 from textual.binding import Binding
+from textual.geometry import Size
 from textual.screen import Screen
 from textual.widgets import Static
 
@@ -49,9 +51,12 @@ class SurveyApp(App[int]):
         else:
             self._push(ReviewScreen(self.ui, self.dst), self._after_review)
 
-    def on_resize(self) -> None:
-        """Show the resize prompt below MIN_WIDTH or MIN_HEIGHT, hide it above."""
-        self._check_size()
+    def on_resize(self, event: events.Resize) -> None:
+        """Show the resize prompt below MIN_WIDTH or MIN_HEIGHT, hide it above.
+
+        The event carries the new size; App.size still reports the old one here.
+        """
+        self._check_size(event.size)
 
     def action_cancel(self) -> None:
         """Leave without writing anything."""
@@ -88,10 +93,11 @@ class SurveyApp(App[int]):
         """The render's verdict is the process exit code."""
         self.exit(EXIT_OK if ok else EXIT_FAILURE)
 
-    def _check_size(self) -> None:
+    def _check_size(self, size: Size | None = None) -> None:
         """Mount or drop the resize prompt on the screen currently on top."""
+        size = self.size if size is None else size
         prompt = self.screen.query("#resize-prompt")
-        if self.size.width < MIN_WIDTH or self.size.height < MIN_HEIGHT:
+        if size.width < MIN_WIDTH or size.height < MIN_HEIGHT:
             if not prompt:
                 self.screen.mount(
                     Static(

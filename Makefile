@@ -116,7 +116,7 @@ test-functional: build
 	@uv $(UV_OPTS) pip install -q --python $(FUNCTIONAL_VENV) \
 		$(wildcard $(PROJECT_DIR)/packages/copier-ui/dist/*.whl) \
 		$(wildcard $(PROJECT_DIR)/packages/copier-tui/dist/*.whl) \
-		pytest pytest-asyncio
+		pytest pytest-asyncio jinja2-time
 	@echo "$(MSG_PREFIX) executing functional tests against the installed wheels"
 	$(FUNCTIONAL_VENV)/bin/pytest -v ./tests/functional
 	@echo "$(OK_STYLE)>>> functional tests passed against the built wheels$(NO_STYLE)"

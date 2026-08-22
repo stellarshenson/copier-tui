@@ -1,0 +1,10 @@
+_subdirectory: template
+
+alpha:
+  type: str
+  default: a
+  when: "{{ beta == 'b' }}"
+
+beta:
+  type: str
+  default: "{{ alpha }}"

@@ -1,0 +1,20 @@
+_subdirectory: template
+
+name:
+    type: str
+    default: demo
+    validator: "{% if not name %}name is required{% endif %}"
+
+advanced:
+    type: bool
+    default: false
+
+detail:
+    type: str
+    default: plain
+    when: "{{ advanced }}"
+
+token:
+    type: str
+    secret: true
+    default: s3cret

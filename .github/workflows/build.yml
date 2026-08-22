@@ -70,7 +70,7 @@ jobs:
           uv venv --python 3.13 tmp/functional-venv
           uv pip install --python tmp/functional-venv \
             packages/copier-ui/dist/*.whl packages/copier-tui/dist/*.whl \
-            pytest pytest-asyncio
+            pytest pytest-asyncio jinja2-time
       - name: Functional tests against the built wheels
         run: tmp/functional-venv/bin/pytest -v ./tests/functional
       - name: Check distributions

@@ -18,6 +18,7 @@ SIZE = (110, 40)
 OUT = Path("docs/assets")
 DEFAULT_TEMPLATE = "../../copier-data-science"
 REVEAL = ("python_version_choice", "other")
+REVEALED = "python_version_custom"
 
 
 def _save(app: SurveyApp, name: str) -> None:
@@ -35,6 +36,10 @@ async def _capture(template: str, dst: Path) -> None:
         app = SurveyApp(ui, dst, {"pretend": True, "quiet": True, "unsafe": True})
         async with app.run_test(size=SIZE) as pilot:
             await pilot.pause()
+            revealed = app.screen.query(f"#ctl-{REVEALED}")
+            if revealed:
+                revealed.first().focus()
+                await pilot.pause()
             _save(app, "survey")
             await pilot.press("enter")
             await pilot.pause()

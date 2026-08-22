@@ -1,0 +1,58 @@
+_subdirectory: template
+
+text:
+    type: str
+    default: demo
+
+where:
+    type: path
+    default: ./here
+
+count:
+    type: int
+    default: 3
+
+ratio:
+    type: float
+    default: 1.5
+
+enabled:
+    type: bool
+    default: false
+
+config:
+    type: json
+    default: "{}"
+
+flavour:
+    type: str
+    default: a
+    choices:
+        - a
+        - b
+
+extras:
+    type: str
+    multiselect: true
+    default: []
+    choices:
+        - x
+        - y
+
+token:
+    type: str
+    secret: true
+    default: s3cret
+
+notes:
+    type: str
+    multiline: true
+    default: line one
+
+secret_pick:
+    type: str
+    secret: true
+    default: alpha
+    choices:
+        - alpha
+        - beta

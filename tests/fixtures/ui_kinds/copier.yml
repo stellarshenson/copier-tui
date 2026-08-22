@@ -1,0 +1,74 @@
+_subdirectory: template
+
+text:
+  type: str
+  default: hello
+  help: Some free text
+
+flag:
+  type: bool
+  default: true
+  help: A boolean switch
+
+count:
+  type: int
+  default: 3
+
+ratio:
+  type: float
+  default: 1.5
+
+where:
+  type: path
+  default: ./out
+
+config:
+  type: json
+  default: '{"a": 1}'
+
+blob:
+  type: yaml
+  default: "a: 1"
+
+colour:
+  type: str
+  default: red
+  choices:
+    - red
+    - green
+
+shade:
+  type: str
+  default: light
+  choices:
+    Light shade: light
+    Dark shade: dark
+
+size:
+  type: str
+  default: s
+  choices:
+    - [Small, s]
+    - [Large, l]
+
+tags:
+  type: str
+  default:
+    - a
+  multiselect: true
+  choices:
+    - a
+    - b
+
+token:
+  type: str
+  secret: true
+  default: s3cret
+
+mode:
+  type: str
+  secret: true
+  default: alpha
+  choices:
+    - alpha
+    - beta

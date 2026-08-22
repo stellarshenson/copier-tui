@@ -1,0 +1,14 @@
+_subdirectory: template
+
+good:
+  type: str
+  default: fine
+
+broken_when:
+  type: str
+  default: x
+  when: "{{ 1 / 0 }}"
+
+broken_default:
+  type: str
+  default: "{{ 1 / 0 }}"

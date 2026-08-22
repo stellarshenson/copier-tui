@@ -1,0 +1,28 @@
+_subdirectory: template
+
+project:
+  type: str
+  default: demo
+  help: Project name
+
+use_docker:
+  type: bool
+  default: false
+
+image:
+  type: str
+  default: "{{ project }}-image"
+  when: "{{ use_docker }}"
+
+port:
+  type: int
+  default: 8080
+  when: "{{ use_docker }}"
+  validator: "{% if port < 1024 %}Port must be 1024 or above{% endif %}"
+
+flavour:
+  type: str
+  default: "{{ project }}"
+  choices:
+    - "{{ project }}"
+    - other

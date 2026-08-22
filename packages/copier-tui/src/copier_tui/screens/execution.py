@@ -70,7 +70,7 @@ class ExecutionScreen(Screen[bool]):
 
     def on_mount(self) -> None:
         """Start the render worker and the indeterminate progress bar."""
-        self.run_worker(self._render, thread=True, name="render")
+        self.run_worker(self._run_copier, thread=True, name="render")
 
     def on_key(self, event: events.Key) -> None:
         """Any key dismisses the verdict banner and ends the run."""
@@ -78,8 +78,12 @@ class ExecutionScreen(Screen[bool]):
             event.stop()
             self.dismiss(self._ok)
 
-    def _render(self) -> None:
-        """Call TemplateUI.render off the UI thread; report back with call_from_thread."""
+    def _run_copier(self) -> None:
+        """Call TemplateUI.render off the UI thread; report back with call_from_thread.
+
+        Not named `_render`: Widget._render is Textual's own, and shadowing it runs this
+        on the UI thread during layout.
+        """
         error: BaseException | None = None
         try:
             self.ui.render(self.dst, **self.copier_kwargs)

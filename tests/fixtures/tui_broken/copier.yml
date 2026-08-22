@@ -1,0 +1,9 @@
+_subdirectory: template
+
+good:
+    type: str
+    default: fine
+
+bad:
+    type: nonsense
+    default: 1

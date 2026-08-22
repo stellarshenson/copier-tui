@@ -1,0 +1,9 @@
+_subdirectory: template
+
+good:
+  type: str
+  default: fine
+
+wrong:
+  type: colour
+  default: red

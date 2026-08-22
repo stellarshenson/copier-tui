@@ -12,12 +12,24 @@ from textual.binding import Binding
 from textual.containers import VerticalScroll
 from textual.css.query import NoMatches
 from textual.screen import ModalScreen, Screen
-from textual.widgets import Footer, OptionList, Static, TextArea
+from textual.widget import Widget
+from textual.widgets import Footer, OptionList, Select, SelectionList, Static, TextArea
 from textual.widgets.option_list import Option
 
 from copier_tui.theme import CYAN_BRIGHT, SURFACE_BG, TEXT_MUTED
 from copier_tui.widgets import FieldRow, HeaderBar, display_value
 from copier_ui import Schema, State, TemplateUI
+
+_ACTION_KEY = {
+    "confirm": "enter",
+    "cancel": "escape",
+    "focus_next": "down",
+    "focus_previous": "up",
+}
+"""Screen action to the key it is bound to, for check_action."""
+
+_ARROW_OWNERS = (Select, SelectionList, TextArea)
+"""Controls that move a cursor of their own with up and down."""
 
 
 class SurveyScreen(Screen[bool]):
@@ -35,8 +47,8 @@ class SurveyScreen(Screen[bool]):
         Binding("enter", "confirm", "Review", priority=True),
         Binding("escape", "cancel", "Cancel", priority=True),
         Binding("f2", "jump", "Overview"),
-        Binding("down", "focus_next", "Next field", show=False),
-        Binding("up", "focus_previous", "Previous field", show=False),
+        Binding("down", "focus_next", "Next field", show=False, priority=True),
+        Binding("up", "focus_previous", "Previous field", show=False, priority=True),
     ]
 
     def __init__(self, ui: TemplateUI) -> None:
@@ -64,6 +76,33 @@ class SurveyScreen(Screen[bool]):
         self.ui.set(message.field_id, message.value)
         self._refresh_rows()
 
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        """Give a key back to the control that owns it.
+
+        Enter opens a Select's menu, which then picks with enter and closes with escape;
+        up and down move the cursor inside a menu, a multiselect or an editor. Elsewhere
+        up and down step between fields, over the scrolling form's own arrow bindings.
+        Greying the screen binding is what lets the key reach the control instead.
+        """
+        key = _ACTION_KEY.get(action)
+        if key is None or self._warn.display:
+            return True
+        if key in ("up", "down"):
+            return True if self._focused_owner(_ARROW_OWNERS) is None else None
+        select = self._focused_owner((Select,))
+        if select is None:
+            return True
+        return None if key == "enter" or select.expanded else True
+
+    def _focused_owner(self, types: tuple[type[Widget], ...]) -> Widget | None:
+        """The focused control, or the control enclosing it, when it is one of these."""
+        focused = self.focused
+        if focused is None:
+            return None
+        if isinstance(focused, types):
+            return focused
+        return next((node for node in focused.ancestors if isinstance(node, types)), None)
+
     def on_key(self, event: events.Key) -> None:
         """Any key dismisses the blocking warning popup."""
         if self._warn.display:
@@ -75,7 +114,7 @@ class SurveyScreen(Screen[bool]):
         if self._warn.display:
             self._dismiss_warning()
             return
-        self.app.push_screen(JumpScreen(self.ui.schema(), self.ui.state()), self._focus_field)
+        self.app.push_screen(JumpScreen(self.ui.state(), self.ui.schema()), self._focus_field)
 
     def action_confirm(self) -> None:
         """Dismiss with True to advance to the review screen."""
@@ -91,6 +130,14 @@ class SurveyScreen(Screen[bool]):
             self._show_warning(errors)
             return
         self.dismiss(True)
+
+    def action_focus_next(self) -> None:
+        """Move to the next field. Screen has no focus_next action of its own."""
+        self.focus_next()
+
+    def action_focus_previous(self) -> None:
+        """Move to the previous field."""
+        self.focus_previous()
 
     def action_cancel(self) -> None:
         """Dismiss with False, leaving the destination untouched."""
@@ -180,11 +227,11 @@ class JumpScreen(ModalScreen[str | None]):
         Binding("escape", "close", "Close", priority=True),
     ]
 
-    def __init__(self, schema: Schema, state: State) -> None:
-        """Hold the questions and the state the overview lists."""
+    def __init__(self, state: State, schema: Schema) -> None:
+        """Hold the state and the questions the overview lists."""
         super().__init__(id="jump-screen")
-        self.schema = schema
         self.state = state
+        self.schema = schema
 
     def compose(self) -> ComposeResult:
         """Header, one option per visible question, footer."""

@@ -96,8 +96,15 @@ choice -> Select, multiselect -> SelectionList, structured -> TextArea."""
 
 
 def control_for(question: Question, field: FieldState) -> Widget:
-    """Build the input control for a question, prefilled with the field's current value."""
-    widget = TextArea if question.multiline else WIDGET_BY_KIND[question.kind]
+    """Build the input control for a question, prefilled with the field's current value.
+
+    A secret question always gets the masked Input, whatever its kind: no choice list or
+    editor may put the value on screen in the clear.
+    """
+    if question.secret:
+        widget: type[Widget] = Input
+    else:
+        widget = TextArea if question.multiline else WIDGET_BY_KIND[question.kind]
     control_id = f"ctl-{question.id}"
     if widget is ChoiceSelectionList:
         return ChoiceSelectionList(field.choices, field.value, id=control_id)
@@ -138,11 +145,11 @@ class HeaderBar(Horizontal):
     def __init__(self, context: str = "") -> None:
         """Build the header, optionally folding extra context into the title cell."""
         super().__init__(id="app-header")
-        self._context = context
+        self._label_context = context
 
     def compose(self) -> ComposeResult:
         """The title cell and the version cell."""
-        title = f"copier-tui · {self._context}" if self._context else "copier-tui"
+        title = f"copier-tui · {self._label_context}" if self._label_context else "copier-tui"
         yield Static(title, id="hdr-title")
         yield Static(f"v{__version__}", id="hdr-version")
 

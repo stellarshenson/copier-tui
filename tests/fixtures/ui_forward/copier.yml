@@ -1,0 +1,10 @@
+_subdirectory: template
+
+early:
+  type: str
+  default: shown
+  when: "{{ later == 'yes' }}"
+
+later:
+  type: str
+  default: "yes"
