@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "copier-tui"
-version = "0.6.7"
+version = "0.6.8"
 description = "A terminal UI for copier: the same CLI, a survey you can move back and forth through before instantiating the template"
 authors = [
     { name = "Stellars Henson", email = "konrad.jelen+github@gmail.com" },
@@ -22,7 +22,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "copier-ui==0.6.7",
+    "copier-ui==0.6.8",
     "copier>=9.6",
     "textual>=1.0",
     "rich>=13.0",
