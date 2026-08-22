@@ -298,6 +298,27 @@ async def test_a_multiselect_keeps_the_arrows_until_its_last_option(tmp_path: Pa
         assert app.focused is not options
 
 
+async def test_escape_closes_an_open_menu_instead_of_arming_the_cancel(tmp_path: Path) -> None:
+    """The screen's escape is a priority binding, so an open menu has to be given it back."""
+    async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
+        select = app.screen.query_one("#ctl-flavour", ChoiceSelect)
+        select.focus()
+        await pilot.pause()
+        await pilot.press("space")
+        await pilot.pause()
+        assert select.expanded is True
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert select.expanded is False
+        assert hint(app) != CANCEL_HINT
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert isinstance(app.screen, SurveyScreen)
+        assert hint(app) == CANCEL_HINT
+
+
 async def test_escape_takes_two_presses_and_says_so(tmp_path: Path) -> None:
     """A survey is too costly to lose to one stray key: the first escape only arms."""
     async with survey(tmp_path / "out") as (app, pilot):
@@ -312,7 +333,7 @@ async def test_escape_takes_two_presses_and_says_so(tmp_path: Path) -> None:
 
 
 async def test_moving_the_focus_disarms_a_pending_escape(tmp_path: Path) -> None:
-    """Anything but a second escape puts the safety back on."""
+    """Stepping to another field puts the safety back on."""
     async with survey(tmp_path / "out") as (app, pilot):
         await pilot.press("escape")
         await pilot.pause()
@@ -327,24 +348,8 @@ async def test_moving_the_focus_disarms_a_pending_escape(tmp_path: Path) -> None
         assert isinstance(app.screen, SurveyScreen)
 
 
-async def test_escape_closes_an_open_menu_before_it_arms_a_quit(tmp_path: Path) -> None:
-    """Escape reaches the transient thing first: an open list closes, the survey stays put."""
-    async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
-        select = app.screen.query_one("#ctl-flavour")
-        select.focus()
-        await pilot.pause()
-        await pilot.press("space")
-        await pilot.pause()
-        assert select.expanded is True
-
-        await pilot.press("escape")
-        await pilot.pause()
-        assert select.expanded is False
-        assert hint(app) != CANCEL_HINT
-
-
 async def test_editing_an_answer_disarms_a_pending_escape(tmp_path: Path) -> None:
-    """A keystroke that changes an answer is not the confirmation the armed escape wants."""
+    """So does typing. A control consumes its own keys, so the change message is the signal."""
     async with survey(tmp_path / "out") as (app, pilot):
         app.screen.query_one("#ctl-name").focus()
         await pilot.pause()
@@ -352,7 +357,7 @@ async def test_editing_an_answer_disarms_a_pending_escape(tmp_path: Path) -> Non
         await pilot.pause()
         assert hint(app) == CANCEL_HINT
 
-        await pilot.press("z")
+        await pilot.press("x")
         await pilot.pause()
         assert hint(app) != CANCEL_HINT
 

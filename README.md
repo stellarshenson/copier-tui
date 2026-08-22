@@ -32,8 +32,9 @@ Every existing copier template gets the alternative UI without any change to the
 ## Screens
 
 The whole survey is one screen. Every question is one row - a label gutter, the control, and a
-single glyph marking a problem, an unavailable field or an untouched default. Help and validation
-messages share the reserved line above the footer, so they cost no rows. The capture below is
+single glyph marking a problem, an unavailable field or an untouched default. The header counts
+the field you are on, and help and validation messages share the reserved line above the footer,
+so neither costs a row. The capture below is
 [copier-data-science](https://github.com/stellarshenson/copier-data-science): 24 questions,
 conditional fields included, in 24 rows.
 

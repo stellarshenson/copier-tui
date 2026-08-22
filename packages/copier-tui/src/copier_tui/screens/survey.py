@@ -128,9 +128,10 @@ class SurveyScreen(Screen[None]):
         """Give a key back to the control that owns it.
 
         Returning None greys the screen's binding for this key, which is what lets the key
-        reach the focused control instead. Enter belongs to the open menu, the editor and
-        the switch; up and down belong to a cursor that still has somewhere to go, so a
-        control hands the focus on at its own first and last line rather than trapping it.
+        reach the focused control instead. Enter belongs to an open menu and to an editor;
+        escape belongs to an open menu, which it closes; up and down belong to a cursor that
+        still has somewhere to go, so a control hands the focus on at its own first and last
+        line rather than trapping it.
         """
         key = _ACTION_KEY.get(action)
         if key is None:

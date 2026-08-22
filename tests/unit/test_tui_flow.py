@@ -310,3 +310,59 @@ async def test_the_progress_bar_takes_the_width_of_the_screen(tmp_path: Path) ->
         bar = progress.query_one(Bar)
         assert progress.size.width == app.screen.query_one("#exec-body").size.width
         assert bar.size.width >= progress.size.width - 1
+
+
+async def focus_control(pilot: Pilot, app: SurveyApp, control_id: str, limit: int = 60) -> bool:
+    """Walk the form downward with the arrow key until a control has the focus."""
+    for _ in range(limit):
+        if app.focused is not None and app.focused.id == control_id:
+            return True
+        await pilot.press("down")
+        await pilot.pause()
+    return app.focused is not None and app.focused.id == control_id
+
+
+@pytest.mark.skipif(not REFERENCE.is_dir(), reason="the reference template is not checked out")
+async def test_the_round_trip_runs_on_the_keyboard_alone(tmp_path: Path) -> None:
+    """The headline requirement, driven the way a user drives it: keys only, no private calls.
+
+    Walk down to a choice, open its list, pick the answer that reveals a conditional field,
+    walk on to the bottom of a form taller than the viewport, go to review, come back. The
+    revealed field, the scroll offset and the focused control all have to survive.
+    """
+    dst = tmp_path / "demo-proj"
+    with TemplateUI.from_template(str(REFERENCE), dst=dst, unsafe=True) as ui:
+        app = SurveyApp(ui, dst, {"quiet": True, "unsafe": True})
+        async with app.run_test(size=(120, 24)) as pilot:
+            await pilot.pause()
+            survey = app.screen
+            assert isinstance(survey, SurveyScreen)
+            assert not survey.query("#row-python_version_custom")
+
+            assert await focus_control(pilot, app, "ctl-python_version_choice")
+            await pilot.press("space")
+            await pilot.pause()
+            await pilot.press("end")
+            await pilot.pause()
+            await pilot.press("enter")
+            await pilot.pause()
+            assert ui.state().fields["python_version_choice"].value == "other"
+            assert survey.query("#row-python_version_custom")
+
+            last = [row.question.id for row in survey.query(FieldRow)][-1]
+            assert await focus_control(pilot, app, f"ctl-{last}")
+            form = survey.query_one("#survey-form", VerticalScroll)
+            offset = form.scroll_offset.y
+            assert offset > 0, "the form did not scroll - the check would prove nothing"
+
+            await pilot.press("enter")
+            await pilot.pause()
+            assert isinstance(app.screen, ReviewScreen)
+            assert app.screen.query("#review-python_version_custom")
+            assert not dst.exists()
+
+            await pilot.press("escape")
+            await pilot.pause()
+            assert app.screen is survey
+            assert form.scroll_offset.y == offset
+            assert app.focused.id == f"ctl-{last}"
