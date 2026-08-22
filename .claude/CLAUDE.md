@@ -21,14 +21,16 @@ The following workspace rules are STRICTLY ENFORCED for this project:
 
 ## Project Context
 
-Two Python packages in one repository, both installed from `src/`:
+Two Python packages in one repository, published together to PyPI as `copier-ui` and `copier-tui`, laid out as a uv workspace under `packages/`:
 
 - `copier_ui` - UI-neutral abstraction over a [copier](https://copier.readthedocs.io) template survey. Three layers: copier adapter (parses `copier.yml`), UI model (normalised questions, pages, groups, fields), state engine (answers, dependency evaluation, visibility, validation). Owns semantics, renders nothing
 - `copier_tui` - terminal renderer built on `copier_ui`, using Textual and Rich. Maps question kinds to widgets and nothing more. Lets the user move back and forth through the survey and only instantiates the template on confirmation
 
 Copier itself stays the template engine. Answers are supplied through `copier.run_copy(..., data=answers)`, so nothing is prompted interactively and every existing template works unchanged. `copier_webui` and `copier_api` are named in the design as future siblings; they are out of scope here.
 
-Stack: Python 3.13, uv environment (`.venv`, env name `copier-tui`), ruff, pytest, Makefile-driven. Acceptance criteria live in `docs/acc-crit-copier-tui.md`.
+Stack: Python 3.11+ (3.13 locally), uv workspace, ruff, pytest, Makefile-driven, GitHub Actions. Acceptance criteria live in `docs/acc-crit-copier-tui.md`. `copier-data-science` (`/home/lab/workspace/private/copier-data-science`, also on GitHub) is the reference template the functional tests run against - 37 questions, conditional `when`, computed `when: false` fields, Jinja defaults referencing other answers, choices, `type: json`.
+
+Versioning: both packages share one version, bumped in lockstep by `scripts/bump_version.py`. `make install` bumps the patch every time, including for a major change - deliberate. `make publish` uploads both with twine, `copier-ui` first because `copier-tui` pins it exactly.
 
 ## Journal Rules (Project-Specific)
 
@@ -45,4 +47,5 @@ Stack: Python 3.13, uv environment (`.venv`, env name `copier-tui`), ruff, pytes
 - **`copier_tui` holds no semantics** - it never parses `copier.yml`, evaluates a `when`, or computes a default. Anything it displays comes from `copier_ui` state. Logic that both a TUI and a future web UI would need belongs in `copier_ui`
 - **CLI is a drop-in for copier** - `copier-tui` accepts copier's exact CLI syntax: same subcommands, arguments, flags and short forms. Swapping `copier` for `copier-tui` changes the interface and nothing else. Flags keep copier's semantics rather than being re-implemented
 - **Acceptance criteria are the gate** - `docs/acc-crit-copier-tui.md` is the canonical statement of done. Update it via the `acceptance-criteria` skill and validate with its `acc-crit.py check` after every edit
+- **Modular and simple** - the Star Colonel's standing instruction for this project: small modules with one job each, no speculative abstraction, no framework where a function does. If a file is doing two things, split it; if a layer exists only for a future caller, delete it
 - **Surgical changes** - the workspace rule applies with force here: this is a small codebase where an unrequested abstraction is immediately visible. No speculative layers for `copier_webui` or `copier_api` until those are actually being built

@@ -1,4 +1,5 @@
-.PHONY: clean lint format requirements upgrade build install help sync_data_up sync_data_down sync_models_up sync_models_down test docs docs_serve create_environment remove_environment register_environment increment_version_number preflight
+.PHONY: clean lint format requirements upgrade build install publish help test test-functional \
+        create_environment remove_environment increment_version_number preflight screenshots
 
 #################################################################################
 # GLOBALS                                                                       #
@@ -9,12 +10,19 @@
 
 PROJECT_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 PROJECT_NAME = copier-tui
-MODULE_NAME = copier_tui
 PYTHON_VERSION = 3.13
 PYTHON_INTERPRETER = python
 
+# the two distributable packages, published together and versioned in lockstep
+PACKAGES = copier-ui copier-tui
+UI_PYPROJECT = $(PROJECT_DIR)/packages/copier-ui/pyproject.toml
+TUI_PYPROJECT = $(PROJECT_DIR)/packages/copier-tui/pyproject.toml
+
 # Set SKIP_VERSION_INCREMENT=1 to skip auto-bumping the patch version in install/build
 SKIP_VERSION_INCREMENT ?= 0
+
+# throwaway environment used by the isolated functional tests
+FUNCTIONAL_VENV = $(PROJECT_DIR)/tmp/functional-venv
 
 #################################################################################
 # STYLES                                                                        #
@@ -33,36 +41,36 @@ NO_STYLE = \033[0m
 # ENVIRONMENT CONFIGURATION                                                     #
 #################################################################################
 
-# unified environment name for all managers
 ENV_NAME = copier-tui
-# uv configuration
 VENV_PATH = $(PROJECT_DIR)/.venv
 UV_OPTS =
 
 #################################################################################
 # COMMANDS                                                                      #
 #################################################################################
-## Install Python dependencies
+
+## Install workspace dependencies
 .PHONY: requirements
 requirements:
-	@echo "$(MSG_PREFIX) installing requirements with uv"
-	uv $(UV_OPTS) sync --python $(PROJECT_DIR)/.venv --extra dev
-## Upgrade Python dependencies to latest versions
+	@echo "$(MSG_PREFIX) installing workspace requirements with uv"
+	uv $(UV_OPTS) sync --all-packages
+
+## Upgrade dependencies to latest versions
 .PHONY: upgrade
 upgrade:
 	@echo "$(MSG_PREFIX) upgrading packages with uv"
-	uv $(UV_OPTS) sync --python $(PROJECT_DIR)/.venv --extra dev --upgrade
+	uv $(UV_OPTS) sync --all-packages --upgrade
 
-## Delete all compiled Python files
+## Delete all compiled Python files, build output and scratch
 clean:
 	@echo "$(MSG_PREFIX) removing cache and compiled files"
 	@find . -type f -name "*.py[co]" -delete
 	@find . -type d -name '__pycache__' -exec rm -r {} +
 	@find . -type d -name '*.egg-info' -exec rm -r {} +
-	@find . -type d -name '.ipynb_checkpoints' -exec rm -r {} +
 	@find . -type d -name '.pytest_cache' -exec rm -r {} +
-	@echo "$(MSG_PREFIX) removing dist and build directory"
-	@rm -rf build dist
+	@find . -type d -name '.ruff_cache' -exec rm -r {} +
+	@echo "$(MSG_PREFIX) removing dist and build directories"
+	@rm -rf build dist packages/*/dist packages/*/build
 	@echo "$(MSG_PREFIX) removing logs and tmp directories"
 	@rm -rf logs tmp
 
@@ -93,16 +101,31 @@ format:
 	@echo "$(MSG_PREFIX) formatting the sourcecode"
 	uvx ruff check --fix
 	uvx ruff format
-## Run tests
+
+## Run unit tests
 test:
-	@echo "$(MSG_PREFIX) checking for tests"
-	@$(PROJECT_DIR)/.venv/bin/pytest --collect-only ./tests > /dev/null 2>&1; RESULT="$$?"; \
-	if [ "$$RESULT" != "5" ]; then \
-		echo "$(MSG_PREFIX) executing python tests"; \
-		$(PROJECT_DIR)/.venv/bin/pytest --cov -v ./tests; \
-	else \
-		echo "$(WARN_PREFIX) $(WARN_STYLE)WARNING: no tests present$(NO_STYLE)"; \
-	fi
+	@echo "$(MSG_PREFIX) executing unit tests"
+	uv $(UV_OPTS) run pytest --cov=copier_ui --cov=copier_tui -v ./tests/unit
+
+## Run functional tests in a throwaway venv built from the wheels
+test-functional: build
+	@echo "$(MSG_PREFIX) creating throwaway environment at $(HIGHLIGHT_STYLE)$(FUNCTIONAL_VENV)$(NO_STYLE)"
+	@rm -rf $(FUNCTIONAL_VENV)
+	@uv $(UV_OPTS) venv -q --python $(PYTHON_VERSION) $(FUNCTIONAL_VENV)
+	@echo "$(MSG_PREFIX) installing built wheels into the throwaway environment"
+	@uv $(UV_OPTS) pip install -q --python $(FUNCTIONAL_VENV) \
+		$(wildcard $(PROJECT_DIR)/packages/copier-ui/dist/*.whl) \
+		$(wildcard $(PROJECT_DIR)/packages/copier-tui/dist/*.whl) \
+		pytest pytest-asyncio
+	@echo "$(MSG_PREFIX) executing functional tests against the installed wheels"
+	$(FUNCTIONAL_VENV)/bin/pytest -v ./tests/functional
+	@echo "$(OK_STYLE)>>> functional tests passed against the built wheels$(NO_STYLE)"
+
+## Capture TUI screenshots into docs/assets (SVG)
+screenshots:
+	@echo "$(MSG_PREFIX) capturing TUI screenshots"
+	uv $(UV_OPTS) run python -m copier_tui.screenshots
+
 #################################################################################
 # UV ENVIRONMENT MANAGEMENT                                                     #
 #################################################################################
@@ -115,9 +138,9 @@ preflight:
 		exit 1; \
 	fi
 
-## Set up Python interpreter environment
+## Set up the uv virtual environment
 create_environment: preflight
-	@if [ -d "$(PROJECT_DIR)/.venv" ]; then \
+	@if [ -d "$(VENV_PATH)" ]; then \
 		echo "$(MSG_PREFIX) virtual environment already exists at $(HIGHLIGHT_STYLE).venv$(NO_STYLE). Skipping creation."; \
 	else \
 		if ! command -v uv >/dev/null 2>&1; then \
@@ -127,68 +150,45 @@ create_environment: preflight
 		echo "$(MSG_PREFIX) creating uv virtual environment"; \
 		uv $(UV_OPTS) venv -q --python $(PYTHON_VERSION); \
 		echo "$(MSG_PREFIX) new uv virtual environment created. Activate with:"; \
-		echo "$(MSG_PREFIX) Windows: $(HIGHLIGHT_STYLE).\\\.venv\\\Scripts\\\activate$(NO_STYLE)"; \
 		echo "$(MSG_PREFIX) Unix/macOS: $(HIGHLIGHT_STYLE)source ./.venv/bin/activate$(NO_STYLE)"; \
-		echo "$(MSG_PREFIX) installing dependencies"; \
-		uv $(UV_OPTS) pip install -q --python $(PROJECT_DIR)/.venv -e ".[dev]"; \
-		if command -v nb_venv_kernels >/dev/null 2>&1; then \
-			echo "$(MSG_PREFIX) registering Jupyter kernel for $(HIGHLIGHT_STYLE)$(ENV_NAME)$(NO_STYLE)"; \
-			nb_venv_kernels register --name $(ENV_NAME) $(PROJECT_DIR)/.venv >/dev/null 2>&1; \
-			echo "$(OK_STYLE)>>> Kernel registered successfully$(NO_STYLE)"; \
-		else \
-			echo "$(MSG_PREFIX) registering Jupyter kernel with ipykernel"; \
-			$(PROJECT_DIR)/.venv/bin/python -m ipykernel install --user --name=$(ENV_NAME) --display-name "Python [uv env:$(ENV_NAME)]"; \
-			echo "$(OK_STYLE)>>> Kernel registered as $(ENV_NAME)$(NO_STYLE)"; \
-		fi; \
 	fi
 
 ## Remove previously created environment
 remove_environment:
 	@echo "$(MSG_PREFIX) removing uv virtual environment at $(HIGHLIGHT_STYLE).venv$(NO_STYLE)"
-	@echo "$(MSG_PREFIX) unregistering Jupyter kernel $(HIGHLIGHT_STYLE)$(ENV_NAME)$(NO_STYLE)"
-	@if command -v nb_venv_kernels >/dev/null 2>&1; then \
-		nb_venv_kernels unregister $(PROJECT_DIR)/.venv >/dev/null 2>&1 || true; \
-	else \
-		jupyter kernelspec uninstall -y $(ENV_NAME) >/dev/null 2>&1 || true; \
-	fi
-	@-rm -rf ~/.local/share/jupyter/kernels/$(ENV_NAME) 2>/dev/null || true
-	@rm -rf $(PROJECT_DIR)/.venv
+	@rm -rf $(VENV_PATH) $(FUNCTIONAL_VENV)
 	@echo "$(OK_STYLE)>>> Environment removed$(NO_STYLE)"
-## Register Jupyter kernel for the environment
-register_environment:
-	@if [ ! -d "$(PROJECT_DIR)/.venv" ]; then \
-		echo "$(ERR_PREFIX) $(ERR_STYLE)ERROR: uv virtual environment not found at .venv. Run 'make create_environment' first$(NO_STYLE)"; \
-		exit 1; \
-	fi
-	@if command -v nb_venv_kernels >/dev/null 2>&1; then \
-		echo "$(MSG_PREFIX) registering Jupyter kernel for $(HIGHLIGHT_STYLE)$(ENV_NAME)$(NO_STYLE)"; \
-		nb_venv_kernels register --name $(ENV_NAME) $(PROJECT_DIR)/.venv >/dev/null 2>&1; \
-		echo "$(OK_STYLE)>>> Kernel registered successfully$(NO_STYLE)"; \
-	else \
-		echo "$(MSG_PREFIX) registering Jupyter kernel with ipykernel"; \
-		$(PROJECT_DIR)/.venv/bin/python -m ipykernel install --user --name=$(ENV_NAME) --display-name "Python [uv env:$(ENV_NAME)]"; \
-		echo "$(OK_STYLE)>>> Kernel registered as $(ENV_NAME)$(NO_STYLE)"; \
-	fi
 
-## Install src modules (editable)
-install: create_environment requirements clean increment_version_number .env
+## Install both packages in editable mode
+install: create_environment increment_version_number requirements .env
+	@echo "$(OK_STYLE)>>> $(PACKAGES) installed$(NO_STYLE)"
 
-	@echo "$(MSG_PREFIX) installing $(MODULE_NAME) in editable mode"
-	@uv $(UV_OPTS) pip install -q --python $(PROJECT_DIR)/.venv -e .
-	@echo "$(OK_STYLE)>>> $(MODULE_NAME) installed$(NO_STYLE)"
-
-## Build package
+## Build wheels and sdists for both packages
 build: clean install test
-	@echo "$(MSG_PREFIX) building $(MODULE_NAME)"
-	$(PROJECT_DIR)/.venv/bin/python -m build --wheel
+	@for pkg in $(PACKAGES); do \
+		echo "$(MSG_PREFIX) building $(HIGHLIGHT_STYLE)$$pkg$(NO_STYLE)"; \
+		uv $(UV_OPTS) build --package $$pkg --out-dir $(PROJECT_DIR)/packages/$$pkg/dist; \
+	done
+	@echo "$(OK_STYLE)>>> built $(words $(PACKAGES)) packages$(NO_STYLE)"
 
-## Increment build number (skip with SKIP_VERSION_INCREMENT=1)
+## Upload both packages to PyPI with twine (never runs on its own)
+publish: build
+	@echo "$(MSG_PREFIX) checking distributions with twine"
+	@for pkg in $(PACKAGES); do \
+		uv $(UV_OPTS) run twine check $(PROJECT_DIR)/packages/$$pkg/dist/*; \
+	done
+	@echo "$(WARN_PREFIX) $(WARN_STYLE)uploading $(words $(PACKAGES)) packages to PyPI$(NO_STYLE)"
+	@echo "$(MSG_PREFIX) copier-ui goes first - copier-tui pins it exactly"
+	uv $(UV_OPTS) run twine upload $(PROJECT_DIR)/packages/copier-ui/dist/*
+	uv $(UV_OPTS) run twine upload $(PROJECT_DIR)/packages/copier-tui/dist/*
+	@echo "$(OK_STYLE)>>> published $(PACKAGES)$(NO_STYLE)"
+
+## Increment the shared patch version of both packages (skip with SKIP_VERSION_INCREMENT=1)
 increment_version_number:
 	@if [ "$(SKIP_VERSION_INCREMENT)" = "1" ]; then \
 		echo "$(MSG_PREFIX) skipping version increment (SKIP_VERSION_INCREMENT=1)"; \
 	else \
-		echo "$(MSG_PREFIX) incrementing build number"; \
-		$(PROJECT_DIR)/.venv/bin/python -c "import re; c=open('pyproject.toml').read(); m=re.search(r'version = \"(\\d+)\\.(\\d+)\\.(\\d+)\"',c); v=f'{m[1]}.{m[2]}.{int(m[3])+1}'; c=re.sub(r'version = \"\\d+\\.\\d+\\.\\d+\"',f'version = \"{v}\"',c,count=1); open('pyproject.toml','w').write(c); print('New version:',v)"; \
+		$(PYTHON_INTERPRETER) $(PROJECT_DIR)/scripts/bump_version.py; \
 	fi
 
 #################################################################################

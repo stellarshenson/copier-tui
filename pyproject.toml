@@ -1,61 +1,34 @@
-[build-system]
-requires = ["setuptools", "wheel"]
-build-backend = "setuptools.build_meta"
+# Virtual workspace root - not a distributable package.
+# The two published packages live in packages/copier-ui and packages/copier-tui.
 
-[project]
-name = "copier_tui"
-version = "0.1.0"
-description = "Project intents to build a wrapper copier-ui to copier for survey comprehension and abstraction and copier-tui to use that abstraction to build nice ui, where user can move back and forth until they are ready to finish and instantiate template"
-authors = [
-    { name = "Stellars Henson \u003ckonrad.jelen+github@gmail.com\u003e" },
-]
-license = "MIT"
-readme = "README.md"
-requires-python = "~=3.13.0"
-classifiers = [
-    "Programming Language :: Python :: 3",
-]
+[tool.uv.workspace]
+members = ["packages/copier-ui", "packages/copier-tui"]
 
-dependencies = [
-    "copier",
-    "loguru",
-    "python-dotenv",
-    "rich",
-    "textual",
-    "typer",
-]
+[tool.uv.sources]
+copier-ui = { workspace = true }
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "build",
-    "ipykernel",
-    "ipython",
-    "nbdime",
-    "pip",
     "pytest",
     "pytest-cov",
+    "pytest-asyncio",
     "ruff",
+    "twine",
 ]
-
-[tool.setuptools]
-include-package-data = true
-
-[tool.setuptools.packages.find]
-where = ["src"]
-include = ["copier_tui*", "copier_ui*"]
-exclude = ["tests*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"
 
 [tool.ruff]
 line-length = 99
-src = ["src"]
-include = ["pyproject.toml", "src/**/*.py"]
+src = ["packages/copier-ui/src", "packages/copier-tui/src"]
+include = ["pyproject.toml", "packages/*/src/**/*.py", "tests/**/*.py"]
 
 [tool.ruff.lint]
 extend-select = ["I"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["copier_tui", "copier_ui"]
+known-first-party = ["copier_ui", "copier_tui"]
 force-sort-within-sections = true

@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "copier-tui"
+version = "0.6.1"
+description = "A terminal UI for copier: the same CLI, a survey you can move back and forth through before instantiating the template"
+authors = [
+    { name = "Stellars Henson", email = "konrad.jelen+github@gmail.com" },
+]
+license = "MIT"
+readme = "README.md"
+requires-python = ">=3.11"
+keywords = ["copier", "template", "scaffolding", "tui", "textual", "terminal"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Code Generators",
+]
+
+dependencies = [
+    "copier-ui==0.6.1",
+    "copier>=9.6",
+    "textual>=1.0",
+    "rich>=13.0",
+]
+
+[project.scripts]
+copier-tui = "copier_tui.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/stellarshenson/copier-tui"
+Repository = "https://github.com/stellarshenson/copier-tui"
+Issues = "https://github.com/stellarshenson/copier-tui/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["copier_tui*"]

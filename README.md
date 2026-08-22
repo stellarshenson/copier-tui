@@ -1,9 +1,13 @@
 # copier-tui
 
-Two packages that put a proper user interface in front of [copier](https://copier.readthedocs.io). `copier-ui` reads a template's question model and turns it into a deterministic, UI-neutral schema with state and validation. `copier-tui` is a terminal renderer built on that schema, letting the user move back and forth through the survey and only instantiate the template once they are ready.
+[![build](https://github.com/stellarshenson/copier-tui/actions/workflows/build.yml/badge.svg)](https://github.com/stellarshenson/copier-tui/actions/workflows/build.yml)
+[![PyPI copier-tui](https://img.shields.io/pypi/v/copier-tui.svg?label=copier-tui)](https://pypi.org/project/copier-tui/)
+[![PyPI copier-ui](https://img.shields.io/pypi/v/copier-ui.svg?label=copier-ui)](https://pypi.org/project/copier-ui/)
+[![Python](https://img.shields.io/pypi/pyversions/copier-tui.svg)](https://pypi.org/project/copier-tui/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Brought To You By KOLOMOLO](https://img.shields.io/badge/Brought%20To%20You%20By-KOLOMOLO-00ffff?style=flat)](https://kolomolo.com)
 
-> **Note**: Generated with copier-data-science template v1.2+
-> For template documentation, visit [copier-data-science](https://github.com/stellarshenson/copier-data-science)
+Two packages that put a proper user interface in front of [copier](https://copier.readthedocs.io). `copier-ui` reads a template's question model and turns it into a deterministic, UI-neutral schema with state and validation. `copier-tui` is a terminal renderer built on that schema, letting the user move back and forth through the survey and only instantiate the template once they are ready.
 
 ## Why
 
@@ -76,45 +80,40 @@ ui.validate()
 ui.render("./output")
 ```
 
-## Quick Start
-
-```bash
-make install
-```
-
-## Makefile Targets
-
-- `make install` - Create environment and install package
-- `make test` - Run tests
-- `make lint` / `make format` - Check / fix code style
-- `make upgrade` - Upgrade dependencies to latest versions
-- `make build` - Build distributable wheel
-- `make clean` - Remove compiled files, caches, logs and tmp
-- `make .env` / `make .env.enc` - Decrypt / encrypt environment secrets
-- `make help` - Show all available targets
-
-## Best Practices
-
-- **Layering**: nothing in `copier_ui/` may import Textual, Rich, or anything else that assumes a display; violations of that rule are the one thing worth failing a build over
-- **Terminal UI**: `copier_tui/` is built with Textual and Rich and follows the workspace `text-user-interface` conventions - palette, header bar, 2D navigation, key bindings, execution screen
-- **Documentation**: `docs/` holds the project's own documentation - acceptance criteria, design notes, defects
-- **Logs**: runtime and job logs in `logs/` (gitignored), with a short `logs/README.md`
-- **Temporary files**: `tmp/` for throwaway work (gitignored); never keep anything here
-
 ## Project Organization
 
 ```
-├── Makefile           <- Makefile with convenience commands
-├── README.md          <- The top-level README for developers
-├── docs               <- Project documentation: acceptance criteria, design notes, defects
-├── logs               <- Runtime and background-job logs (gitignored)
-├── tmp                <- Throwaway scratch (gitignored)
-├── pyproject.toml     <- Project configuration and dependencies
-├── tests              <- Test files
-└── src
-    ├── copier_ui      <- UI-neutral abstraction over a copier survey
-    │   └── __init__.py
-    └── copier_tui     <- Terminal renderer built on copier_ui
-        ├── __init__.py
-        └── config.py      <- Configuration variables
+├── Makefile                    <- install, test, test-functional, build, publish
+├── README.md
+├── pyproject.toml              <- uv workspace root (not published)
+├── scripts/bump_version.py     <- lockstep patch bump for both packages
+├── docs                        <- acceptance criteria, design notes, assets
+├── packages
+│   ├── copier-ui               <- published: UI-neutral survey abstraction
+│   │   ├── pyproject.toml
+│   │   └── src/copier_ui
+│   └── copier-tui              <- published: Textual terminal renderer
+│       ├── pyproject.toml
+│       └── src/copier_tui
+└── tests
+    ├── unit                    <- run against the workspace
+    └── functional              <- run against the built wheels in a throwaway venv
 ```
+
+## Development
+
+```bash
+make install          # uv workspace, both packages editable, bumps the patch version
+make test             # unit tests
+make test-functional  # builds both wheels, installs them into a clean venv, runs against them
+make lint             # ruff
+make build            # wheels and sdists for both packages
+make publish          # twine upload, copier-ui first because copier-tui pins it exactly
+```
+
+Both packages share one version and are released together. `make install` bumps the patch
+number every time, including for a major change - that is deliberate, not an oversight.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE).
