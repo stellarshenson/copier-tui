@@ -197,6 +197,29 @@ async def test_enter_confirms_from_a_switch_too(tmp_path: Path) -> None:
         assert app.ui.state().fields["advanced"].value is False
 
 
+async def test_an_answer_outside_its_new_choices_is_kept_flagged_and_not_faked(
+    tmp_path: Path,
+) -> None:
+    """A recompute can strand an answer. Nothing is silently corrected, nothing is invented.
+
+    The state keeps the value and the review shows it. The choice control cannot show it -
+    it is not one of the options - so it falls back to its prompt rather than displaying a
+    neighbouring option the user never picked.
+    """
+    async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
+        app.ui.set("flavour", "zzz")
+        app.screen._refresh_rows()
+        await pilot.pause()
+
+        assert app.ui.state().fields["flavour"].value == "zzz"
+        assert str(app.screen.query_one("#flag-flavour", Static).visual) == "!"
+        assert app.screen.query_one("#ctl-flavour", ChoiceSelect).value is Select.NULL
+
+        app.screen._focus_field("flavour")
+        await pilot.pause()
+        assert "not in" in hint(app)
+
+
 async def test_a_question_that_failed_to_load_is_disabled_and_blocks(tmp_path: Path) -> None:
     """A load error shows as a disabled field carrying its message, and blocks the finish."""
     async with survey(tmp_path / "out", template="tui_broken") as (app, pilot):

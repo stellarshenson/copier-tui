@@ -29,6 +29,37 @@ copier.run_copy(src_path, dst_path, data=answers)
 
 Every existing copier template gets the alternative UI without any change to the template.
 
+## Screens
+
+The whole survey is one screen. Every question is one row - a label gutter, the control, and a
+single glyph marking a problem, an unavailable field or an untouched default. Help and validation
+messages share the reserved line above the footer, so they cost no rows. The capture below is
+[copier-data-science](https://github.com/stellarshenson/copier-data-science): 24 questions,
+conditional fields included, in 24 rows.
+
+![the survey screen](docs/assets/survey.svg)
+
+Nothing is written until the review is confirmed. Review is stacked over the survey rather than
+replacing it, so `esc` goes back to the form exactly as it was left - same scroll offset, same
+focused field - and every dependent answer recalculates as soon as it is changed again.
+
+![the review screen](docs/assets/review.svg)
+
+Confirming hands the answers to copier and reports its verdict. A `--pretend` run says plainly
+that nothing was written.
+
+![the execution screen](docs/assets/execution.svg)
+
+## Keys
+
+| Key | What it does |
+|-----|--------------|
+| `up` / `down` | move between fields; inside an editor or an option list they move its cursor and hand focus on at the first and last line |
+| `space` | open a choice list, toggle a switch, tick a multiselect option |
+| `enter` | confirm the screen; inside an open menu it picks, inside a multiline editor it breaks the line |
+| `esc` | go back, or cancel - on the survey it arms first and quits on a second press |
+| `ctrl+p` | command palette |
+
 ## Usage
 
 `copier-tui` is a drop-in for the `copier` command. Same subcommands, same arguments, same flags, same short forms - swap the binary and the only thing that changes is the interface.
@@ -38,7 +69,12 @@ copier-tui copy gh:stellarshenson/copier-data-science ./my-project
 copier-tui update
 ```
 
-Flags keep copier's semantics rather than being re-implemented: values passed with `--data` are seeded and not asked for, and `--defaults` or `-f/--force` skip the survey entirely and run headless. `--quiet` is not a non-interactive flag in copier - it only suppresses status output - so it keeps the TUI.
+Flags keep copier's semantics rather than being re-implemented: values passed with `--data` are
+seeded and not asked for, and `--defaults` or `-f/--force` skip the survey entirely and run
+headless. `--quiet` is not a non-interactive flag in copier - it only suppresses status output -
+so it keeps the TUI, and `--ask` turns asking back on even under `--defaults`. A template
+declaring Jinja extensions or tasks is refused before any screen opens unless `--trust` was given,
+with copier's own message and copier's own exit code.
 
 ## Architecture
 
@@ -57,14 +93,18 @@ The hard rule: **`copier-ui` must never require a terminal, browser, or event lo
 | Question kind | Widget |
 |---------------|--------|
 | `string` | text input |
-| `bool` | checkbox / switch |
-| `choice` | select |
-| `multiselect` | multi-select |
-| `secret` | password input |
+| `path` | text input |
 | `integer` | numeric input |
 | `float` | numeric input |
-| `path` | path input |
+| `bool` | switch |
+| `choice` | select |
+| `multiselect` | selection list |
 | `structured` | multiline editor |
+| `secret` | password input, whatever the kind |
+| any kind with `multiline: true` | multiline editor |
+
+A secret question always gets the masked input, even when it declares choices: no control may
+put the value on screen in the clear.
 
 Sketch of the `copier-ui` surface:
 

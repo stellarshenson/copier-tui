@@ -72,10 +72,10 @@ class ExecutionScreen(Screen[bool]):
         self._ok = False
 
     def compose(self) -> ComposeResult:
-        """Header, the status line and the progress bar, the verdict banner, footer.
+        """Header, the status line and the progress bar, the verdict line, footer.
 
-        The destination is named once, in the header: the status line and the banner say
-        what happened to it, and repeating the path three times said nothing extra.
+        The destination is named once, by the status line that narrates the run: the header
+        says which run it is, and repeating the path three times said nothing extra.
         """
         verb = "checking" if self.pretend else "rendering"
         yield HeaderBar("dry run" if self.pretend else "render")
@@ -92,7 +92,7 @@ class ExecutionScreen(Screen[bool]):
         self.run_worker(self._run_copier, thread=True, name="render")
 
     def on_key(self, event: events.Key) -> None:
-        """Any key dismisses the verdict banner and ends the run."""
+        """Any key closes the finished run, not just the bound ones."""
         if self._done:
             event.stop()
             self.action_close()

@@ -11,7 +11,9 @@ It never imports a display library and never requires an event loop.
 ```python
 from copier_ui import TemplateUI
 
-ui = TemplateUI.from_template("gh:stellarshenson/copier-data-science")
+# unsafe=True is copier's own trust gate: this template declares Jinja extensions and tasks,
+# and copier_ui refuses to load such a template before importing anything unless you say so
+ui = TemplateUI.from_template("gh:stellarshenson/copier-data-science", unsafe=True)
 ui.set("dataset_storage", "s3")
 ui.state().fields["s3_bucket"].visible   # True
 ui.render("./my-project")

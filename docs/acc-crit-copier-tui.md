@@ -137,10 +137,12 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
   - log: 2026-08-22 criterion added (v0.1.0)
   - log: 2026-08-22 `--quiet` removed from this criterion; copier's `-q` only suppresses status output (v0.6.4)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_cli.py
-- [ ] **Quiet keeps the TUI** - `--quiet` is copier's status-output switch, not a non-interactive one: the survey still opens, and the flag reaches copier so the render is silent
+- [x] **Quiet keeps the TUI** - `--quiet` is copier's status-output switch, not a non-interactive one: the survey still opens, and the flag reaches copier so the render is silent
   - log: 2026-08-22 criterion added (v0.6.4)
-- [ ] **Trust refusal before the survey** - a template needing trust is refused before any screen opens unless `--trust` was given or copier's settings trust it, with copier's own message and copier's own exit code 4
+  - log: 2026-08-22 closed: built - tests/unit/test_tui_cli.py (v0.6.5)
+- [x] **Trust refusal before the survey** - a template needing trust is refused before any screen opens unless `--trust` was given or copier's settings trust it, with copier's own message and copier's own exit code 4
   - log: 2026-08-22 criterion added (v0.6.4)
+  - log: 2026-08-22 closed: built - tests/unit/test_ui_edges.py and test_tui_cli.py (v0.6.5)
 - [x] **Update and recopy** - `update` and `recopy` open the survey seeded from the destination's `.copier-answers.yml`, then hand back to copier for the merge
   - log: 2026-08-22 criterion added (v0.1.0)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_cli.py and test_tui_flow.py
@@ -163,17 +165,35 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
   - log: 2026-08-22 criterion added (v0.1.0)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py
   - log: 2026-08-22 reworded for the one-row-per-field layout; help and messages moved to the reserved hint line (v0.6.4)
+- [x] **One row per question** - a question is one row: right-aligned label gutter, control, one status glyph; only a multiline editor and a multiselect grow, and both are capped, so a template of two dozen questions is one screen and not several
+  - log: 2026-08-22 criterion added (v0.6.5)
+  - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py (v0.6.5)
+- [x] **Reserved hint line** - one line below the form carries the focused field's help, its validation message, or how to open its list, and is the only place any of the three appears
+  - log: 2026-08-22 criterion added (v0.6.5)
+  - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py (v0.6.5)
+- [x] **Two-press cancel** - the first `escape` arms the cancel and says so in the hint line, a second quits, and any other key disarms it, so one stray key cannot discard a survey
+  - log: 2026-08-22 criterion added (v0.6.5)
+  - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py (v0.6.5)
+- [x] **Arrow handoff** - `up` and `down` step between fields except inside a control with a cursor of its own, which keeps them until its first or last line and then hands the focus on
+  - log: 2026-08-22 criterion added (v0.6.5)
+  - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py (v0.6.5)
 - [x] **Defaults prefilled** - every field opens on its computed default; the user confirms rather than retypes
   - log: 2026-08-22 criterion added (v0.1.0)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_widgets.py
 - [x] **Back and forward** - the user moves to the previous and next question freely, in any order, without losing entered answers
   - log: 2026-08-22 criterion added (v0.1.0)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py
-- [ ] **Confirm key** - `enter` advances the survey to the review from every field, whatever control holds focus, bound with priority so an input, a select or a multiline editor cannot swallow it
+- [x] **Confirm key** - `enter` advances the survey to the review from every field, including a switch and a closed choice list; only an open menu and a multiline editor keep it, being the two controls with nothing else that does enter's job, and `space` opens a closed menu
   - log: 2026-08-22 criterion added (v0.6.4)
-- [ ] **Back from review** - the review screen lists every answer, and returning from it to the survey keeps the survey's scroll position and focused field
+  - log: 2026-08-22 reworded: enter is claimed back from the switch and the closed select, which space already serves (v0.6.5)
+  - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py (v0.6.5)
+- [x] **Back from review** - the review screen lists every answer, and returning from it to the survey keeps the survey's scroll position and focused field
   - log: 2026-08-22 criterion added (v0.1.0)
   - log: 2026-08-22 replaces the Jump criterion; the overview screen is dropped (v0.6.4)
+  - log: 2026-08-22 closed: built - review is stacked over the survey, never replacing it - tests/unit/test_tui_flow.py (v0.6.5)
+- [x] **Recompute after coming back** - an answer changed after a return from the review still recalculates every dependent field, so the round trip is an edit and not a read-only view
+  - log: 2026-08-22 criterion added (v0.6.5)
+  - log: 2026-08-22 closed: built - tests/unit/test_tui_flow.py (v0.6.5)
 - [x] **Question set per screen** - the survey shows askable questions, visible and not already answered by `--data`; the review shows every visible question, so a `--data` preset appears on the review and nowhere else
   - log: 2026-08-22 criterion added (v0.6.4)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py and test_tui_flow.py
@@ -183,8 +203,10 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
 - [x] **Live revisibility** - changing an answer that reveals or hides dependent fields updates the visible set immediately, without restarting the survey
   - log: 2026-08-22 criterion added (v0.1.0)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py
-- [ ] **Stale answer after recompute** - when a recompute leaves an answer outside its question's new choices or type, state keeps the value, the field carries copier's own message, and the control still shows the stale value
+- [x] **Stale answer after recompute** - when a recompute leaves an answer outside its question's new choices or type, state keeps the value and the review shows it, the row is marked and carries copier's own message in the hint line, and a choice control falls back to its prompt rather than displaying an option the user never picked
   - log: 2026-08-22 criterion added (v0.6.4)
+  - log: 2026-08-22 reworded: a choice control cannot render a value that is not one of its options (v0.6.5)
+  - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py (v0.6.5)
 - [x] **Inline errors** - an invalid field is marked on its own row and its message shows in the reserved hint line while that field has focus
   - log: 2026-08-22 criterion added (v0.1.0)
   - log: 2026-08-22 closed: built - copier_tui/screens/survey.py _show_hint and widgets.py _flag_text

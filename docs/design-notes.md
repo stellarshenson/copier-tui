@@ -303,9 +303,13 @@ and default-ness all arrive from `copier_ui` state.
 - `control_for(question: Question, field: FieldState) -> Widget` - the control alone, prefilled
 - `read_control(question: Question, control: Widget) -> Any` - the control's current value
 - `HeaderBar(Horizontal)` - app name left, version right; `__init__(context: str = "")`
-- `FieldRow(Vertical)` - label, help, control, error line, default marker
+- `FieldRow(Horizontal)` - one row: label gutter, control, one status glyph. Help and validation
+  messages belong to the screen's hint line, not to the row
   - `__init__(question: Question, field: FieldState)`
-  - `update(field: FieldState) -> None`
+  - `update(field: FieldState) -> None` - leaves an unmounted control alone: `Select` stores its
+    constructed value privately and only assigns the reactive on mount, so an earlier write
+    leaves the reactive unchanged and the control renders its prompt over a real answer
+  - `field: FieldState` - property, what the row currently shows
   - `value: Any` - property reading the control
   - `FieldRow.Changed(Message)` - fields `field_id: str`, `value: Any`
 
@@ -316,11 +320,14 @@ One screen per module, re-exported from `screens/__init__.py`.
 `screens/survey.py` - the whole visible survey as one scrolling form, which is what makes free
 back-and-forward navigation and live revisibility fall out for nothing.
 
-- `SurveyScreen(Screen[bool])` - `__init__(ui: TemplateUI)`; returns `True` to advance to review,
-  `False` on cancel. Rebuilds rows from `ui.state()` after every `FieldRow.Changed`; skips fields
-  that are not `visible` or are `preset`; renders `errors` inline without blocking navigation
-- `JumpScreen(ModalScreen[str | None])` - `__init__(state: State, schema: Schema)`; the overview of
-  visible questions and their current values, returns the chosen field id
+- `SurveyScreen(Screen[None])` - `__init__(ui: TemplateUI)`. It never dismisses itself: review is
+  stacked over it, so the form is never rebuilt and keeps its scroll offset and focused field.
+  Posts `SurveyScreen.Confirmed` and `SurveyScreen.Cancelled` for the app to act on. Rebuilds rows
+  from `ui.state()` after every `FieldRow.Changed` and on resume; skips fields that are not
+  `visible` or are `preset`; marks errors on the row and names them in the hint line
+- `check_action` is the one key-ownership rule: enter reaches an open menu and a multiline editor
+  and confirms everywhere else; up and down reach a control with a cursor of its own until its
+  first or last line, then step between fields
 
 `screens/review.py`
 
@@ -330,8 +337,9 @@ back-and-forward navigation and live revisibility fall out for nothing.
 `screens/execution.py`
 
 - `ExecutionScreen(Screen[bool])` - `__init__(ui: TemplateUI, dst: Path, copier_kwargs: dict[str, Any])`;
-  runs `ui.render` in a thread, indeterminate progress until it returns, then the verdict banner.
-  Returns success. On failure it shows copier's message and leaves partial output alone
+  runs `ui.render` in a thread, indeterminate progress until it returns, then the verdict on the
+  status line - mint on success, rose with copier's message on failure. A `pretend` run says
+  nothing was written. Returns success and leaves partial output alone
 
 ## copier_tui.app
 
