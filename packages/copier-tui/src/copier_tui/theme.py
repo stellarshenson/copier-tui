@@ -23,8 +23,13 @@ TEXT_SUBTLE = "#939da7"
 MIN_WIDTH = 60
 MIN_HEIGHT = 18
 
-LABEL_WIDTH = 26
-"""Width of the label gutter, so every control on the form starts in the same column."""
+LABEL_WIDTH = 56
+"""Cap on the label gutter, so every control on the form starts in the same column.
+
+The survey gutter is a share of the terminal up to this; the review screen uses it flat.
+Wide enough for most copier captions - a longer one is clipped and shown whole on the
+survey's hint line, which is why a caption costs one column rather than one row.
+"""
 
 THEME = Theme(
     name="copier-tui",
@@ -104,6 +109,13 @@ Select > SelectCurrent {{
     color: {TEXT};
     border: none;
     padding: 0 1;
+}}
+Select > SelectCurrent .down-arrow {{
+    color: {TEXT_MUTED};
+}}
+Select > SelectOverlay {{
+    background: {CHROME_BG};
+    border: round {BORDER};
 }}
 Switch {{
     background: {SURFACE_BG};

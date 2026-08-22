@@ -44,7 +44,11 @@ SelectionList and the Select overlay are both OptionList subclasses, so both are
 """
 
 OPEN_HINT = "space opens the list"
-"""Shown while a collapsed choice control has focus, because enter confirms instead."""
+"""Fallback for a collapsed choice control whose question declares no help.
+
+A field's own description always outranks it: help is the only text distinguishing one
+choice from another, and a constant key hint that hides it costs more than it teaches.
+"""
 
 CANCEL_HINT = "press escape again to discard every answer and quit"
 """Shown by the first escape; a second one within the arming window quits."""
@@ -232,10 +236,13 @@ class SurveyScreen(Screen[None]):
         if row.field.errors:
             self._hint.update(Text(row.field.errors[0], style=ROSE))
             return
+        if row.question.help:
+            self._hint.update(Text(row.question.help, style=TEXT_MUTED))
+            return
         if isinstance(self.focused, Select) and not self.focused.expanded:
             self._hint.update(Text(OPEN_HINT, style=TEXT_SUBTLE))
             return
-        self._hint.update(Text(row.question.help, style=TEXT_MUTED))
+        self._hint.update(Text(""))
 
     def _show_position(self) -> None:
         """The header says which field of how many, so the eye has an anchor while scrolling."""

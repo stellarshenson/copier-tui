@@ -109,6 +109,9 @@ UI-neutral core. Three layers - copier adapter (parses `copier.yml`), UI model (
 - [x] **Edge: render with invalid state** - `render` refuses when `validate()` reports errors, and names the offending fields
   - log: 2026-08-22 criterion added (v0.1.0)
   - log: 2026-08-22 closed: built - tests/unit/test_ui_render.py
+- [x] **Caption parity** - `Question.label` is copier's own rendered prompt message - the template's help, falling back to `var_name (type)` - so no UI shows less than copier's prompt does, and no raw Jinja reaches a caption
+  - log: 2026-08-22 added
+  - log: 2026-08-22 closed: implemented after ux adversarial review (v0.6.9)
 
 ### API
 
@@ -165,12 +168,14 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
   - log: 2026-08-22 criterion added (v0.1.0)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py
   - log: 2026-08-22 reworded for the one-row-per-field layout; help and messages moved to the reserved hint line (v0.6.4)
+  - log: 2026-08-22 label is now the question's caption, not its identifier (v0.6.9)
 - [x] **One row per question** - a question is one row: right-aligned label gutter, control, one status glyph; only a multiline editor and a multiselect grow, and both are capped, so a template of two dozen questions is one screen and not several
   - log: 2026-08-22 criterion added (v0.6.5)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py (v0.6.5)
 - [x] **Reserved hint line** - one line below the form carries the focused field's help, its validation message, or how to open its list, and is the only place any of the three appears
   - log: 2026-08-22 criterion added (v0.6.5)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py (v0.6.5)
+  - log: 2026-08-22 help outranks the open-the-list hint, which was hiding it on every choice field (v0.6.9)
 - [x] **Two-press cancel** - the first `escape` arms the cancel and says so in the hint line, a second quits, and any other key disarms it, so one stray key cannot discard a survey
   - log: 2026-08-22 criterion added (v0.6.5)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py (v0.6.5)
@@ -256,3 +261,15 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
 - [x] **Edge: not a tty** - launched without a terminal, the app exits with a clear message rather than a traceback
   - log: 2026-08-22 criterion added (v0.1.0)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_cli.py
+- [x] **Question captions** - every row is captioned by its question, never by a bare `copier.yml` identifier, on the survey and on the review screen alike
+  - log: 2026-08-22 added
+  - log: 2026-08-22 closed: implemented after ux adversarial review (v0.6.9)
+- [x] **Help precedence** - a field's own help outranks any key hint on the reserved line; the open-the-list hint appears only for a choice field whose question declares no help
+  - log: 2026-08-22 added
+  - log: 2026-08-22 closed: implemented after ux adversarial review (v0.6.9)
+- [x] **Enclosed choice menu** - an open dropdown draws its own bordered panel over the form, so a row it covers is never read as an answer to the question beside it
+  - log: 2026-08-22 added
+  - log: 2026-08-22 closed: implemented after ux adversarial review (v0.6.9)
+- [x] **Blank pick is not an answer** - picking a choice control's own prompt row leaves the stored answer untouched and snaps the control back to it, so screen and state never disagree
+  - log: 2026-08-22 added
+  - log: 2026-08-22 closed: implemented after ux adversarial review (v0.6.9)

@@ -189,10 +189,13 @@ class FieldRow(Horizontal):
         text-style: bold;
     }}
     FieldRow > .field-label {{
-        width: {LABEL_WIDTH};
+        width: 45%;
+        max-width: {LABEL_WIDTH};
         height: 1;
         padding: 0 1 0 0;
         text-align: right;
+        text-wrap: nowrap;
+        text-overflow: ellipsis;
     }}
     FieldRow > .field-flag {{
         width: 2;
@@ -329,10 +332,16 @@ class FieldRow(Horizontal):
         self._emit()
 
     def on_select_changed(self, event: Select.Changed) -> None:
-        """A choice picked. Rebuilding the options blanks the select for a beat - that is
-        our own write, not an answer of None, so it never becomes a change."""
+        """A choice picked. The blank is never an answer.
+
+        Rebuilding the options blanks the select for a beat - our own write, not a choice
+        of None. Textual also offers the prompt as a selectable row, so the user can pick
+        the blank; that is not an answer either, and returning bare would leave the control
+        showing `no answer yet` over a value the state still holds and still renders.
+        """
         event.stop()
         if event.value is Select.NULL:
+            self._write_value(self._field)
             return
         self._emit()
 
@@ -348,11 +357,14 @@ class FieldRow(Horizontal):
 
 
 def _label_text(question: Question, field: FieldState) -> Text:
-    """The question label, dimmed while the value is still the computed default."""
+    """The question caption, dimmed while the value is still the computed default.
+
+    A caption longer than the gutter is clipped by the gutter itself, so the width can be
+    a share of the terminal rather than a constant; the focused row's caption is shown in
+    full on the hint line, which is what keeps a long question readable on one line.
+    """
     style = TEXT_SUBTLE if field.is_default else f"bold {CYAN_BRIGHT}"
-    text = Text(question.label, style=style, no_wrap=True, overflow="ellipsis")
-    text.truncate(LABEL_WIDTH - 1, overflow="ellipsis")
-    return text
+    return Text(question.label, style=style, no_wrap=True, overflow="ellipsis")
 
 
 def _flag_text(field: FieldState) -> Text:

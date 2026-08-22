@@ -67,6 +67,19 @@ async def test_the_review_lists_every_answer_and_masks_secrets(tmp_path: Path) -
         assert "s3cret" not in text
 
 
+async def test_the_review_names_the_questions_not_the_variables(tmp_path: Path) -> None:
+    """The last screen before anything is written reads as questions, like the survey.
+
+    This is the moment of commitment, so it is the worst place to fall back to snake_case.
+    """
+    async with running(tmp_path / "out", template="tui_kinds") as (app, pilot):
+        await pilot.press("enter")
+        await pilot.pause()
+        text = "\n".join(str(line.visual) for line in app.screen.query(".review-answer"))
+        assert "Which flavour the build uses" in text
+        assert "flavour  " not in text
+
+
 async def test_going_back_from_the_review_returns_to_the_survey(tmp_path: Path) -> None:
     """The review's back key reopens the survey with the answers still in place."""
     dst = tmp_path / "out"

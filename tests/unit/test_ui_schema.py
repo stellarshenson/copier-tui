@@ -84,7 +84,7 @@ def test_question_fields_carry_the_declared_metadata(tmp_path: Path) -> None:
         port = ui.schema().by_id("port")
         assert port.id == "port"
         assert port.kind is Kind.INTEGER
-        assert port.label == "port"
+        assert port.label == "port (int)"
         assert port.default_source == 8080
         assert port.when_source == "{{ use_docker }}"
         assert "Port must be 1024 or above" in port.validator_source
@@ -94,6 +94,41 @@ def test_question_fields_carry_the_declared_metadata(tmp_path: Path) -> None:
         assert port.choices_source is None
         project = ui.schema().by_id("project")
         assert project.help == "Project name"
+
+
+def test_the_label_is_copiers_own_caption_not_the_variable_name(tmp_path: Path) -> None:
+    """Label: the question's help, so a UI shows what copier's own prompt shows.
+
+    A variable name is not a question. `port` declares no help, so it falls back to copier's
+    own `var_name (type)` form rather than to the bare identifier.
+    """
+    with load("ui_deps", tmp_path / "dst") as ui:
+        assert ui.schema().by_id("project").label == "Project name"
+        assert ui.schema().by_id("port").label == "port (int)"
+
+
+def test_a_templated_help_string_never_reaches_the_ui_as_raw_jinja(tmp_path: Path) -> None:
+    """Help: copier renders help through Jinja, so no UI ever prints the braces.
+
+    The schema is normalised once, before any answer exists, so a help string referencing
+    another answer renders that reference empty rather than live. That is the cost of one
+    screen instead of a prompt sequence; the alternative is recomputing every caption on
+    every keystroke. What must never happen is the template source reaching the screen.
+    """
+    template = tmp_path / "tpl"
+    template.mkdir()
+    (template / "copier.yml").write_text(
+        "name:\n  type: str\n  default: demo\n"
+        "where:\n  type: str\n  default: /opt\n  help: Where {{ name }} will be installed\n"
+    )
+    ui = TemplateUI.from_template(template, dst=tmp_path / "dst")
+    try:
+        where = ui.schema().by_id("where")
+        assert "{{" not in where.help and "}}" not in where.help
+        assert where.help.startswith("Where")
+        assert where.label == where.help
+    finally:
+        ui.close()
 
 
 @pytest.mark.parametrize(

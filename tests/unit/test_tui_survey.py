@@ -65,7 +65,7 @@ async def test_a_plain_field_costs_exactly_one_row(tmp_path: Path) -> None:
 
 
 async def test_the_whole_form_is_about_one_line_per_question(tmp_path: Path) -> None:
-    """Eleven questions of every kind occupy under 14 lines, editors and lists included.
+    """Twelve questions of every kind occupy under 15 lines, editors and lists included.
 
     virtual_size is no measure here - a VerticalScroll reports its viewport when the content
     is shorter than it. The bottom of the last row is where the form actually ends.
@@ -73,9 +73,9 @@ async def test_the_whole_form_is_about_one_line_per_question(tmp_path: Path) -> 
     async with survey(tmp_path / "out", template="tui_kinds") as (app, _):
         rows = list(app.screen.query(FieldRow))
         form = app.screen.query_one("#survey-form", VerticalScroll)
-        assert len(rows) == 11
+        assert len(rows) == 12
         used = rows[-1].region.bottom - form.region.y
-        assert used <= 14, f"eleven questions took {used} lines"
+        assert used <= 15, f"twelve questions took {used} lines"
 
 
 async def test_a_choice_control_shows_its_answer_not_its_prompt(tmp_path: Path) -> None:
@@ -158,9 +158,67 @@ async def test_a_preset_answer_is_not_asked(tmp_path: Path) -> None:
 async def test_the_hint_line_carries_the_focused_field_s_help(tmp_path: Path) -> None:
     """Help costs no row of its own - the one reserved line follows the focus."""
     async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
+        app.screen.query_one("#ctl-text").focus()
+        await pilot.pause()
+        assert hint(app) == ""
         app.screen.query_one("#ctl-flavour").focus()
         await pilot.pause()
+        assert hint(app) == "Which flavour the build uses"
+
+
+async def test_a_choice_field_shows_its_help_rather_than_a_key_hint(tmp_path: Path) -> None:
+    """A collapsed choice field is the one that most needs its help, not least.
+
+    The help is the only text telling two options apart. A constant key hint occupying the
+    line instead makes every choice in the survey unexplained, which is the state this was
+    shipped in.
+    """
+    async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
+        select = app.screen.query_one("#ctl-flavour", ChoiceSelect)
+        select.focus()
+        await pilot.pause()
+        assert select.expanded is False
+        assert hint(app) == "Which flavour the build uses"
+
+
+async def test_a_choice_field_with_no_help_still_says_how_to_open_it(tmp_path: Path) -> None:
+    """With nothing to explain, the line is free for the affordance."""
+    async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
+        app.screen.query_one("#ctl-plain_pick").focus()
+        await pilot.pause()
         assert hint(app) == OPEN_HINT
+
+
+async def test_every_row_is_captioned_by_its_question_not_its_variable_name(
+    tmp_path: Path,
+) -> None:
+    """A person meeting the template reads questions, never snake_case identifiers."""
+    async with survey(tmp_path / "out", template="tui_kinds") as (app, _):
+        labels = {
+            row.question.id: str(row.query_one(".field-label", Static).visual)
+            for row in app.screen.query(FieldRow)
+        }
+        assert labels["flavour"].startswith("Which flavour the build uses")
+        # no declared help falls back to copier's own `var_name (type)`, never a bare id
+        assert labels["count"].startswith("count (int)")
+
+
+async def test_picking_the_blank_snaps_back_to_the_answer_the_state_holds(
+    tmp_path: Path,
+) -> None:
+    """The prompt row is not an answer, and the screen must not pretend it became one.
+
+    Textual offers the prompt as a selectable option. Swallowing that pick left the control
+    reading "no answer yet" while state still held the old value - so the review screen and
+    the generated project disagreed with what the user was looking at.
+    """
+    async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
+        select = app.screen.query_one("#ctl-flavour", ChoiceSelect)
+        assert app.ui.state().fields["flavour"].value == "a"
+        select.value = Select.NULL
+        await pilot.pause()
+        assert app.ui.state().fields["flavour"].value == "a"
+        assert str(select.query_one(SelectCurrent).label) == "a"
 
 
 async def test_an_invalid_field_blocks_finishing_but_not_navigation(tmp_path: Path) -> None:

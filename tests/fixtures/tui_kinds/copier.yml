@@ -27,6 +27,14 @@ config:
 flavour:
     type: str
     default: a
+    help: Which flavour the build uses
+    choices:
+        - a
+        - b
+
+plain_pick:
+    type: str
+    default: a
     choices:
         - a
         - b

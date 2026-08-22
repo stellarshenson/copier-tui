@@ -20,6 +20,13 @@ UNSET = "not set"
 """Stands in for an answer with no value, so a blank line is never mistaken for one."""
 
 
+def _gutter(label: str) -> str:
+    """A caption padded to the gutter, marked when it did not fit."""
+    if len(label) > LABEL_WIDTH - 1:
+        return label[: LABEL_WIDTH - 2] + "\u2026 "
+    return label.ljust(LABEL_WIDTH)
+
+
 class ReviewScreen(Screen[bool]):
     """Lists every answer and warns when the destination is not empty."""
 
@@ -78,7 +85,7 @@ class ReviewScreen(Screen[bool]):
         return Text("")
 
     def _answer_lines(self) -> list[Static]:
-        """One static per visible answer, id gutter aligned, secrets masked."""
+        """One static per visible answer, caption gutter aligned, secrets masked."""
         state = self.ui.state()
         lines = []
         for field_id in state.visible_ids:
@@ -87,7 +94,7 @@ class ReviewScreen(Screen[bool]):
             lines.append(
                 Static(
                     Text.assemble(
-                        (field_id[: LABEL_WIDTH - 1].ljust(LABEL_WIDTH), f"bold {CYAN_BRIGHT}"),
+                        (_gutter(self.ui.schema().by_id(field_id).label), f"bold {CYAN_BRIGHT}"),
                         (value, TEXT) if value else (UNSET, TEXT_SUBTLE),
                     ),
                     classes="review-answer",

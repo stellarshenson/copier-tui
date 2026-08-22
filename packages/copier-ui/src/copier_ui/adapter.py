@@ -208,6 +208,10 @@ class TemplateAdapter:
                 )
                 multiline = question.get_multiline()
                 placeholder = question.get_placeholder()
+                # copier's own prompt caption: the rendered help, or `var_name (type)`
+                # when the template declares none. A drop-in must not show less than copier.
+                label = _one_line(question.get_message()) or id
+                help = _one_line(question.render_value(details.get("help", "")))
         except Exception as error:  # noqa: BLE001 - a broken question is reported, not raised
             return Question(
                 id=id,
@@ -228,8 +232,8 @@ class TemplateAdapter:
         return Question(
             id=id,
             kind=kind,
-            label=id,
-            help=str(details.get("help", "")),
+            label=label,
+            help=help,
             secret=question.secret,
             multiselect=question.multiselect,
             multiline=multiline,
@@ -291,6 +295,11 @@ def _templates(source: Any) -> Iterator[str]:
     elif isinstance(source, (list, tuple)):
         for item in source:
             yield from _templates(item)
+
+
+def _one_line(text: Any) -> str:
+    """Collapse a rendered template string to the single line a label or hint can hold."""
+    return " ".join(str(text or "").split())
 
 
 def _kind_of(type_name: str, *, choices: bool, multiselect: bool, secret: bool) -> Kind:
