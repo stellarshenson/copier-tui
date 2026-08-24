@@ -239,7 +239,7 @@ async def test_an_unmodified_third_party_template_runs(tmp_path: Path) -> None:
             assert len(app.screen.query(FieldRow)) == len(ui.state().visible_ids)
 
             ui.set("python_version_choice", "other")
-            app.screen._refresh_rows()
+            await app.screen._refresh_rows()
             await pilot.pause()
             assert app.screen.query("#row-python_version_custom")
 
@@ -304,7 +304,7 @@ async def test_an_answer_changed_after_coming_back_still_recomputes(tmp_path: Pa
             assert app.screen is survey
 
             ui.set("python_version_choice", "other")
-            survey._refresh_rows()
+            await survey._refresh_rows()
             await pilot.pause()
             assert survey.query("#row-python_version_custom")
 

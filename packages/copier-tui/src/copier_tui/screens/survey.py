@@ -48,6 +48,18 @@ CANCEL_WINDOW = 3.0
 """Seconds an armed escape stays armed. After that the safety goes back on by itself."""
 
 
+class _Form(VerticalScroll):
+    """The scrolling form, which is never itself a place the cursor stops.
+
+    A VerticalScroll takes focus by default so it can be scrolled, which put a stop between
+    every pair of questions where no row was focused, nothing highlighted and nothing could
+    be edited - a dead press that reads as a row offering no answer. Textual scrolls the
+    focused control into view on its own, so the container has nothing to focus for.
+    """
+
+    can_focus = False
+
+
 class SurveyScreen(Screen[None]):
     """The whole visible survey, scrollable, navigable in any order.
 
@@ -93,25 +105,30 @@ class SurveyScreen(Screen[None]):
     def compose(self) -> ComposeResult:
         """Header, the scrolling form, the key legend, footer."""
         yield HeaderBar("survey")
-        yield VerticalScroll(id="survey-form")
+        yield _Form(id="survey-form")
         yield self._hint
         yield Footer()
 
-    def on_mount(self) -> None:
-        """Build the rows and focus the first one."""
-        self._refresh_rows()
-        self.call_after_refresh(self._focus_first)
+    async def on_mount(self) -> None:
+        """Build the rows and focus the first one, once it has a control to focus.
 
-    def on_screen_resume(self) -> None:
+        The mounts are awaited because a row composes its control a beat after it mounts
+        itself: focusing before that finds the row and not the widget inside it, which
+        `_focus_field` reads as a missing field, and the form opens with nothing focused.
+        """
+        await self._refresh_rows()
+        self._focus_first()
+
+    async def on_screen_resume(self) -> None:
         """Coming back from review: re-read the state, keeping scroll and focus as they were."""
-        self._refresh_rows()
+        await self._refresh_rows()
 
-    def on_field_row_changed(self, message: FieldRow.Changed) -> None:
+    async def on_field_row_changed(self, message: FieldRow.Changed) -> None:
         """Push the new value into copier_ui and refresh every row from the new state."""
         message.stop()
         self._disarm()
         self.ui.set(message.field_id, message.value)
-        self._refresh_rows()
+        await self._refresh_rows()
 
     def on_descendant_focus(self) -> None:
         """The header position follows the focus; the legend is a constant."""
@@ -147,11 +164,11 @@ class SurveyScreen(Screen[None]):
             return focused
         return next((node for node in focused.ancestors if isinstance(node, types)), None)
 
-    def action_confirm(self) -> None:
+    async def action_confirm(self) -> None:
         """Advance to review, or point at the first field that is not ready."""
         errors = self.ui.validate()
         if errors:
-            self._refresh_rows()
+            await self._refresh_rows()
             field_id, messages = next(iter(errors.items()))
             self._focus_field(field_id)
             self._hint.update(Text(f"{field_id} - {messages[0]}", style=ROSE))
@@ -182,8 +199,11 @@ class SurveyScreen(Screen[None]):
         self._armed = False
         self._show_hint()
 
-    def _refresh_rows(self) -> None:
-        """Add, remove and update rows so they match the state's visible, non-preset fields."""
+    async def _refresh_rows(self) -> None:
+        """Add, remove and update rows so they match the state's visible, non-preset fields.
+
+        Mounting is awaited so a caller may act on the controls straight afterwards.
+        """
         state = self.ui.state()
         schema = self.ui.schema()
         errors = self.ui.validate()
@@ -200,9 +220,9 @@ class SurveyScreen(Screen[None]):
             if row is None:
                 row = FieldRow(schema.by_id(field_id), field)
                 if previous is None:
-                    form.mount(row, before=0)
+                    await form.mount(row, before=0)
                 else:
-                    form.mount(row, after=previous)
+                    await form.mount(row, after=previous)
             else:
                 row.update(field)
             # banding is by position in the form as it now stands, not by the order rows
@@ -239,14 +259,21 @@ class SurveyScreen(Screen[None]):
             self._focus_field(rows.first(FieldRow).question.id)
 
     def _focus_field(self, field_id: str | None) -> None:
-        """Scroll a field into view and focus its control."""
+        """Scroll a field into view and focus its control.
+
+        The screen is asked directly rather than through `Widget.focus`, which defers the
+        real call to the next beat of the app's message pump: on the first paint the control
+        is not laid out yet when that beat arrives, it fails the visibility half of
+        `focusable`, and the focus is dropped without a word. The form then opened with no
+        row focused at all.
+        """
         if field_id is None:
             return
         try:
             control = self.query_one(f"#ctl-{field_id}")
         except NoMatches:
             return
-        control.focus()
+        self.set_focus(control)
         control.scroll_visible()
 
 

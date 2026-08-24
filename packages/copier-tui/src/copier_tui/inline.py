@@ -17,7 +17,7 @@ from textual.binding import Binding
 from textual.message import Message
 from textual.widgets import Static
 
-from copier_tui.theme import CHROME_BG, PICKED_BG, PICKED_FG, TEXT, TEXT_MUTED
+from copier_tui.theme import CURSOR_BG, CURSOR_FG, OPTION_BG, OPTION_FG, PICKED_BG, PICKED_FG
 from copier_ui import Choice
 
 BOOL_CHOICES = (Choice(label="No", value=False), Choice(label="Yes", value=True))
@@ -150,15 +150,20 @@ class InlineOptions(Static):
             if index:
                 text.append(GAP)
             if self._in_force(choice):
-                # the answer, on a filled chip: taken and passed-over now differ by ground
-                # rather than by brightness, which is a difference that survives a reader
-                # who does not already know which of two blues means chosen
+                # the answer, on a filled chip - the one state that changes hue, so being
+                # chosen never has to be inferred from which neutral is brighter. A ticked
+                # multiselect option is chosen in exactly the same sense, and looks it
                 style = f"bold {PICKED_FG} on {PICKED_BG}"
             elif index == self._cursor:
-                style = f"{TEXT} on {CHROME_BG}"
+                style = f"{CURSOR_FG} on {CURSOR_BG}"
             else:
-                style = TEXT_MUTED
+                # every option gets a ground, not only the answer: a bare label among chips
+                # reads as prose, and the question's own caption then reads as one more
+                # option of its own answer. Set back a step, never dimmed out of legibility
+                style = f"{OPTION_FG} on {OPTION_BG}"
             if index == self._cursor and self.has_focus:
+                # chosen and under the cursor are two different facts and can hold at once,
+                # so the cursor is an underline rather than a ground that would hide the first
                 style = f"{style} underline"
             text.append(f" {choice.label} ", style=style)
         self.update(text)

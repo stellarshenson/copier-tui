@@ -16,7 +16,17 @@ from typing import Any
 from copier_tui.app import SurveyApp
 from copier_tui.inline import InlineOptions
 from copier_tui.screens.execution import _detached_stdin
-from copier_tui.theme import FIELD_ALT_BG, FIELD_BG, PICKED_BG, ROW_ALT_BG, ROW_BG
+from copier_tui.theme import (
+    CURSOR_BG,
+    FIELD_ALT_BG,
+    FIELD_BG,
+    FIELD_FOCUS_BG,
+    OPTION_BG,
+    PICKED_BG,
+    ROW_ALT_BG,
+    ROW_BG,
+    SURFACE_BG,
+)
 from copier_tui.widgets import FieldRow
 from copier_ui import TemplateUI
 
@@ -89,10 +99,15 @@ async def test_a_typing_ground_carries_the_band_through_the_control(tmp_path: Pa
             for row in rows(app)
             if row.question.id in {"name", "token"}
         }
-        assert grounds["name"].lower() == FIELD_BG.lower()
+        # `name` is the first row and holds the focus on mount, so it wears the focus ground
+        assert grounds["name"].lower() == FIELD_FOCUS_BG.lower()
         assert grounds["token"].lower() == FIELD_BG.lower()
         assert FIELD_ALT_BG != FIELD_BG
         assert ROW_ALT_BG != ROW_BG
+        # app CSS outranks a widget's default sheet whatever the specificity, so the ground
+        # only lands if the rule lives in BASE_CSS - it did not, and the test passed anyway
+        # for as long as FIELD_BG happened to equal the generic Input background
+        assert FIELD_BG != SURFACE_BG
 
 
 async def test_an_option_row_takes_no_typing_ground(tmp_path: Path) -> None:
@@ -149,3 +164,64 @@ def test_the_render_runs_with_stdin_detached() -> None:
         assert os.fstat(0).st_rdev == inside.st_rdev
     after = os.fstat(0)
     assert (after.st_dev, after.st_ino) == (before.st_dev, before.st_ino)
+
+
+async def test_the_first_field_holds_the_focus_as_soon_as_the_form_opens(tmp_path: Path) -> None:
+    """Focus: the form opens on a question, not on nothing.
+
+    A row mounts a beat before the control it composes, so focusing without awaiting the
+    mount finds the row and not the widget inside it - and the failure is silent, because a
+    missing control is indistinguishable from a field that has gone away.
+    """
+    async with survey(tmp_path / "out") as (app, _):
+        assert app.screen.focused is not None
+        assert app.screen.focused.id == "ctl-name"
+
+
+async def test_every_place_the_cursor_stops_is_a_control(tmp_path: Path) -> None:
+    """Focus: no stop in the walk offers nothing to do.
+
+    A VerticalScroll takes focus by default so it can be scrolled, which put a dead stop
+    between every pair of questions - nothing highlighted, nothing editable, a press that
+    went nowhere. Textual scrolls the focused control into view by itself.
+    """
+    async with survey(tmp_path / "out") as (app, pilot):
+        stops = []
+        for _ in range(8):
+            await pilot.press("down")
+            await pilot.pause()
+            stops.append(getattr(app.screen.focused, "id", None))
+        assert all(stop and stop.startswith("ctl-") for stop in stops), stops
+        assert app.screen.query_one("#survey-form").can_focus is False
+
+
+async def test_the_three_option_states_each_have_their_own_ground(tmp_path: Path) -> None:
+    """Option chips: chosen, under the cursor, and passed over are three separate grounds.
+
+    The answer is the only one that changes hue, so being chosen is never inferred from which
+    neutral is brighter, and nothing is dimmed out of legibility - the options passed over are
+    the alternatives being decided against.
+    """
+    async with survey(tmp_path / "out") as (app, pilot):
+        app.screen.set_focus(app.screen.query_one("#ctl-advanced", InlineOptions))
+        await pilot.pause()
+        options = app.screen.query_one("#ctl-advanced", InlineOptions)
+        grounds = {
+            segment.text.strip(): segment.style.bgcolor.triplet.hex
+            for segment in options.render_line(0)
+            if segment.text.strip() and segment.style and segment.style.bgcolor
+        }
+        # "No" is the default and also where the cursor starts, so it shows as chosen
+        assert grounds["No"] == PICKED_BG
+        assert grounds["Yes"] == OPTION_BG
+        assert len({PICKED_BG, OPTION_BG, CURSOR_BG}) == 3
+
+        await pilot.press("right")
+        await pilot.pause()
+        moved = {
+            segment.text.strip(): segment.style.bgcolor.triplet.hex
+            for segment in options.render_line(0)
+            if segment.text.strip() and segment.style and segment.style.bgcolor
+        }
+        assert moved["Yes"] == PICKED_BG
+        assert moved["No"] == OPTION_BG

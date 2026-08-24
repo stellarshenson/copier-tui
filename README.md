@@ -63,11 +63,15 @@ was passed over stays legible beside what was taken and there is no menu to open
 questions underneath. Left and right move between the options; nothing expands, nothing is
 covered.
 
-Rows alternate between two grounds so the eye can tell where one question ends, and the answer
-to a choice sits on a filled chip while the options passed over stay plain beside it - taken and
-dismissed differ by ground rather than by which blue is brighter. Anything that accepts typing
-carries a lifted ground; an option row does not, so only what takes letters looks like it does.
-A caption is coloured by focus alone and never by whether its answer is still the default.
+Rows alternate between two grounds so the eye can tell where one question ends, and the focused
+question keeps a blank line above and below it. Every option is a chip in one of three states:
+the answer on filled cyan, the option under the cursor on the brightest neutral, and the rest a
+step back but fully legible - they are the alternatives being decided against, so none of them
+is dimmed out of readability. Only the answer changes hue, so being chosen is never inferred
+from which neutral is brighter, and a ticked multiselect option reads exactly like a chosen
+single one. Anything that accepts typing carries a lifted ground; an option row does not, so
+only what takes letters looks like it does. A caption is coloured by focus alone and never by
+whether its answer is still the default, and the cursor only ever stops on a control.
 
 Captions are copier's own rendered `help`, which is also the only description copier has, so a
 caption is never cut - it wraps to a second line instead. A long free-text answer wraps too,

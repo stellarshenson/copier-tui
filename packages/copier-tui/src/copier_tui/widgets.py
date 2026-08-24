@@ -24,12 +24,8 @@ from copier_tui import __version__
 from copier_tui.inline import BOOL_CHOICES, InlineOptions
 from copier_tui.theme import (
     AMBER,
-    CHROME_BG,
     CYAN,
     CYAN_BRIGHT,
-    FIELD_ALT_BG,
-    FIELD_BG,
-    FIELD_FOCUS_BG,
     HELP_LINES,
     LABEL_LINES,
     LABEL_WIDTH,
@@ -198,8 +194,8 @@ class FieldRow(Vertical):
         border-left: thick {ROW_ALT_BG};
     }}
     FieldRow:focus-within {{
-        background: {CHROME_BG};
         border-left: thick {CYAN};
+        margin: 1 0;
     }}
     FieldRow > .field-head {{
         height: auto;
@@ -229,23 +225,6 @@ class FieldRow(Vertical):
     FieldRow > .field-head > InlineOptions,
     FieldRow > .field-head > TextArea {{
         width: 1fr;
-    }}
-    FieldRow > .field-head > Input,
-    FieldRow > .field-head > TextArea {{
-        background: {FIELD_BG};
-    }}
-    FieldRow.row-alt > .field-head > Input,
-    FieldRow.row-alt > .field-head > TextArea {{
-        background: {FIELD_ALT_BG};
-    }}
-    FieldRow:focus-within > .field-head > Input,
-    FieldRow:focus-within > .field-head > TextArea {{
-        background: {FIELD_FOCUS_BG};
-    }}
-    FieldRow > .field-head > Input:disabled,
-    FieldRow > .field-head > TextArea:disabled {{
-        background: transparent;
-        color: {TEXT_SUBTLE};
     }}
     FieldRow > .field-head > InlineOptions:disabled {{
         color: {TEXT_SUBTLE};

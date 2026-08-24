@@ -256,7 +256,7 @@ async def test_an_answer_outside_its_new_choices_is_kept_flagged_and_not_faked(
     """
     async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
         app.ui.set("flavour", "zzz")
-        app.screen._refresh_rows()
+        await app.screen._refresh_rows()
         await pilot.pause()
 
         assert app.ui.state().fields["flavour"].value == "zzz"

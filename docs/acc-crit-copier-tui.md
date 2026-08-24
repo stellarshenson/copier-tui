@@ -340,3 +340,21 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
 - [x] **Render keeps the keyboard** - the copier run happens with stdin on /dev/null, so a template task cannot eat the keystrokes and leave 'press any key to close' dead; descriptors 1 and 2 stay, since Textual paints through 1
   - log: 2026-08-24 added
   - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+- [x] **Every option is a chip** - every option carries a ground, so a bare label never reads as prose and the question's caption never reads as one of its own answers
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+- [x] **Three option states** - chosen, under the cursor and passed over each have their own ground; only chosen changes hue, and all three clear the 4.5:1 contrast floor
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+- [x] **Focus opens on a question** - the first field holds the focus as soon as the form opens, the row mounts being awaited before it is focused
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+- [x] **Every stop is actionable** - the cursor only ever stops on a control; the scrolling form is not itself a tab stop
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+- [x] **Focused row is spaced** - the focused question keeps a blank line above and below it, so the row being answered separates from its neighbours
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+- [x] **Grounds live in app CSS** - the form's typing grounds are declared in the app stylesheet, since Textual ranks app CSS above a widget's default sheet whatever the specificity
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py

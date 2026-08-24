@@ -18,29 +18,44 @@ SURFACE_BG = "#303841"
 BORDER = "#5f6b76"
 
 ROW_BG = SCREEN_BG
-ROW_ALT_BG = BASE_BG
-"""The two bands the form alternates between, one step apart on the skill's dark ladder.
+ROW_ALT_BG = "#2a313a"
+"""The two bands the form alternates between.
 
 A form of thirty near-identical rows gives the eye nothing to count by, and a caption that
-wraps onto a second line is indistinguishable from the next question starting. The band says
-where one question ends without spending a rule or a blank line on saying it."""
+wraps onto a second line is indistinguishable from the next question starting. The step is
+16-21 per channel: the smaller one the skill's base token gives survives a 256-colour
+terminal intact and still could not be seen, so the band is worth nothing until it is wide
+enough to read at a glance."""
 
-FIELD_BG = SURFACE_BG
-FIELD_ALT_BG = "#353d47"
-FIELD_FOCUS_BG = "#39424d"
-"""The ground under anything the user types into, and the same one step lifted under focus.
+FIELD_BG = "#39424d"
+FIELD_ALT_BG = "#3f4854"
+FIELD_FOCUS_BG = "#495362"
+FIELD_FOCUS_FG = "#e8e8e8"
+"""The ground under anything the user types into, per band, and lifted again under focus.
 
-It is the skill's surface/input/highlight token, above the brightest row band, so a box reads
-as a box on either band and a disabled one reads as inert by dropping back to the band it
-sits on. Only typing surfaces get it: an option row says "pick me" with the chip under the
-answer, and giving it a typing ground as well only invited the reader to type into it.
+Only typing surfaces get one: an option row says "pick me" with its chips, and a typing
+ground there invites the reader to type into a widget that ignores every letter. The ground
+carries the band as well, because a control spans the row and would otherwise paint over the
+stripe - five text questions in a row merged into one lit block."""
 
-The ground carries the band as well, because a control spans the row and would otherwise
-paint over the stripe: five text questions in a row merged into one lit block, which is the
-same undifferentiated wall the banding exists to break up."""
+OPTION_BG = "#363e49"
+OPTION_FG = "#b8b8b8"
+CURSOR_BG = "#5a6674"
+CURSOR_FG = "#ffffff"
+"""The three states an option can be in, each with its own ground and ink.
+
+Every option carries a ground, not just the answer. A bare label among chips reads as prose,
+and prose beside chips reads as another option - the question's own caption ended up looking
+like one of its answers.
+
+The states are read in one glance: the answer is a filled cyan chip, the option the cursor is
+on is the brightest neutral, and the rest sit back a step while staying fully legible. Nothing
+here is dimmed to the point of hiding, and all three clear the 4.5:1 contrast floor - the
+options passed over are the alternatives the reader is deciding against, so they have to stay
+readable to be worth showing at all."""
 
 PICKED_BG = CYAN
-PICKED_FG = SCREEN_BG
+PICKED_FG = "#10161c"
 """The chip under the option in force. Colour alone separated taken from passed-over only for
 a reader who already knew which hue meant which; a filled chip needs no key."""
 
@@ -140,6 +155,27 @@ Input, TextArea, SelectionList {{
     color: {TEXT};
     border: none;
     padding: 0 1;
+}}
+/* the form's own typing grounds. These live here rather than in FieldRow.DEFAULT_CSS
+   because Textual ranks app CSS above a widget's default sheet whatever the specificity,
+   so the generic rule above silently won and the row never got the ground it asked for. */
+FieldRow > .field-head > Input,
+FieldRow > .field-head > TextArea {{
+    background: {FIELD_BG};
+}}
+FieldRow.row-alt > .field-head > Input,
+FieldRow.row-alt > .field-head > TextArea {{
+    background: {FIELD_ALT_BG};
+}}
+FieldRow:focus-within > .field-head > Input,
+FieldRow:focus-within > .field-head > TextArea {{
+    background: {FIELD_FOCUS_BG};
+    color: {FIELD_FOCUS_FG};
+}}
+FieldRow > .field-head > Input:disabled,
+FieldRow > .field-head > TextArea:disabled {{
+    background: transparent;
+    color: {TEXT_SUBTLE};
 }}
 Select {{
     background: {SURFACE_BG};
