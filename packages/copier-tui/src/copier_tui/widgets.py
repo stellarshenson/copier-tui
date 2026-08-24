@@ -35,7 +35,9 @@ from copier_tui.theme import (
     PULSE_SHADES,
     ROSE,
     ROW_ALT_BG,
+    ROW_ALT_FOCUS_BG,
     ROW_BG,
+    ROW_FOCUS_BG,
     TEXT,
     TEXT_MUTED,
     TEXT_SUBTLE,
@@ -205,8 +207,12 @@ class FieldRow(Vertical):
         border-left: thick {ROW_ALT_BG};
     }}
     FieldRow:focus-within {{
+        background: {ROW_FOCUS_BG};
         border-left: thick {CYAN};
         margin: 1 0;
+    }}
+    FieldRow.row-alt:focus-within {{
+        background: {ROW_ALT_FOCUS_BG};
     }}
     {_PULSE_CSS}
     FieldRow > .field-head {{

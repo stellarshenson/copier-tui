@@ -29,8 +29,11 @@ from copier_tui.theme import (
     PICKED_BG,
     PULSE_CYCLE,
     PULSE_INTERVAL,
+    PULSE_SHADES,
     ROW_ALT_BG,
+    ROW_ALT_FOCUS_BG,
     ROW_BG,
+    ROW_FOCUS_BG,
     SURFACE_BG,
 )
 from copier_tui.widgets import FieldRow
@@ -351,3 +354,44 @@ async def test_the_focus_bar_breathes_while_the_cursor_rests_on_a_question(
         await pilot.pause()
         assert shade("name") is None
         assert shade("advanced") is not None
+
+
+def test_the_breath_moves_in_steps_too_small_to_see() -> None:
+    """Focus bar: consecutive phases are near-identical, so the bar reads as a breath.
+
+    Four shades a third of a second apart was a sequence of shades rather than a breath. The
+    bound is on the ramp itself because it is what went wrong - a cycle can be any length and
+    still look stepped if the colours between its phases are far apart.
+    """
+    frames = [PULSE_SHADES[index] for index in PULSE_CYCLE]
+    jumps = [
+        max(abs(int(a[i : i + 2], 16) - int(b[i : i + 2], 16)) for i in (1, 3, 5))
+        for a, b in zip(frames, frames[1:] + frames[:1])
+    ]
+    assert max(jumps) <= 12, jumps
+    assert PULSE_INTERVAL * len(PULSE_CYCLE) < 2.5
+
+
+async def test_the_focused_row_leans_its_ground_towards_blue(tmp_path: Path) -> None:
+    """Row ground: the row under the cursor tints its band, on either band.
+
+    Small on purpose - the row already carries a breathing bar, a blank line either side and
+    a lit caption. Each tint stays nearer its own band than the other band, so a focused row
+    is never read as a banded one.
+    """
+    async with survey(tmp_path / "out") as (app, pilot):
+        grounds = {row.question.id: row.styles.background.hex6.lower() for row in rows(app)}
+        assert grounds["name"] == ROW_FOCUS_BG  # first row, focused on mount
+        assert grounds["token"] == ROW_BG
+
+        app.screen.set_focus(app.screen.query_one("#ctl-advanced", InlineOptions))
+        await pilot.pause()
+        banded = {row.question.id: row.styles.background.hex6.lower() for row in rows(app)}
+        assert banded["advanced"] == ROW_ALT_FOCUS_BG
+        assert banded["name"] == ROW_BG
+
+        def blue(colour: str) -> int:
+            return int(colour[5:7], 16)
+
+        assert blue(ROW_FOCUS_BG) - blue(ROW_BG) < blue(ROW_ALT_BG) - blue(ROW_BG)
+        assert blue(ROW_ALT_FOCUS_BG) > blue(ROW_ALT_BG)

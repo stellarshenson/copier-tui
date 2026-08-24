@@ -22,7 +22,7 @@ SIZE = (110, 40)
 OUT = Path("docs/assets")
 DEFAULT_TEMPLATE = "../../copier-data-science"
 DEMO_ANSWERS = {
-    "author_name": "Kolomolo",
+    "author_name": "AcmeCo",
     "description": "A demo project rendered by copier-tui",
     "python_version_choice": "other",
 }

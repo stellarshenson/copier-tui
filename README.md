@@ -64,10 +64,10 @@ questions underneath. Left and right move between the options; nothing expands, 
 covered.
 
 The header names the template being filled in - the one fact none of its questions carries -
-and answers are written in a pale yellow, warming under the cursor, so a value is never
-mistaken for the caption beside it. Rows alternate between two grounds so the eye can tell
-where one question ends, the focused question keeps a blank line above and below it, and the
-bar beside it breathes slowly rather than sitting still. Every option is a chip carrying a filled circle
+and answers are written in a brighter grey than the captions, turning orange in the cell being
+edited, so a value is never mistaken for the caption beside it. Rows alternate between two grounds so the eye can tell
+where one question ends, the focused question keeps a blank line above and below it, leans its
+ground a little towards blue, and the bar beside it breathes slowly rather than sitting still. Every option is a chip carrying a filled circle
 when it is the answer and an empty one when it is not, so being chosen is said in the shape as
 well as in the colour. The answer sits on the one hue in the row, the option under the cursor on
 the brightest neutral, and the rest a step back but fully legible - they are the alternatives

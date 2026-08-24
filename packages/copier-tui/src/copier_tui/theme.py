@@ -17,18 +17,81 @@ CHROME_BG = "#2a313a"
 SURFACE_BG = "#303841"
 BORDER = "#5f6b76"
 
-PULSE_SHADES = ("#46bcf0", "#2f9fd8", "#1b7fae", "#12648b")
-PULSE_CYCLE = (0, 1, 2, 3, 2, 1)
-PULSE_INTERVAL = 0.35
-"""The bar beside the focused question breathes through these shades and back.
+PULSE_SHADES = (
+    "#46bcf0",
+    "#46bbef",
+    "#44b9ec",
+    "#42b5e7",
+    "#3eafe1",
+    "#3aa8da",
+    "#36a1d1",
+    "#3199c7",
+    "#2c90be",
+    "#2787b4",
+    "#227faa",
+    "#1e78a1",
+    "#1a719a",
+    "#166b94",
+    "#14678f",
+    "#12658c",
+    "#12648b",
+)
+PULSE_CYCLE = (
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    15,
+    14,
+    13,
+    12,
+    11,
+    10,
+    9,
+    8,
+    7,
+    6,
+    5,
+    4,
+    3,
+    2,
+    1,
+)
+PULSE_INTERVAL = 0.06
+"""The bar beside the focused question breathes down this ramp and back.
 
-Six steps at a third of a second is a little over two seconds a cycle - slow enough to read as
-breathing rather than blinking, which is the difference between an indicator and an alarm. The
-dimmest shade still carries the bar against the row, so the mark never disappears mid-cycle."""
+32 phases at 17 a second, so the cycle takes about two seconds and no step moves a channel
+more than 10 of 255 - a breath rather than a sequence of shades, which is what four shades a
+third of a second apart actually looked like. The phases are spaced on a cosine, so the bar
+eases through the turnarounds instead of reversing on the spot, and that easing is why the
+ramp holds fewer colours than phases - it dwells at the two ends. The dimmest shade still
+carries the bar against the row, so the mark never disappears mid-cycle."""
 
 ROW_BG = SCREEN_BG
 ROW_ALT_BG = "#2a313a"
-"""The two bands the form alternates between.
+ROW_FOCUS_BG = "#1a202d"
+ROW_ALT_FOCUS_BG = "#2a3242"
+"""The two bands the form alternates between, and each band's ground under the cursor.
+
+The focused row leans about eight parts of blue away from its band and nothing else. It is
+deliberately almost nothing: the row already carries a breathing bar, a blank line above and
+below, and a lit caption, so a fourth cue loud enough to notice on its own would be the
+fourth thing shouting. This one is only meant to be there when the reader looks for where
+they are, and both stay far enough from the other band that a focused row is never mistaken
+for a banded one.
 
 A form of thirty near-identical rows gives the eye nothing to count by, and a caption that
 wraps onto a second line is indistinguishable from the next question starting. The step is
@@ -39,8 +102,8 @@ enough to read at a glance."""
 FIELD_BG = "#39424d"
 FIELD_ALT_BG = "#3f4854"
 FIELD_FOCUS_BG = "#495362"
-ANSWER_FG = "#e3d9a8"
-ANSWER_FOCUS_FG = "#ffc857"
+ANSWER_FG = "#dcdcdc"
+ANSWER_FOCUS_FG = "#ffb866"
 """The ground under anything the user types into, per band, and lifted again under focus.
 
 Only typing surfaces get one: an option row says "pick me" with its chips, and a typing
@@ -48,11 +111,13 @@ ground there invites the reader to type into a widget that ignores every letter.
 carries the band as well, because a control spans the row and would otherwise paint over the
 stripe - five text questions in a row merged into one lit block.
 
-An answer is written in pale yellow and the answer being edited in a warm one, so the values
-carry a colour of their own rather than the reading grey of the captions around them: on a
-form this long the question text and the answers to it are the two things most worth telling
-apart at a glance. Both clear the contrast floor on the ground they sit on, 7.16:1 and
-5.06:1."""
+An answer already given is written in a plain grey brighter than the captions around it, and
+the answer being edited in orange: on a form this long the question text and the answers to
+it are the two things most worth telling apart at a glance, and only one cell is being typed
+into at a time. The grey stays neutral because a tint on thirty settled answers reads as a
+warning about all of them; the orange is as saturated as the focused ground allows, since a
+hue that far from yellow cannot go deeper and still clear the floor on it. 7.43:1 and
+4.56:1 on their grounds."""
 
 OPTION_BG = "#363e49"
 OPTION_FG = "#b8b8b8"

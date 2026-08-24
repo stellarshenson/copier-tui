@@ -379,9 +379,14 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
 - [x] **ctrl+c belongs to the terminal** - ctrl+c never leaves the survey; it is what a terminal copies with, and Textual hands it to a focused input as copy of its own
   - log: 2026-08-24 added
   - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
-- [x] **Answers carry their own ink** - an answer is written in pale yellow and the answer being edited in a warm one, so values are told apart from the captions around them at a glance
+- [x] **Answers carry their own ink** - an answer is written in a grey brighter than the captions and the answer being edited in orange, so values are told apart from the captions around them at a glance
   - log: 2026-08-24 added
   - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
-- [x] **Focus bar breathes** - the bar beside the focused question cycles shades over about two seconds and stops when focus leaves, driven by classes since Textual cannot clear an inline style
+  - log: 2026-08-24 ink repointed: settled answers neutral grey, edited answer orange
+- [x] **Focus bar breathes** - the bar beside the focused question rides a cosine-eased ramp over about two seconds in steps too small to see, and stops when focus leaves, driven by classes since Textual cannot clear an inline style
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-24 ramp widened to 32 cosine-eased phases, no step over 10 of 255
+- [x] **Focused row ground** - the row under the cursor tints its band a little towards blue, on either band, staying nearer its own band than the other one
   - log: 2026-08-24 added
   - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
