@@ -42,22 +42,38 @@ OPTION_BG = "#363e49"
 OPTION_FG = "#b8b8b8"
 CURSOR_BG = "#5a6674"
 CURSOR_FG = "#ffffff"
+CURSOR_PICKED_BG = "#1477b4"
+CURSOR_PICKED_FG = "#ffffff"
 """The three states an option can be in, each with its own ground and ink.
 
 Every option carries a ground, not just the answer. A bare label among chips reads as prose,
 and prose beside chips reads as another option - the question's own caption ended up looking
 like one of its answers.
 
-The states are read in one glance: the answer is a filled cyan chip, the option the cursor is
-on is the brightest neutral, and the rest sit back a step while staying fully legible. Nothing
-here is dimmed to the point of hiding, and all three clear the 4.5:1 contrast floor - the
-options passed over are the alternatives the reader is deciding against, so they have to stay
-readable to be worth showing at all."""
+Two questions are being answered at once and they are given separate channels, because they
+can hold at the same time and regularly do - the cursor starts on the answer every time. The
+shape says which option is chosen, filled against empty; the answer keeps its blue ground and
+white ink whether or not the cursor is on it.
 
-PICKED_BG = CYAN
-PICKED_FG = "#10161c"
-"""The chip under the option in force. Colour alone separated taken from passed-over only for
-a reader who already knew which hue meant which; a filled chip needs no key."""
+The cursor is carried by three cues at once, because no single one was enough. An underline
+was close to invisible. A ground bright enough to read on its own cannot hold white text - the
+blues that clear 4.5:1 with white stop well short of striking. And a coloured mark inside the
+chip has only the chip to contrast against, where amber manages 2.91:1. So the mark sits
+outside the chip on the dark row instead, where a bright cyan caret has the whole row band to
+read against, and the chip beneath it steps one shade brighter and goes bold.
+
+Nothing is dimmed to the point of hiding, and every state clears the 4.5:1 contrast floor -
+the options passed over are the alternatives the reader is deciding against, so they have to
+stay readable to be worth showing at all."""
+
+PICKED_BG = "#0b6591"
+PICKED_FG = "#ffffff"
+"""The chip under the option in force.
+
+Deeper than the brand cyan so the label can be light: white on `#21a8e4` measures 2.70:1 and
+white on this 6.39:1, and an answer written in dark ink on a bright chip reads as struck out
+rather than chosen. It is still the only hue on the row, so the answer is still the only
+option that is not a neutral."""
 
 TEXT = "#c3c3c3"
 TEXT_MUTED = "#a5a5a5"

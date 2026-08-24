@@ -358,3 +358,18 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
 - [x] **Grounds live in app CSS** - the form's typing grounds are declared in the app stylesheet, since Textual ranks app CSS above a widget's default sheet whatever the specificity
   - log: 2026-08-24 added
   - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+- [x] **Option shape** - the answer is a filled circle and every alternative an empty one, so chosen is said in the glyph as well as the ground
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+- [x] **Cursor on the answer** - the cursor mark shows even when the cursor sits on the chosen option, since where you are and what is chosen are two facts that must both read
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+- [x] **Option layout** - options share a line while they fit the row's real width and stack one per line once they do not, so no alternative runs off the edge
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+- [x] **Answer takes light ink** - the chosen chip is deep enough to carry light text at 6.39:1; dark ink on a bright chip read as struck out rather than chosen
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+- [x] **Cursor carries three cues** - the cursor shows as a bright caret on the row ground, a brighter chip and bold text together; an underline alone was close to invisible
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py

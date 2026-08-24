@@ -14,10 +14,11 @@ from pathlib import Path
 from typing import Any
 
 from copier_tui.app import SurveyApp
-from copier_tui.inline import InlineOptions
+from copier_tui.inline import CURSOR, FREE, TAKEN, InlineOptions
 from copier_tui.screens.execution import _detached_stdin
 from copier_tui.theme import (
     CURSOR_BG,
+    CURSOR_PICKED_BG,
     FIELD_ALT_BG,
     FIELD_BG,
     FIELD_FOCUS_BG,
@@ -28,7 +29,7 @@ from copier_tui.theme import (
     SURFACE_BG,
 )
 from copier_tui.widgets import FieldRow
-from copier_ui import TemplateUI
+from copier_ui import Choice, TemplateUI
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 
@@ -56,6 +57,21 @@ def rows(app: SurveyApp) -> list[FieldRow]:
 def banding(app: SurveyApp) -> list[bool]:
     """Whether each visible row wears the band, top to bottom."""
     return [BAND in row.classes for row in rows(app)]
+
+
+def option_grounds(options: InlineOptions) -> dict[str, str]:
+    """Map each option's label to the background it is painted on.
+
+    Read off the painted strip rather than the source Text, and matched on the label alone -
+    a chip also carries its cursor mark and its filled-or-empty circle.
+    """
+    grounds: dict[str, str] = {}
+    for line in range(max(1, options.size.height)):
+        for segment in options.render_line(line):
+            label = segment.text.strip(" \u25cf\u25cb\u25b8")
+            if label and segment.style and segment.style.bgcolor:
+                grounds[label] = segment.style.bgcolor.triplet.hex
+    return grounds
 
 
 async def test_the_form_alternates_a_band_down_the_rows(tmp_path: Path) -> None:
@@ -124,15 +140,8 @@ async def test_an_option_row_takes_no_typing_ground(tmp_path: Path) -> None:
 async def test_the_answer_sits_on_a_chip_and_the_alternatives_do_not(tmp_path: Path) -> None:
     """Option chips: taken and passed-over differ by ground, not by which blue is brighter."""
     async with survey(tmp_path / "out") as (app, _):
-        options = app.screen.query_one("#ctl-advanced", InlineOptions)
-        # the painted strip, not the source Text: what a reader sees is the assertion
-        grounds = {
-            segment.text.strip(): segment.style.bgcolor.triplet.hex
-            if segment.style and segment.style.bgcolor
-            else None
-            for segment in options.render_line(0)
-            if segment.text.strip()
-        }
+        grounds = option_grounds(app.screen.query_one("#ctl-advanced", InlineOptions))
+        # no focus here, so the answer wears its resting blue
         assert grounds["No"] == PICKED_BG
         assert grounds["Yes"] != PICKED_BG
 
@@ -206,22 +215,81 @@ async def test_the_three_option_states_each_have_their_own_ground(tmp_path: Path
         app.screen.set_focus(app.screen.query_one("#ctl-advanced", InlineOptions))
         await pilot.pause()
         options = app.screen.query_one("#ctl-advanced", InlineOptions)
-        grounds = {
-            segment.text.strip(): segment.style.bgcolor.triplet.hex
-            for segment in options.render_line(0)
-            if segment.text.strip() and segment.style and segment.style.bgcolor
-        }
-        # "No" is the default and also where the cursor starts, so it shows as chosen
-        assert grounds["No"] == PICKED_BG
+        grounds = option_grounds(options)
+        # the cursor starts on the answer, so that chip shows the cursor's brighter blue
+        assert grounds["No"] == CURSOR_PICKED_BG
         assert grounds["Yes"] == OPTION_BG
-        assert len({PICKED_BG, OPTION_BG, CURSOR_BG}) == 3
+        assert len({PICKED_BG, CURSOR_PICKED_BG, OPTION_BG, CURSOR_BG}) == 4
 
         await pilot.press("right")
         await pilot.pause()
-        moved = {
-            segment.text.strip(): segment.style.bgcolor.triplet.hex
-            for segment in options.render_line(0)
-            if segment.text.strip() and segment.style and segment.style.bgcolor
-        }
-        assert moved["Yes"] == PICKED_BG
+        moved = option_grounds(options)
+        assert moved["Yes"] == CURSOR_PICKED_BG
+        # left behind by the cursor, the old answer is an ordinary alternative again
         assert moved["No"] == OPTION_BG
+
+
+def option_text(options: InlineOptions) -> str:
+    """Everything the option row paints, lines joined by a newline."""
+    lines = []
+    for line in range(max(1, options.size.height)):
+        lines.append("".join(segment.text for segment in options.render_line(line)))
+    return "\n".join(lines)
+
+
+async def test_the_answer_is_a_filled_circle_and_the_rest_are_empty(tmp_path: Path) -> None:
+    """Option shape: chosen is said in the glyph as well as the colour.
+
+    Colour alone asks the reader to know which of two grounds means chosen. A filled circle
+    against empty ones needs no key, and survives a terminal that renders the palette poorly.
+    """
+    async with survey(tmp_path / "out") as (app, pilot):
+        app.screen.set_focus(app.screen.query_one("#ctl-advanced", InlineOptions))
+        await pilot.pause()
+        painted = option_text(app.screen.query_one("#ctl-advanced", InlineOptions))
+        assert f"{TAKEN} No" in painted
+        assert f"{FREE} Yes" in painted
+        assert painted.count(TAKEN) == 1
+
+
+async def test_the_cursor_shows_even_when_it_sits_on_the_answer(tmp_path: Path) -> None:
+    """Cursor: where you are and what is chosen are two facts, and both must show at once.
+
+    The cursor starts on the answer every time, so a ground that only says "chosen" leaves
+    the row with nothing to say "and you are here" - the mark carries it instead.
+    """
+    async with survey(tmp_path / "out") as (app, pilot):
+        options = app.screen.query_one("#ctl-advanced", InlineOptions)
+        app.screen.set_focus(options)
+        await pilot.pause()
+        assert f"{CURSOR}{TAKEN} No" in option_text(options)
+
+        await pilot.press("right")
+        await pilot.pause()
+        painted = option_text(options)
+        assert f"{CURSOR}{TAKEN} Yes" in painted
+        assert painted.count(CURSOR) == 1
+
+
+async def test_short_options_share_a_line_and_long_ones_stack(tmp_path: Path) -> None:
+    """Option layout: side by side while they fit, one per line once they do not.
+
+    A yes and a no read fastest side by side and stacking them spends rows the form has not
+    got. Long labels side by side run past the edge, and the option that falls off is an
+    alternative the reader never learns exists.
+    """
+    async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
+        await pilot.pause()
+        short = app.screen.query_one("#ctl-enabled", InlineOptions)
+        assert "\n" not in option_text(short).rstrip("\n")
+
+        long_labels = InlineOptions(
+            (
+                Choice(label="an unusually long option label", value="a"),
+                Choice(label="another unusually long option label", value="b"),
+            ),
+            "a",
+        )
+        assert not long_labels._fits(
+            [long_labels._chip(index, choice) for index, choice in enumerate(long_labels.choices)]
+        )
