@@ -13,9 +13,9 @@ from textual.css.query import NoMatches
 from textual.message import Message
 from textual.screen import Screen
 from textual.widget import Widget
-from textual.widgets import Footer, OptionList, Select, SelectionList, Static, TextArea
+from textual.widgets import Footer, Static, TextArea
 
-from copier_tui.theme import ROSE, TEXT_MUTED, TEXT_SUBTLE
+from copier_tui.theme import ROSE, TEXT_MUTED
 from copier_tui.widgets import FieldRow, HeaderBar
 from copier_ui import State, TemplateUI
 
@@ -27,28 +27,19 @@ _ACTION_KEY = {
 }
 """Screen action to the key it is bound to, for check_action."""
 
-_ENTER_OWNERS = (OptionList, TextArea)
-"""Controls with nothing else that does enter's job: an open menu picks, an editor breaks
-the line. Everything else leaves enter alone, so one key confirms from anywhere in the form.
+_ENTER_OWNERS = (TextArea,)
+"""Controls with nothing else that does enter's job - an editor breaks the line. Everything
+else leaves enter alone, so one key confirms the survey from anywhere in the form.
 
-A Switch and a collapsed Select are deliberately absent - space already toggles the one and
-opens the other. Handing them enter as well would cost the user the confirm key on every
-boolean and every choice, and the menu's own enter would close onto the Select that opened
-it, so a survey could never be confirmed from a choice field at all.
-"""
+Options are picked with left and right, so a choice never claims enter and never claims the
+arrows that walk the form."""
 
-_ARROW_OWNERS = (OptionList, TextArea)
-"""Controls that move a cursor of their own with up and down, at anything but their edge.
+_ARROW_OWNERS = (TextArea,)
+"""Controls that move a cursor of their own with up and down, at anything but their edge."""
 
-SelectionList and the Select overlay are both OptionList subclasses, so both are covered.
-"""
-
-OPEN_HINT = "space opens the list"
-"""Fallback for a collapsed choice control whose question declares no help.
-
-A field's own description always outranks it: help is the only text distinguishing one
-choice from another, and a constant key hint that hides it costs more than it teaches.
-"""
+KEY_HINT = "up down  move    left right  choose    enter  review and create"
+"""The legend under the form. Every key that moves or changes something is named, because a
+survey nobody can navigate is worse than one that spends a row saying how."""
 
 CANCEL_HINT = "press escape again to discard every answer and quit"
 """Shown by the first escape; a second one within the arming window quits."""
@@ -100,7 +91,7 @@ class SurveyScreen(Screen[None]):
         self._armed = False
 
     def compose(self) -> ComposeResult:
-        """Header, the scrolling form, the one reserved hint line, footer."""
+        """Header, the scrolling form, the key legend, footer."""
         yield HeaderBar("survey")
         yield VerticalScroll(id="survey-form")
         yield self._hint
@@ -123,7 +114,7 @@ class SurveyScreen(Screen[None]):
         self._refresh_rows()
 
     def on_descendant_focus(self) -> None:
-        """The hint line and the header position follow the focus."""
+        """The header position follows the focus; the legend is a constant."""
         self._disarm()
         self._show_hint()
         self._show_position()
@@ -132,27 +123,20 @@ class SurveyScreen(Screen[None]):
         """Give a key back to the control that owns it.
 
         Returning None greys the screen's binding for this key, which is what lets the key
-        reach the focused control instead. Enter belongs to an open menu and to an editor;
-        escape belongs to an open menu, which it closes; up and down belong to a cursor that
-        still has somewhere to go, so a control hands the focus on at its own first and last
-        line rather than trapping it.
+        reach the focused control instead. Enter belongs to a multiline editor, which breaks
+        the line with it; up and down belong to a cursor that still has somewhere to go, so
+        an editor hands the focus on at its own first and last line rather than trapping it.
         """
         key = _ACTION_KEY.get(action)
         if key is None:
             return True
         if key == "enter":
-            return self._focused_owner(_ENTER_OWNERS) is None
+            owner = self._focused_owner(_ENTER_OWNERS)
+            return owner is None or not getattr(owner, "owns_enter", True)
         if key in ("up", "down"):
             owner = self._focused_owner(_ARROW_OWNERS)
             return True if owner is None else _at_edge(owner, key)
-        if key == "escape":
-            return None if self._open_menu() else True
         return True
-
-    def _open_menu(self) -> bool:
-        """True while a choice menu is showing: escape closes that before it arms a quit."""
-        select = self._focused_owner((Select,))
-        return isinstance(select, Select) and select.expanded
 
     def _focused_owner(self, types: tuple[type[Widget], ...]) -> Widget | None:
         """The focused control, or the control enclosing it, when it is one of these."""
@@ -226,23 +210,15 @@ class SurveyScreen(Screen[None]):
         self._show_position()
 
     def _show_hint(self) -> None:
-        """Write the focused field's problem, or its help, or how to open its list."""
+        """Say what the keys do. A field's own help and errors are printed under the field.
+
+        The line is a constant legend rather than a per-field message because the focused
+        row now carries everything specific to it, and a legend that never changes is one
+        the eye stops having to re-read.
+        """
         if self._armed:
             return
-        row = self._focused_owner((FieldRow,))
-        if not isinstance(row, FieldRow):
-            self._hint.update(Text(""))
-            return
-        if row.field.errors:
-            self._hint.update(Text(row.field.errors[0], style=ROSE))
-            return
-        if row.question.help:
-            self._hint.update(Text(row.question.help, style=TEXT_MUTED))
-            return
-        if isinstance(self.focused, Select) and not self.focused.expanded:
-            self._hint.update(Text(OPEN_HINT, style=TEXT_SUBTLE))
-            return
-        self._hint.update(Text(""))
+        self._hint.update(Text(KEY_HINT, style=TEXT_MUTED))
 
     def _show_position(self) -> None:
         """The header says which field of how many, so the eye has an anchor while scrolling."""
@@ -279,12 +255,6 @@ def _at_edge(owner: Widget, key: str) -> bool | None:
         row = owner.cursor_location[0]
         last = owner.document.line_count - 1
         return True if (row == 0 if key == "up" else row >= last) else None
-    if isinstance(owner, SelectionList):
-        index = owner.highlighted
-        if index is None:
-            return True
-        last = owner.option_count - 1
-        return True if (index == 0 if key == "up" else index >= last) else None
     return None
 
 

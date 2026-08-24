@@ -195,3 +195,12 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+# design scratch captures and MCP browser tool output
+/frame.png
+/groups.png
+/measure.png
+/miller-shot.png
+/plan.png
+/quiet.png
+/shot.png
+/.playwright-mcp/

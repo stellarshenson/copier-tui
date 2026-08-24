@@ -9,6 +9,9 @@ Internals to use, all documented in docs/design-notes.md:
 
 - `copier._main.Worker` - constructed, never run; owns the fetch, the Jinja env and the context
 - `Worker.template.questions_data`, `Worker.template.local_abspath`, `Worker.jinja_env`
+- `Worker.template.config_data` - every `_`-prefixed copier.yml key, underscore stripped;
+  copier does not validate the set, so a key it does not know is carried through and
+  ignored, which is what makes `_ui_groups` a legal opt-in rather than a fork
 - `Worker.unsafe` and `Worker._check_unsafe(operation)` - the trust gate, config reads only,
   called before `jinja_env` because that access imports every `_jinja_extensions` entry
 - `Worker.answers` (assign a fresh `copier._user_data.AnswersMap`) and `Worker._render_context()`
@@ -34,7 +37,7 @@ from copier._user_data import Question as CopierQuestion
 from jinja2 import TemplateSyntaxError, meta
 
 from copier_ui.errors import TemplateLoadError
-from copier_ui.model import Choice, Evaluation, Kind, Operation, Question
+from copier_ui.model import Choice, Evaluation, Group, Kind, Operation, Question
 
 _KIND_BY_TYPE = {
     "str": Kind.STRING,
@@ -99,6 +102,10 @@ class TemplateAdapter:
                 for id, details in self._worker.template.questions_data.items()
             )
         return self._questions
+
+    def groups(self) -> tuple[Group, ...]:
+        """The template's `_ui_groups`, or the single untitled group covering everything."""
+        return _groups_of(self._worker.template.config_data.get("ui_groups"), self.questions())
 
     def last_answers(self) -> dict[str, Any]:
         """The destination's answers file, with every underscore-prefixed key dropped."""
@@ -208,6 +215,7 @@ class TemplateAdapter:
                 )
                 multiline = question.get_multiline()
                 placeholder = question.get_placeholder()
+                validator_source = str(details.get("validator", ""))
                 # copier's own prompt caption: the rendered help, or `var_name (type)`
                 # when the template declares none. A drop-in must not show less than copier.
                 label = _one_line(question.get_message()) or id
@@ -226,6 +234,9 @@ class TemplateAdapter:
                 choices_source=None,
                 when_source=True,
                 validator_source="",
+                validated=False,
+                constraints=(),
+                condition_ids=(),
                 dependencies=(),
                 load_error=f"{id}: {error}",
             )
@@ -241,7 +252,14 @@ class TemplateAdapter:
             default_source=None if question.secret else details.get("default"),
             choices_source=details.get("choices"),
             when_source=details.get("when", True),
-            validator_source=str(details.get("validator", "")),
+            validator_source=validator_source,
+            validated=bool(validator_source.strip()),
+            constraints=_constraints_of(kind),
+            condition_ids=tuple(
+                dependency
+                for dependency in self._dependencies(details.get("when"))
+                if dependency != id
+            ),
             dependencies=tuple(
                 dependency
                 for dependency in self._dependencies(
@@ -295,6 +313,77 @@ def _templates(source: Any) -> Iterator[str]:
     elif isinstance(source, (list, tuple)):
         for item in source:
             yield from _templates(item)
+
+
+def _groups_of(raw: Any, questions: tuple[Question, ...]) -> tuple[Group, ...]:
+    """Partition the questions into groups, in declaration order, never reordering them.
+
+    copier.yml has no group of its own, so this reads the optional `_ui_groups` key - a list of
+    `{title, fields}` blocks - which copier carries through its config untouched. A template
+    that declares none, which is nearly all of them, gets one untitled group holding every
+    question, so a frontend has exactly one code path either way.
+    """
+    titles = _group_titles(raw, {question.id for question in questions})
+    runs: list[tuple[str, bool, list[str]]] = []
+    for question in questions:
+        title = titles.get(question.id, "")
+        declared = question.id in titles
+        if runs and runs[-1][0] == title and runs[-1][1] == declared:
+            runs[-1][2].append(question.id)
+        else:
+            runs.append((title, declared, [question.id]))
+    return tuple(
+        Group(title=title, ids=tuple(ids), declared=declared) for title, declared, ids in runs
+    )
+
+
+def _group_titles(raw: Any, ids: set[str]) -> dict[str, str]:
+    """Map question id to group title, dropping anything the key got wrong.
+
+    A group heading is decoration: a template that misspells a field, names one it does not
+    have, or writes the whole key as the wrong shape must still load and still render. So every
+    malformed part is skipped rather than raised, and the questions it would have covered fall
+    back to being ungrouped. The first group to claim a field keeps it.
+    """
+    if not isinstance(raw, list):
+        return {}
+    titles: dict[str, str] = {}
+    for entry in raw:
+        if not isinstance(entry, Mapping):
+            continue
+        title = _one_line(entry.get("title"))
+        fields = entry.get("fields")
+        if not title or not isinstance(fields, list):
+            continue
+        for field in fields:
+            if isinstance(field, str) and field in ids and field not in titles:
+                titles[field] = title
+    return titles
+
+
+_KIND_CONSTRAINT = {
+    Kind.INTEGER: "a whole number",
+    Kind.FLOAT: "a number",
+    Kind.PATH: "a filesystem path",
+    Kind.STRUCTURED: "valid JSON",
+}
+"""What a kind requires of a value, phrased for a person. A UI can say this before the user has
+typed anything; copier itself refuses the value at parse time."""
+
+
+def _constraints_of(kind: Kind) -> tuple[str, ...]:
+    """The rules a question declares, without running its validator.
+
+    copier has no field types beyond the kinds - no email, no IP address, no pattern. A template
+    that wants one writes a validator, and the only honest description of a validator is the
+    message it produces, which takes a value to produce; `Question.validated` marks that such a
+    rule exists and `TemplateUI.check` asks it what it wants.
+
+    The permitted set of a choice question is deliberately absent: choices are recomputed per
+    answer set, so they belong to `FieldState.choices` and not to the immutable declaration.
+    """
+    constraint = _KIND_CONSTRAINT.get(kind)
+    return () if constraint is None else (constraint,)
 
 
 def _one_line(text: Any) -> str:

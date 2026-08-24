@@ -60,7 +60,7 @@ class TemplateUI:
             unsafe=unsafe,
         )
         try:
-            schema = Schema(questions=adapter.questions())
+            schema = Schema(questions=adapter.questions(), groups=adapter.groups())
             ui = cls(adapter, schema, evaluation_order(schema), Path(dst))
             ids = schema.ids()
             if operation in ("update", "recopy"):
@@ -100,6 +100,20 @@ class TemplateUI:
     def validate(self) -> dict[str, list[str]]:
         """Per-field error messages; an empty dict means valid."""
         return validate_state(self._schema, self._state, self._adapter.validate)
+
+    def check(self, id: str, value: Any) -> tuple[str, ...]:
+        """What this field would say about a value, without accepting it.
+
+        The answer stays untouched, so a UI can validate a keystroke at a time, warn before a
+        value is committed, or ask what a field would object to - `check(id, "")` names what an
+        empty answer costs. Empty means the value is acceptable.
+
+        This is the only way to learn what a template's own rule requires: copier expresses a
+        rule as a Jinja template that renders its complaint, so the complaint is the description,
+        and it takes a value to produce one.
+        """
+        self._schema.by_id(id)
+        return self._adapter.validate(id, value, self.answers())
 
     def render(self, dst: str | Path | None = None, **copier_kwargs: Any) -> None:
         """Run copier with the current answers; raises RenderRefusedError when invalid."""

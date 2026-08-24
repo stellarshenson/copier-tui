@@ -1,0 +1,28 @@
+_subdirectory: template
+
+_ui_groups:
+  - title: Identity
+    fields: [project, author]
+  - title: Tooling and quality
+    fields: [linter, tests]
+
+project:
+  type: str
+  default: demo
+  help: Project name
+
+author:
+  type: str
+  default: ""
+  help: Who wrote it
+
+linter:
+  type: str
+  default: ruff
+  choices: [ruff, flake8, none]
+  help: Which linter to configure
+
+tests:
+  type: bool
+  default: true
+  help: Set up a test suite

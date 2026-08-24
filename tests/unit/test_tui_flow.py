@@ -53,6 +53,15 @@ async def test_nothing_is_written_before_the_review_is_confirmed(tmp_path: Path)
         assert not dst.exists()
 
 
+def review_text(app: SurveyApp) -> str:
+    """Everything the review screen prints, rows joined in order."""
+    return "\n".join(
+        str(cell.visual)
+        for row in app.screen.query(".review-answer")
+        for cell in row.query(Static)
+    )
+
+
 async def test_the_review_lists_every_answer_and_masks_secrets(tmp_path: Path) -> None:
     """Every visible answer is on the confirmation screen; the secret is not."""
     dst = tmp_path / "out"
@@ -61,7 +70,7 @@ async def test_the_review_lists_every_answer_and_masks_secrets(tmp_path: Path) -
         await pilot.pause()
         lines = app.screen.query(".review-answer")
         assert [line.id for line in lines] == ["review-name", "review-advanced", "review-token"]
-        text = "\n".join(str(line.visual) for line in lines)
+        text = review_text(app)
         assert "name" in text and "demo" in text
         assert "token" in text and "***" in text
         assert "s3cret" not in text
@@ -75,9 +84,21 @@ async def test_the_review_names_the_questions_not_the_variables(tmp_path: Path) 
     async with running(tmp_path / "out", template="tui_kinds") as (app, pilot):
         await pilot.press("enter")
         await pilot.pause()
-        text = "\n".join(str(line.visual) for line in app.screen.query(".review-answer"))
+        text = review_text(app)
         assert "Which flavour the build uses" in text
         assert "flavour  " not in text
+
+
+async def test_the_review_never_cuts_a_question_short(tmp_path: Path) -> None:
+    """The commitment screen shows the whole question, wrapping rather than truncating.
+
+    A caption cut here removes exactly the words someone is reading to decide whether to
+    go ahead, which is the one place an ellipsis costs the most.
+    """
+    async with running(tmp_path / "out", template="tui_kinds") as (app, pilot):
+        await pilot.press("enter")
+        await pilot.pause()
+        assert "\u2026" not in review_text(app)
 
 
 async def test_going_back_from_the_review_returns_to_the_survey(tmp_path: Path) -> None:
@@ -339,7 +360,7 @@ async def focus_control(pilot: Pilot, app: SurveyApp, control_id: str, limit: in
 async def test_the_round_trip_runs_on_the_keyboard_alone(tmp_path: Path) -> None:
     """The headline requirement, driven the way a user drives it: keys only, no private calls.
 
-    Walk down to a choice, open its list, pick the answer that reveals a conditional field,
+    Walk to a choice, move along its options to the answer that reveals a conditional field,
     walk on to the bottom of a form taller than the viewport, go to review, come back. The
     revealed field, the scroll offset and the focused control all have to survive.
     """
@@ -353,12 +374,10 @@ async def test_the_round_trip_runs_on_the_keyboard_alone(tmp_path: Path) -> None
             assert not survey.query("#row-python_version_custom")
 
             assert await focus_control(pilot, app, "ctl-python_version_choice")
-            await pilot.press("space")
-            await pilot.pause()
-            await pilot.press("end")
-            await pilot.pause()
-            await pilot.press("enter")
-            await pilot.pause()
+            # the options are already on the row, so choosing is walking to the one wanted
+            for _ in range(3):
+                await pilot.press("right")
+                await pilot.pause()
             assert ui.state().fields["python_version_choice"].value == "other"
             assert survey.query("#row-python_version_custom")
 

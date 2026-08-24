@@ -24,6 +24,26 @@ MIN_WIDTH = 60
 MIN_HEIGHT = 18
 
 LABEL_WIDTH = 56
+"""Columns the caption gutter holds, padding included.
+
+56 is the measured optimum against the reference template at 100 columns: it is the widest
+gutter at which every choice question still prints all of its options on the same row, and
+widening it further starts pushing option lines off the screen while saving only one more
+wrapped caption. A caption longer than the gutter wraps rather than being cut, because the
+part a cut removes is usually the example that says what to write."""
+
+LABEL_LINES = 2
+"""Lines a wrapped caption may take. Two covers every question in the reference template."""
+
+HELP_LINES = 2
+"""Lines the focused row gives its help. Two holds about 90 characters at this gutter."""
+
+VALUE_LINES = 3
+"""Lines a free-text answer may wrap onto before it scrolls.
+
+The value column is what the gutter leaves, about 40 columns at 100, so a one-sentence
+project description needs three of them. Three is what the reference template's longest
+demo answer takes; a fourth would cost a row on every long field to catch an outlier."""
 """Cap on the label gutter, so every control on the form starts in the same column.
 
 The survey gutter is a share of the terminal up to this; the review screen uses it flat.

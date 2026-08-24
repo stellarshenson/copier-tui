@@ -50,15 +50,44 @@ class Question:
     choices_source: Any
     when_source: str | bool
     validator_source: str
+    validated: bool
+    constraints: tuple[str, ...]
+    condition_ids: tuple[str, ...]
     dependencies: tuple[str, ...]
     load_error: str | None
+    """`validated` says the template declares a rule of its own for this field; `constraints`
+    are the rules derivable from the declaration alone - the kind and the choices - phrased for
+    a person. Neither runs the rule: what a rule SAYS when it fails is only knowable by trying a
+    value, which is `TemplateUI.check`.
+
+    `condition_ids` are the questions this one's `when` reads, so a frontend can show a
+    conditional question under the answer that governs it without parsing Jinja. It is the
+    subset of `dependencies` that decides visibility rather than the default or the choices."""
+
+
+@dataclass(frozen=True, slots=True)
+class Group:
+    """A run of consecutive questions shown under one heading.
+
+    Groups always partition the schema in declaration order and never reorder it, so a
+    frontend that walks the groups sees every question exactly once and in the order the
+    template asked them. `declared` is false for the single untitled group covering a template
+    that names no groups at all, and for the untitled runs between the groups of a template
+    that names only some - which is the common case, since copier has no notion of a group and
+    only a template that opts in has anything to say about them.
+    """
+
+    title: str
+    ids: tuple[str, ...]
+    declared: bool
 
 
 @dataclass(frozen=True, slots=True)
 class Schema:
-    """The template's questions in copier.yml declaration order."""
+    """The template's questions in copier.yml declaration order, and how they are grouped."""
 
     questions: tuple[Question, ...]
+    groups: tuple[Group, ...]
 
     def ids(self) -> tuple[str, ...]:
         """Question ids in declaration order."""

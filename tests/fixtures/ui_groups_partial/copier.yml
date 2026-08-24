@@ -1,0 +1,22 @@
+_subdirectory: template
+
+_ui_groups:
+  - title: Tooling and quality
+    fields: [linter, tests, nonexistent]
+
+project:
+  type: str
+  default: demo
+
+linter:
+  type: str
+  default: ruff
+  choices: [ruff, none]
+
+licence:
+  type: str
+  default: MIT
+
+tests:
+  type: bool
+  default: true

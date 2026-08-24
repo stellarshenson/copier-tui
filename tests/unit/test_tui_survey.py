@@ -9,14 +9,14 @@ from typing import Any
 
 import pytest
 from textual.containers import VerticalScroll
-from textual.widgets import Select, SelectionList, Static, TextArea
-from textual.widgets._select import SelectCurrent
+from textual.widgets import Static, TextArea
 
 from copier_tui.app import SurveyApp
+from copier_tui.inline import InlineOptions
 from copier_tui.screens import ReviewScreen, SurveyScreen
 from copier_tui.screens import survey as survey_screen
-from copier_tui.screens.survey import CANCEL_HINT, OPEN_HINT
-from copier_tui.widgets import ChoiceSelect, FieldRow
+from copier_tui.screens.survey import CANCEL_HINT, KEY_HINT
+from copier_tui.widgets import FieldRow
 from copier_ui import TemplateUI
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
@@ -43,8 +43,18 @@ def row_ids(app: SurveyApp) -> list[str]:
 
 
 def hint(app: SurveyApp) -> str:
-    """Whatever the one reserved hint line currently says."""
+    """Whatever the one reserved line under the form currently says."""
     return str(app.screen.query_one("#survey-hint", Static).visual)
+
+
+def field_help(app: SurveyApp, field_id: str) -> str:
+    """What a row prints under itself: its help, or the problem with its answer."""
+    return str(app.screen.query_one(f"#help-{field_id}", Static).visual)
+
+
+def options_of(app: SurveyApp, field_id: str) -> str:
+    """The option line a picking question shows on its own row."""
+    return str(app.screen.query_one(f"#ctl-{field_id}", InlineOptions).render())
 
 
 async def test_only_visible_askable_questions_are_shown(tmp_path: Path) -> None:
@@ -78,25 +88,17 @@ async def test_the_whole_form_is_about_one_line_per_question(tmp_path: Path) -> 
         assert used <= 15, f"twelve questions took {used} lines"
 
 
-async def test_a_choice_control_shows_its_answer_not_its_prompt(tmp_path: Path) -> None:
-    """The prompt stands in for an answer outside the choices - never for a real one.
+async def test_fields_open_on_their_default(tmp_path: Path) -> None:
+    """Every field opens prefilled, and an untouched default carries no warning glyph.
 
-    Select keeps its constructed value private until it mounts, so a row that writes the
-    same value in first leaves the label unpainted and the control reads "select..." over
-    an answer it is actually holding.
+    An untouched default is the answer most in need of checking, so it is not marked as an
+    exception; the glyph column is kept for a problem and for a field this answer set rules
+    out, which are the two things worth interrupting a reader for.
     """
-    async with survey(tmp_path / "out", template="tui_kinds") as (app, _):
-        select = app.screen.query_one("#ctl-flavour", ChoiceSelect)
-        assert select.value is not Select.NULL
-        assert str(select.query_one(SelectCurrent).label) == "a"
-
-
-async def test_fields_open_on_their_default_and_say_so(tmp_path: Path) -> None:
-    """The value is prefilled and one dim glyph marks it as an untouched default."""
     async with survey(tmp_path / "out") as (app, _):
         row = app.screen.query_one("#row-name", FieldRow)
         assert row.value == "demo"
-        assert str(row.query_one("#flag-name", Static).visual) == "·"
+        assert str(row.query_one("#flag-name", Static).visual).strip() == ""
 
 
 async def test_changing_an_answer_reveals_a_dependent_field(tmp_path: Path) -> None:
@@ -155,38 +157,44 @@ async def test_a_preset_answer_is_not_asked(tmp_path: Path) -> None:
         assert app.ui.answers()["name"] == "seeded"
 
 
-async def test_the_hint_line_carries_the_focused_field_s_help(tmp_path: Path) -> None:
-    """Help costs no row of its own - the one reserved line follows the focus."""
+async def test_a_description_is_the_caption_and_is_never_cut(tmp_path: Path) -> None:
+    """copier has no separate description: the caption IS it, so it must arrive whole.
+
+    `Question.get_message` renders the template's `help`, which is why a caption and its
+    help are the same sentence for every question that declares one. Cutting the caption
+    therefore deletes the description, which is the part that says what to answer.
+    """
+    async with survey(tmp_path / "out", template="tui_kinds") as (app, _):
+        row = app.screen.query_one("#row-flavour", FieldRow)
+        assert row.question.label == row.question.help
+        caption = str(row.query_one(".field-label", Static).visual)
+        assert caption == "Which flavour the build uses"
+        assert "\u2026" not in caption
+
+
+async def test_the_same_sentence_is_never_printed_twice(tmp_path: Path) -> None:
+    """With help and caption identical, repeating it under the row would say nothing."""
     async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
-        app.screen.query_one("#ctl-text").focus()
-        await pilot.pause()
-        assert hint(app) == ""
         app.screen.query_one("#ctl-flavour").focus()
         await pilot.pause()
-        assert hint(app) == "Which flavour the build uses"
+        assert field_help(app, "flavour") == ""
 
 
-async def test_a_choice_field_shows_its_help_rather_than_a_key_hint(tmp_path: Path) -> None:
-    """A collapsed choice field is the one that most needs its help, not least.
-
-    The help is the only text telling two options apart. A constant key hint occupying the
-    line instead makes every choice in the survey unexplained, which is the state this was
-    shipped in.
-    """
-    async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
-        select = app.screen.query_one("#ctl-flavour", ChoiceSelect)
-        select.focus()
-        await pilot.pause()
-        assert select.expanded is False
-        assert hint(app) == "Which flavour the build uses"
+async def test_the_line_under_the_form_says_what_the_keys_do(tmp_path: Path) -> None:
+    """Every key that moves or changes something is named where the eye already rests."""
+    async with survey(tmp_path / "out", template="tui_kinds") as (app, _):
+        legend = hint(app)
+        assert legend == KEY_HINT
+        for key in ("up", "down", "left", "right", "enter"):
+            assert key in legend
 
 
-async def test_a_choice_field_with_no_help_still_says_how_to_open_it(tmp_path: Path) -> None:
-    """With nothing to explain, the line is free for the affordance."""
-    async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
-        app.screen.query_one("#ctl-plain_pick").focus()
-        await pilot.pause()
-        assert hint(app) == OPEN_HINT
+async def test_every_option_is_on_the_row_not_behind_a_menu(tmp_path: Path) -> None:
+    """What was passed over stays legible beside what was taken, without opening anything."""
+    async with survey(tmp_path / "out", template="tui_kinds") as (app, _):
+        line = options_of(app, "flavour")
+        for label in ("a", "b"):
+            assert label in line
 
 
 async def test_every_row_is_captioned_by_its_question_not_its_variable_name(
@@ -203,24 +211,6 @@ async def test_every_row_is_captioned_by_its_question_not_its_variable_name(
         assert labels["count"].startswith("count (int)")
 
 
-async def test_picking_the_blank_snaps_back_to_the_answer_the_state_holds(
-    tmp_path: Path,
-) -> None:
-    """The prompt row is not an answer, and the screen must not pretend it became one.
-
-    Textual offers the prompt as a selectable option. Swallowing that pick left the control
-    reading "no answer yet" while state still held the old value - so the review screen and
-    the generated project disagreed with what the user was looking at.
-    """
-    async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
-        select = app.screen.query_one("#ctl-flavour", ChoiceSelect)
-        assert app.ui.state().fields["flavour"].value == "a"
-        select.value = Select.NULL
-        await pilot.pause()
-        assert app.ui.state().fields["flavour"].value == "a"
-        assert str(select.query_one(SelectCurrent).label) == "a"
-
-
 async def test_an_invalid_field_blocks_finishing_but_not_navigation(tmp_path: Path) -> None:
     """The glyph marks the row, the hint names the problem, and enter goes back to it."""
     async with survey(tmp_path / "out") as (app, pilot):
@@ -231,7 +221,7 @@ async def test_an_invalid_field_blocks_finishing_but_not_navigation(tmp_path: Pa
         await pilot.pause()
 
         assert str(app.screen.query_one("#flag-name", Static).visual) == "!"
-        assert "name is required" in hint(app)
+        assert "name is required" in field_help(app, "name")
 
         await pilot.press("down")
         await pilot.pause()
@@ -241,11 +231,11 @@ async def test_an_invalid_field_blocks_finishing_but_not_navigation(tmp_path: Pa
         await pilot.pause()
         assert isinstance(app.screen, SurveyScreen)
         assert app.focused.id == "ctl-name"
-        assert "name is required" in hint(app)
+        assert "name is required" in field_help(app, "name")
 
 
-async def test_enter_confirms_from_a_switch_too(tmp_path: Path) -> None:
-    """Space already toggles a boolean, so enter stays the confirm key everywhere."""
+async def test_enter_confirms_from_a_boolean_too(tmp_path: Path) -> None:
+    """A boolean is picked with the arrows, so enter stays the confirm key everywhere."""
     async with survey(tmp_path / "out") as (app, pilot):
         app.screen.query_one("#ctl-advanced").focus()
         await pilot.pause()
@@ -260,9 +250,9 @@ async def test_an_answer_outside_its_new_choices_is_kept_flagged_and_not_faked(
 ) -> None:
     """A recompute can strand an answer. Nothing is silently corrected, nothing is invented.
 
-    The state keeps the value and the review shows it. The choice control cannot show it -
-    it is not one of the options - so it falls back to its prompt rather than displaying a
-    neighbouring option the user never picked.
+    The state keeps the value and the review shows it. The option row cannot light any
+    option, because none of them is the answer, so it lights none rather than lighting a
+    neighbour the user never picked.
     """
     async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
         app.ui.set("flavour", "zzz")
@@ -271,11 +261,11 @@ async def test_an_answer_outside_its_new_choices_is_kept_flagged_and_not_faked(
 
         assert app.ui.state().fields["flavour"].value == "zzz"
         assert str(app.screen.query_one("#flag-flavour", Static).visual) == "!"
-        assert app.screen.query_one("#ctl-flavour", ChoiceSelect).value is Select.NULL
+        assert app.screen.query_one("#ctl-flavour", InlineOptions).value == "zzz"
 
         app.screen._focus_field("flavour")
         await pilot.pause()
-        assert "not in" in hint(app)
+        assert "not in" in field_help(app, "flavour")
 
 
 async def test_a_question_that_failed_to_load_is_disabled_and_blocks(tmp_path: Path) -> None:
@@ -287,37 +277,31 @@ async def test_a_question_that_failed_to_load_is_disabled_and_blocks(tmp_path: P
         await pilot.press("enter")
         await pilot.pause()
         assert isinstance(app.screen, SurveyScreen)
-        assert "nonsense" in hint(app)
+        assert "nonsense" in field_help(app, "bad")
 
 
-async def test_space_opens_a_menu_and_the_arrows_move_inside_it(tmp_path: Path) -> None:
-    """A choice control owns space and, once open, the arrows and enter."""
+async def test_enter_confirms_from_a_choice_field(tmp_path: Path) -> None:
+    """A choice claims left and right, never enter, so one key confirms from anywhere."""
     async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
-        select = app.screen.query_one("#ctl-flavour")
-        select.focus()
+        app.screen.query_one("#ctl-flavour").focus()
         await pilot.pause()
-        await pilot.press("space")
-        await pilot.pause()
-        assert select.expanded is True
-
-        await pilot.press("down")
-        await pilot.press("enter")
-        await pilot.pause()
-        assert select.expanded is False
-        assert app.ui.state().fields["flavour"].value == "b"
-
-
-async def test_enter_on_a_closed_menu_confirms_the_survey(tmp_path: Path) -> None:
-    """Enter never re-opens a menu it just closed - from a collapsed choice it advances."""
-    async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
-        select = app.screen.query_one("#ctl-flavour")
-        select.focus()
-        await pilot.pause()
-        assert select.expanded is False
 
         await pilot.press("enter")
         await pilot.pause()
         assert isinstance(app.screen, ReviewScreen)
+
+
+async def test_the_arrows_choose_without_opening_anything(tmp_path: Path) -> None:
+    """Right takes the next option there and then; the questions around it never move."""
+    async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
+        before = row_ids(app)
+        app.screen.query_one("#ctl-flavour").focus()
+        await pilot.pause()
+
+        await pilot.press("right")
+        await pilot.pause()
+        assert app.ui.state().fields["flavour"].value == "b"
+        assert row_ids(app) == before
 
 
 async def test_an_editor_keeps_the_arrows_until_its_last_line(tmp_path: Path) -> None:
@@ -337,44 +321,6 @@ async def test_an_editor_keeps_the_arrows_until_its_last_line(tmp_path: Path) ->
         await pilot.press("down")
         await pilot.pause()
         assert app.focused is not editor
-
-
-async def test_a_multiselect_keeps_the_arrows_until_its_last_option(tmp_path: Path) -> None:
-    """Same rule for an option list: it moves its highlight, then lets the form take over."""
-    async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
-        options = app.screen.query_one("#ctl-extras", SelectionList)
-        options.focus()
-        await pilot.pause()
-
-        await pilot.press("down")
-        await pilot.pause()
-        assert app.focused is options
-        assert options.highlighted == 1
-
-        await pilot.press("down")
-        await pilot.pause()
-        assert app.focused is not options
-
-
-async def test_escape_closes_an_open_menu_instead_of_arming_the_cancel(tmp_path: Path) -> None:
-    """The screen's escape is a priority binding, so an open menu has to be given it back."""
-    async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
-        select = app.screen.query_one("#ctl-flavour", ChoiceSelect)
-        select.focus()
-        await pilot.pause()
-        await pilot.press("space")
-        await pilot.pause()
-        assert select.expanded is True
-
-        await pilot.press("escape")
-        await pilot.pause()
-        assert select.expanded is False
-        assert hint(app) != CANCEL_HINT
-
-        await pilot.press("escape")
-        await pilot.pause()
-        assert isinstance(app.screen, SurveyScreen)
-        assert hint(app) == CANCEL_HINT
 
 
 async def test_escape_takes_two_presses_and_says_so(tmp_path: Path) -> None:

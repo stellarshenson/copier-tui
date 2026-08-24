@@ -1,0 +1,11 @@
+_subdirectory: template
+
+_ui_groups: "Tooling and quality"
+
+project:
+  type: str
+  default: demo
+
+linter:
+  type: str
+  default: ruff

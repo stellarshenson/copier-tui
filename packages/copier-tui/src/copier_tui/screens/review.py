@@ -8,23 +8,16 @@ from typing import ClassVar
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import VerticalScroll
+from textual.containers import Horizontal, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Footer, Static
 
-from copier_tui.theme import AMBER, CYAN_BRIGHT, LABEL_WIDTH, TEXT, TEXT_SUBTLE
+from copier_tui.theme import AMBER, CYAN_BRIGHT, LABEL_LINES, LABEL_WIDTH, TEXT, TEXT_SUBTLE
 from copier_tui.widgets import HeaderBar, display_value
 from copier_ui import TemplateUI
 
 UNSET = "not set"
 """Stands in for an answer with no value, so a blank line is never mistaken for one."""
-
-
-def _gutter(label: str) -> str:
-    """A caption padded to the gutter, marked when it did not fit."""
-    if len(label) > LABEL_WIDTH - 1:
-        return label[: LABEL_WIDTH - 2] + "\u2026 "
-    return label.ljust(LABEL_WIDTH)
 
 
 class ReviewScreen(Screen[bool]):
@@ -44,8 +37,18 @@ class ReviewScreen(Screen[bool]):
         color: {AMBER};
     }}
     .review-answer {{
-        height: 1;
+        height: auto;
         width: 100%;
+    }}
+    .review-caption {{
+        width: {LABEL_WIDTH};
+        height: auto;
+        max-height: {LABEL_LINES};
+        padding: 0 2 0 1;
+    }}
+    .review-value {{
+        width: 1fr;
+        height: auto;
     }}
     #review-empty {{
         color: {TEXT_SUBTLE};
@@ -84,18 +87,32 @@ class ReviewScreen(Screen[bool]):
             return Text(f"{self.dst} is not empty - existing files may be overwritten")
         return Text("")
 
-    def _answer_lines(self) -> list[Static]:
-        """One static per visible answer, caption gutter aligned, secrets masked."""
+    def _answer_lines(self) -> list[Static | Horizontal]:
+        """One row per visible answer: the question whole, then what it will be answered with.
+
+        This is the last screen before anything is written, so a caption cut here removes
+        exactly the words someone is checking. Captions wrap instead, as they do in the form.
+        """
         state = self.ui.state()
-        lines = []
+        lines: list[Static | Horizontal] = []
         for field_id in state.visible_ids:
             field = state.fields[field_id]
             value = display_value(field)
             lines.append(
-                Static(
-                    Text.assemble(
-                        (_gutter(self.ui.schema().by_id(field_id).label), f"bold {CYAN_BRIGHT}"),
-                        (value, TEXT) if value else (UNSET, TEXT_SUBTLE),
+                Horizontal(
+                    Static(
+                        Text(
+                            self.ui.schema().by_id(field_id).label,
+                            style=f"bold {CYAN_BRIGHT}",
+                            overflow="fold",
+                        ),
+                        classes="review-caption",
+                    ),
+                    Static(
+                        Text(value, style=TEXT, overflow="fold")
+                        if value
+                        else Text(UNSET, style=TEXT_SUBTLE),
+                        classes="review-value",
                     ),
                     classes="review-answer",
                     id=f"review-{field_id}",

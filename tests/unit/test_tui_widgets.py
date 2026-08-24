@@ -11,14 +11,14 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from textual.widgets import Input, Select, SelectionList, Switch, TextArea
+from textual.widgets import Input, TextArea
 
 from copier_tui.app import SurveyApp
+from copier_tui.inline import InlineOptions
 from copier_tui.widgets import (
     WIDGET_BY_KIND,
-    ChoiceSelect,
-    ChoiceSelectionList,
     FieldRow,
+    WrapInput,
     display_value,
     read_control,
 )
@@ -27,14 +27,14 @@ from copier_ui import Kind, TemplateUI
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 
 WIDGET_FOR_QUESTION = [
-    ("text", Kind.STRING, Input),
-    ("where", Kind.PATH, Input),
+    ("text", Kind.STRING, WrapInput),
+    ("where", Kind.PATH, WrapInput),
     ("count", Kind.INTEGER, Input),
     ("ratio", Kind.FLOAT, Input),
-    ("enabled", Kind.BOOL, Switch),
+    ("enabled", Kind.BOOL, InlineOptions),
     ("config", Kind.STRUCTURED, TextArea),
-    ("flavour", Kind.CHOICE, ChoiceSelect),
-    ("extras", Kind.MULTISELECT, ChoiceSelectionList),
+    ("flavour", Kind.CHOICE, InlineOptions),
+    ("extras", Kind.MULTISELECT, InlineOptions),
     ("token", Kind.SECRET, Input),
 ]
 """One question of every kind, and the widget the README table gives it."""
@@ -72,19 +72,18 @@ def control(app: SurveyApp, field_id: str) -> Any:
 def test_widget_by_kind_is_the_documented_table() -> None:
     """Every kind maps to the widget the README table names."""
     assert WIDGET_BY_KIND == {
-        Kind.STRING: Input,
-        Kind.PATH: Input,
+        Kind.STRING: WrapInput,
+        Kind.PATH: WrapInput,
         Kind.SECRET: Input,
         Kind.INTEGER: Input,
         Kind.FLOAT: Input,
-        Kind.BOOL: Switch,
-        Kind.CHOICE: ChoiceSelect,
-        Kind.MULTISELECT: ChoiceSelectionList,
+        Kind.BOOL: InlineOptions,
+        Kind.CHOICE: InlineOptions,
+        Kind.MULTISELECT: InlineOptions,
         Kind.STRUCTURED: TextArea,
     }
     assert set(WIDGET_BY_KIND) == set(Kind)
-    assert issubclass(ChoiceSelect, Select)
-    assert issubclass(ChoiceSelectionList, SelectionList)
+    assert issubclass(WrapInput, TextArea)
 
 
 def test_the_fixture_covers_every_kind(kinds_ui: TemplateUI) -> None:
@@ -102,16 +101,19 @@ async def test_every_kind_gets_its_widget(survey: SurveyApp) -> None:
 
 
 async def test_numeric_inputs_are_numeric(survey: SurveyApp) -> None:
-    """integer and float get an Input restricted to their type; a string does not."""
+    """integer and float get an Input restricted to their type.
+
+    A string does not appear here: it is answered in a wrapping editor, which has no type
+    restriction to assert because any character is a legal one.
+    """
     assert control(survey, "count").type == "integer"
     assert control(survey, "ratio").type == "number"
-    assert control(survey, "text").type == "text"
 
 
 async def test_secret_is_a_password_input(survey: SurveyApp) -> None:
-    """A secret question is masked on screen; an ordinary string is not."""
+    """A secret question is masked on screen; an ordinary string is written in the clear."""
     assert control(survey, "token").password is True
-    assert control(survey, "text").password is False
+    assert control(survey, "text").text == "demo"
 
 
 async def test_a_secret_choice_stays_masked(survey: SurveyApp, kinds_ui: TemplateUI) -> None:
@@ -130,7 +132,7 @@ async def test_multiline_string_is_an_editor(survey: SurveyApp) -> None:
 
 async def test_controls_open_on_their_default(survey: SurveyApp) -> None:
     """Every field opens prefilled: the user confirms rather than retypes."""
-    assert control(survey, "text").value == "demo"
+    assert control(survey, "text").text == "demo"
     assert control(survey, "count").value == "3"
     assert control(survey, "ratio").value == "1.5"
     assert control(survey, "enabled").value is False
@@ -152,23 +154,45 @@ async def test_a_row_reads_back_what_its_control_holds(survey: SurveyApp) -> Non
 
 
 async def test_a_choice_reads_back_as_its_copier_value(survey: SurveyApp) -> None:
-    """The select carries indices; reading it returns the copier value again."""
+    """Moving along the options takes the one landed on, in copier's own terms."""
     question = survey.ui.schema().by_id("flavour")
-    select = control(survey, "flavour")
-    select.value = 1
-    assert read_control(question, select) == "b"
-    select.value = Select.NULL
-    assert read_control(question, select) is None
+    options = control(survey, "flavour")
+    options.action_next()
+    assert read_control(question, options) == "b"
+    options.action_previous()
+    assert read_control(question, options) == "a"
+
+
+async def test_moving_stops_at_the_ends_instead_of_wrapping(survey: SurveyApp) -> None:
+    """The first and last option are ends, not a ring - a run of keys cannot overshoot."""
+    options = control(survey, "flavour")
+    for _ in range(5):
+        options.action_previous()
+    assert options.value == "a"
+    for _ in range(5):
+        options.action_next()
+    assert options.value == "b"
 
 
 async def test_a_multiselect_reads_back_as_a_list(survey: SurveyApp) -> None:
-    """Selecting options yields the chosen copier values in choice order."""
+    """Ticking options yields the chosen copier values in choice order."""
     question = survey.ui.schema().by_id("extras")
-    selection = control(survey, "extras")
-    selection.select(1)
-    assert read_control(question, selection) == ["y"]
-    selection.select(0)
-    assert read_control(question, selection) == ["x", "y"]
+    options = control(survey, "extras")
+    options.action_next()
+    options.action_toggle()
+    assert read_control(question, options) == ["y"]
+    options.action_previous()
+    options.action_toggle()
+    assert read_control(question, options) == ["x", "y"]
+
+
+async def test_a_boolean_is_offered_as_two_options(survey: SurveyApp) -> None:
+    """A bool is a two-option question; both answers are named on the row."""
+    options = control(survey, "enabled")
+    assert [choice.label for choice in options.choices] == ["No", "Yes"]
+    assert options.value is False
+    options.action_next()
+    assert options.value is True
 
 
 def test_display_value_masks_a_secret(kinds_ui: TemplateUI) -> None:

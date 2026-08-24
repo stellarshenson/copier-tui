@@ -64,3 +64,56 @@ def test_secret_values_never_appear_in_reported_messages(tmp_path: Path) -> None
         assert len(messages) == 2
         assert all("SEKRET-9999" not in message for message in messages)
         assert all("***" in message for message in messages)
+
+
+def test_a_question_says_whether_the_template_declares_a_rule_for_it(tmp_path: Path) -> None:
+    """Discoverable validation: a UI can hint at a rule before the user has broken it."""
+    with load("ui_deps", tmp_path / "dst") as ui:
+        assert ui.schema().by_id("port").validated is True
+        assert ui.schema().by_id("project").validated is False
+
+
+def test_kind_constraints_are_stated_without_running_anything(tmp_path: Path) -> None:
+    """Discoverable validation: what the kind requires is knowable from the declaration alone.
+
+    The permitted set of a choice question is deliberately not here - choices are recomputed per
+    answer set, so they live on the field state rather than on the immutable question.
+    """
+    with load("ui_kinds", tmp_path / "dst") as ui:
+        assert ui.schema().by_id("count").constraints == ("a whole number",)
+        assert ui.schema().by_id("ratio").constraints == ("a number",)
+        assert ui.schema().by_id("where").constraints == ("a filesystem path",)
+        assert ui.schema().by_id("config").constraints == ("valid JSON",)
+        assert ui.schema().by_id("text").constraints == ()
+        assert ui.schema().by_id("colour").constraints == ()
+
+
+def test_check_reports_what_a_field_would_say_without_accepting_the_value(
+    tmp_path: Path,
+) -> None:
+    """Discoverable validation: a candidate can be tried without becoming the answer.
+
+    This is what lets a UI warn on the keystroke rather than on the confirm, and it is the only
+    way to learn what a template's own rule wants: copier renders a rule into its complaint, so
+    the complaint takes a value to exist.
+    """
+    with load("ui_deps", tmp_path / "dst") as ui:
+        ui.set("use_docker", True)
+        ui.set("port", 8080)
+        assert ui.check("port", 8443) == ()
+        assert "Port must be 1024 or above" in ui.check("port", 80)[0]
+        assert ui.check("port", "not-a-number")
+        assert ui.answers()["port"] == 8080
+        assert ui.validate() == {}
+
+
+def test_check_on_an_unknown_field_is_an_error_not_a_silent_pass(tmp_path: Path) -> None:
+    """Discoverable validation: a typo in a field id must not read as "this value is fine"."""
+    from copier_ui import UnknownFieldError
+
+    with load("ui_deps", tmp_path / "dst") as ui:
+        try:
+            ui.check("nope", 1)
+        except UnknownFieldError:
+            return
+        raise AssertionError("check accepted an unknown field id")

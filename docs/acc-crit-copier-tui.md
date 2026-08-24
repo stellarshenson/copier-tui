@@ -34,9 +34,13 @@ UI-neutral core. Three layers - copier adapter (parses `copier.yml`), UI model (
 - [x] **Question fields** - normalised `Question` carries id, kind, label, help, default, choices, secret, multiselect, dependencies, visibility expression, validator
   - log: 2026-08-22 criterion added (v0.1.0)
   - log: 2026-08-22 closed: built - tests/unit/test_ui_schema.py
-- [ ] **Choice normalisation** - `choices` given as a list, a dict, or a list of single-key dicts all normalise to ordered `(label, value)` pairs; `copier.yml` order is preserved
+- [x] **Choice normalisation** - `choices` given as a bare list, a label-to-value dict, or a list of `[label, value]` pairs all normalise to ordered `(label, value)` pairs; `copier.yml` order is preserved
   - log: 2026-08-22 criterion added (v0.1.0)
   - log: 2026-08-22 open - copier 9.17.2 refuses the list-of-single-key-dicts form; copier_ui reports it as a field error, per tests/unit/test_ui_schema.py
+  - log: 2026-08-24 reworded: the third form named a syntax copier does not have - `copier.run_copy` on `- Small: s` raises `Could not convert {'Small': 's'} to string` with no copier_ui in the call. Criterion now names copier's own three forms, all three tested
+  - log: 2026-08-24 closed: built - tests/unit/test_ui_schema.py
+- [x] **Edge: choices copier cannot read** - a `choices` shape copier refuses leaves the field disabled with copier's own message as its error, never a syntax copier_ui invented
+  - log: 2026-08-24 criterion added, closed: built - tests/unit/test_ui_schema.py
 - [x] **Declaration order** - `schema()` returns questions in `copier.yml` declaration order
   - log: 2026-08-22 criterion added (v0.1.0)
   - log: 2026-08-22 closed: built - tests/unit/test_ui_schema.py
@@ -112,11 +116,31 @@ UI-neutral core. Three layers - copier adapter (parses `copier.yml`), UI model (
 - [x] **Caption parity** - `Question.label` is copier's own rendered prompt message - the template's help, falling back to `var_name (type)` - so no UI shows less than copier's prompt does, and no raw Jinja reaches a caption
   - log: 2026-08-22 added
   - log: 2026-08-22 closed: implemented after ux adversarial review (v0.6.9)
+- [x] **Grouping fallback** - copier.yml has no group of its own, so a template naming none - the common case - yields exactly one untitled group covering every question, and a frontend has one code path for grouped and ungrouped templates alike
+  - log: 2026-08-23 added
+  - log: 2026-08-23 closed: built - tests/unit/test_ui_groups.py (v0.6.9)
+- [x] **Grouping opt-in** - a template may name groups with a `_ui_groups` list of `{title, fields}` blocks; copier carries unknown underscore-prefixed keys through its config untouched, so the key is inert to copier and needs no copier change
+  - log: 2026-08-23 added
+  - log: 2026-08-23 closed: built - tests/unit/test_ui_groups.py (v0.6.9)
+- [x] **Grouping partition** - groups partition the schema in declaration order and never reorder it; walking every group yields every question exactly once, in the order `copier.yml` asked them
+  - log: 2026-08-23 added
+  - log: 2026-08-23 closed: built - tests/unit/test_ui_groups.py (v0.6.9)
+- [x] **Conditional nesting** - `Question.condition_ids` names the questions a `when` reads, so a frontend can nest a conditional question under the answer that governs it without parsing Jinja; a templated default or choice is a plain dependency and does not nest
+  - log: 2026-08-23 added
+  - log: 2026-08-23 closed: built - tests/unit/test_ui_groups.py (v0.6.9)
+- [x] **Edge: malformed _ui_groups** - a `_ui_groups` key of the wrong shape, or a block missing its title or fields, loads as though the key were absent - a heading is decoration and must never refuse a template
+  - log: 2026-08-23 added
+  - log: 2026-08-23 closed: built - tests/unit/test_ui_groups.py (v0.6.9)
+- [x] **Edge: group names an unknown field** - a group member that is not a question of this template is dropped from the group and never reaches the schema; the first group to claim a field keeps it
+  - log: 2026-08-23 added
+  - log: 2026-08-23 closed: built - tests/unit/test_ui_groups.py (v0.6.9)
 
 ### API
 
 - `TemplateUI.from_template(src, *, dst=".", operation="copy", vcs_ref=None, answers_file=None, data=None, unsafe=False) -> TemplateUI`
 - `TemplateUI.schema() -> Schema` - ordered questions, kinds, choices, help, dependencies
+- `Schema.groups -> tuple[Group, ...]` - `Group(title, ids, declared)`; always covers every question
+- `Question.condition_ids -> tuple[str, ...]` - the answers this question's `when` reads
 - `TemplateUI.set(id, value) -> None` - raises on unknown id
 - `TemplateUI.state() -> State` - `state.fields[id]` carries `value`, `visible`, `enabled`, `is_default`, `errors`
 - `TemplateUI.answers() -> dict` - visible fields only, JSON-compatible
@@ -158,24 +182,27 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
 - [x] **No semantics** - `copier_tui` never parses `copier.yml`, evaluates a `when`, or computes a default; all of it comes from `copier_ui` state
   - log: 2026-08-22 criterion added (v0.1.0)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_contract.py
-- [x] **Widget mapping** - string -> text input, bool -> switch, choice -> select, multiselect -> multi-select, secret -> password input, integer/float -> numeric input, path -> path input, structured -> multiline editor
+- [x] **Widget mapping** - string/path -> wrapping text field, bool/choice/multiselect -> every option printed on the question's own row, secret -> password input, integer/float -> numeric input, structured -> multiline editor
   - log: 2026-08-22 criterion added (v0.1.0)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_widgets.py
+  - log: 2026-08-24 reworded: choices are printed in place rather than behind a menu, and a free-text answer wraps rather than scrolling out of a one-line box (v0.6.9)
 - [x] **TUI conventions** - the header bar, the palette and the execution screen follow the `text-user-interface` skill
   - log: 2026-08-22 criterion added (v0.1.0)
   - log: 2026-08-22 closed: built - copier_tui/theme.py, widgets.HeaderBar, screens/execution.py
-- [x] **Field display** - a field's row carries its label and whether the value is still an untouched default; its help text shows in the survey's reserved hint line while the field has focus, so no field costs a second row
+- [x] **Field display** - a field's row carries its caption and its answer, and a question answered by picking carries every option it was picked from on that same row; the focused row lifts onto a plate and prints under itself what is specific to it - its validation message, or the example its `placeholder` gives
   - log: 2026-08-22 criterion added (v0.1.0)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py
   - log: 2026-08-22 reworded for the one-row-per-field layout; help and messages moved to the reserved hint line (v0.6.4)
   - log: 2026-08-22 label is now the question's caption, not its identifier (v0.6.9)
+  - log: 2026-08-24 reworded for the options-in-place layout; help moved from the shared line onto the focused row, which is where the question it explains is (v0.6.9)
 - [x] **One row per question** - a question is one row: right-aligned label gutter, control, one status glyph; only a multiline editor and a multiselect grow, and both are capped, so a template of two dozen questions is one screen and not several
   - log: 2026-08-22 criterion added (v0.6.5)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py (v0.6.5)
-- [x] **Reserved hint line** - one line below the form carries the focused field's help, its validation message, or how to open its list, and is the only place any of the three appears
+- [x] **Key legend** - one line below the form names every key that moves or changes something, and never changes, so it is a legend rather than a message the eye must re-read
   - log: 2026-08-22 criterion added (v0.6.5)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py (v0.6.5)
   - log: 2026-08-22 help outranks the open-the-list hint, which was hiding it on every choice field (v0.6.9)
+  - log: 2026-08-24 replaced the per-field hint line: help and errors belong on the row of the question they concern, and the freed line says how to drive the form (v0.6.9)
 - [x] **Two-press cancel** - the first `escape` arms the cancel and says so in the hint line, a second quits, and any other key disarms it, so one stray key cannot discard a survey
   - log: 2026-08-22 criterion added (v0.6.5)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py (v0.6.5)
@@ -208,14 +235,16 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
 - [x] **Live revisibility** - changing an answer that reveals or hides dependent fields updates the visible set immediately, without restarting the survey
   - log: 2026-08-22 criterion added (v0.1.0)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py
-- [x] **Stale answer after recompute** - when a recompute leaves an answer outside its question's new choices or type, state keeps the value and the review shows it, the row is marked and carries copier's own message in the hint line, and a choice control falls back to its prompt rather than displaying an option the user never picked
+- [x] **Stale answer after recompute** - when a recompute leaves an answer outside its question's new choices or type, state keeps the value and the review shows it, the row is marked and carries copier's own message under itself, and the option row lights no option rather than lighting a neighbour the user never picked
   - log: 2026-08-22 criterion added (v0.6.4)
   - log: 2026-08-22 reworded: a choice control cannot render a value that is not one of its options (v0.6.5)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py (v0.6.5)
-- [x] **Inline errors** - an invalid field is marked on its own row and its message shows in the reserved hint line while that field has focus
+  - log: 2026-08-24 reworded: an option row can light none of its options, where a dropdown had to fall back to its prompt (v0.6.9)
+- [x] **Inline errors** - an invalid field is marked on its own row and prints its message directly under itself while it has focus
   - log: 2026-08-22 criterion added (v0.1.0)
   - log: 2026-08-22 closed: built - copier_tui/screens/survey.py _show_hint and widgets.py _flag_text
   - log: 2026-08-22 reworded for the one-row-per-field layout; help and messages moved to the reserved hint line (v0.6.4)
+  - log: 2026-08-24 reworded: the message is on the field's own row rather than a shared line (v0.6.9)
 - [x] **Errors block finish only** - an invalid field blocks instantiation, never navigation away from that field
   - log: 2026-08-22 criterion added (v0.1.0)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py
@@ -264,12 +293,32 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
 - [x] **Question captions** - every row is captioned by its question, never by a bare `copier.yml` identifier, on the survey and on the review screen alike
   - log: 2026-08-22 added
   - log: 2026-08-22 closed: implemented after ux adversarial review (v0.6.9)
-- [x] **Help precedence** - a field's own help outranks any key hint on the reserved line; the open-the-list hint appears only for a choice field whose question declares no help
+- [x] **No sentence printed twice** - copier's caption is the rendered `help`, so the two are the same string for every question declaring one; the row prints it once as the caption and leaves its help line empty rather than repeating it
   - log: 2026-08-22 added
   - log: 2026-08-22 closed: implemented after ux adversarial review (v0.6.9)
-- [x] **Enclosed choice menu** - an open dropdown draws its own bordered panel over the form, so a row it covers is never read as an answer to the question beside it
+  - log: 2026-08-24 replaced: with help on the row there is no line to contend for, and the real risk became printing copier's one description twice (v0.6.9)
+- [x] **Nothing covers the form** - no control opens a panel over the questions around it; a choice is made by moving along options already on its row, so what is on screen is never hidden by what is being answered
   - log: 2026-08-22 added
   - log: 2026-08-22 closed: implemented after ux adversarial review (v0.6.9)
+  - log: 2026-08-24 replaced: the bordered overlay fixed a symptom - the cure is having no overlay at all, since the covered rows are what the user compares against (v0.6.9)
 - [x] **Blank pick is not an answer** - picking a choice control's own prompt row leaves the stored answer untouched and snaps the control back to it, so screen and state never disagree
   - log: 2026-08-22 added
   - log: 2026-08-22 closed: implemented after ux adversarial review (v0.6.9)
+- [x] **Captions arrive whole** - a caption too long for its gutter wraps to a second line and is never cut with an ellipsis, on the survey and on the review alike; copier has no description separate from the caption, so a cut caption deletes the only description a question has
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_survey.py, test_tui_widgets.py, test_tui_flow.py (v0.6.9)
+- [x] **Alternatives stay visible** - a question answered by picking shows every option it was picked from, the one in force lit and the rest legible beside it, so what was passed over never has to be recalled
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_survey.py, test_tui_widgets.py, test_tui_flow.py (v0.6.9)
+- [x] **Choosing without opening** - left and right move along a question's options and take the one they land on; space cycles a choice forward and ticks an option in a multiselect; no key opens a panel, so enter stays the confirm key on every field
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_survey.py, test_tui_widgets.py, test_tui_flow.py (v0.6.9)
+- [x] **Long answers wrap** - a free-text answer wraps within its column rather than scrolling out of a one-line box, up to three lines, so a sentence-long answer can be read back before it is committed
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_survey.py, test_tui_widgets.py, test_tui_flow.py (v0.6.9)
+- [x] **Defaults are not de-emphasised** - an untouched default is rendered no dimmer than an answer the user gave and carries no warning glyph - it is the answer most in need of checking, and de-emphasis is concealment rather than styling
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_survey.py, test_tui_widgets.py, test_tui_flow.py (v0.6.9)
+- [x] **Placeholders are not answers** - a `placeholder` is offered on the focused row as an example, never written into the value column, where it would read as an answer nobody gave
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_survey.py, test_tui_widgets.py, test_tui_flow.py (v0.6.9)

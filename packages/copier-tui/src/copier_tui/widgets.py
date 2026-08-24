@@ -1,35 +1,78 @@
 """Kind to widget mapping and the field row.
 
 Holds no semantics: label, help, value, choices, errors and default-ness all come from
-copier_ui state. Every field is one row - label gutter, control, one status glyph - so a
-long survey stays a short screen; the focused field's help goes to the screen's hint line.
+copier_ui state. A question is one row - caption, then the control - and the focused row
+grows by the lines its help needs. A choice shows every option on its own row rather than
+behind a menu, so what was passed over is legible beside what was taken.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 import json
 from typing import Any
 
 from rich.text import Text
+from textual import events
 from textual.app import ComposeResult
-from textual.containers import Horizontal
+from textual.containers import Horizontal, Vertical
 from textual.message import Message
 from textual.widget import Widget
-from textual.widgets import Input, Select, SelectionList, Static, Switch, TextArea
+from textual.widgets import Input, Static, TextArea
 
 from copier_tui import __version__
-from copier_tui.theme import AMBER, CYAN_BRIGHT, LABEL_WIDTH, ROSE, TEXT_SUBTLE
-from copier_ui import Choice, FieldState, Kind, Question
+from copier_tui.inline import BOOL_CHOICES, InlineOptions
+from copier_tui.theme import (
+    AMBER,
+    CYAN_BRIGHT,
+    HELP_LINES,
+    LABEL_LINES,
+    LABEL_WIDTH,
+    ROSE,
+    SURFACE_BG,
+    TEXT,
+    TEXT_MUTED,
+    VALUE_LINES,
+)
+from copier_ui import FieldState, Kind, Question
 
 _INPUT_TYPE = {Kind.INTEGER: "integer", Kind.FLOAT: "number"}
 
-NO_CHOICE = "no answer yet"
-"""Shown by a choice control whose answer is not among its current choices.
+_WRAPPED_KINDS = (Kind.STRING, Kind.PATH)
+"""Free-text kinds whose answer is often longer than the column it is written in.
 
-A recompute can narrow the choices out from under an answer, and this is the honest render
-of that: the field is blank, and picking the blank back is a no-op rather than an answer.
-"""
+A single-line input scrolls the overflow out of sight, so the one field where a person
+writes a sentence is the one field that never shows the sentence. These wrap instead."""
+
+
+class WrapInput(TextArea):
+    """A one-line answer that wraps onto a second line instead of scrolling out of sight.
+
+    It is a TextArea because Textual's Input cannot wrap, but the question behind it is not
+    multiline: enter is left to the screen so it still confirms the survey, and the widget
+    reports that by not owning the key.
+    """
+
+    owns_enter = False
+
+    def __init__(self, text: str, **kwargs: Any) -> None:
+        """Build the wrapping editor over the current value."""
+        super().__init__(text, soft_wrap=True, compact=True, **kwargs)
+
+    def on_mount(self) -> None:
+        """Put the cursor after the answer, where a text field's cursor belongs.
+
+        An editor starts at the top left, which for a prefilled one-line answer means the
+        first thing typed lands in front of the default and the first backspace does
+        nothing at all.
+        """
+        self.move_cursor(self.document.end)
+
+    async def _on_key(self, event: events.Key) -> None:
+        """Let enter reach the screen; a single-line answer has no line to break."""
+        if event.key == "enter":
+            return
+        await super()._on_key(event)
 
 
 def _as_text(value: Any) -> str:
@@ -53,79 +96,42 @@ def display_value(field: FieldState) -> str:
     return " ".join(_as_text(field.value).split())
 
 
-def _index_of(value: Any, values: Sequence[Any]) -> int | None:
-    """The position of a choice value, or None when it is not among the choices."""
-    for index, candidate in enumerate(values):
-        if candidate == value:
-            return index
-    return None
-
-
-class ChoiceSelect(Select[int]):
-    """One-of-many choice. The option value is the choice index, so any value works."""
-
-    def __init__(self, choices: Sequence[Choice], value: Any, **kwargs: Any) -> None:
-        """Build the select over the given choices, showing the current value."""
-        self.choice_values: tuple[Any, ...] = tuple(choice.value for choice in choices)
-        index = _index_of(value, self.choice_values)
-        super().__init__(
-            [(choice.label, position) for position, choice in enumerate(choices)],
-            value=Select.NULL if index is None else index,
-            prompt=NO_CHOICE,
-            compact=True,
-            **kwargs,
-        )
-
-
-class ChoiceSelectionList(SelectionList[int]):
-    """Many-of-many choice. The option value is the choice index, so any value works."""
-
-    def __init__(self, choices: Sequence[Choice], value: Any, **kwargs: Any) -> None:
-        """Build the selection list over the given choices, showing the current values."""
-        self.choice_values: tuple[Any, ...] = tuple(choice.value for choice in choices)
-        selected = value if isinstance(value, (list, tuple)) else ()
-        super().__init__(
-            *[
-                (choice.label, position, choice.value in selected)
-                for position, choice in enumerate(choices)
-            ],
-            compact=True,
-            **kwargs,
-        )
-
-
 WIDGET_BY_KIND: Mapping[Kind, type[Widget]] = {
-    Kind.STRING: Input,
-    Kind.PATH: Input,
+    Kind.STRING: WrapInput,
+    Kind.PATH: WrapInput,
     Kind.SECRET: Input,
     Kind.INTEGER: Input,
     Kind.FLOAT: Input,
-    Kind.BOOL: Switch,
-    Kind.CHOICE: ChoiceSelect,
-    Kind.MULTISELECT: ChoiceSelectionList,
+    Kind.BOOL: InlineOptions,
+    Kind.CHOICE: InlineOptions,
+    Kind.MULTISELECT: InlineOptions,
     Kind.STRUCTURED: TextArea,
 }
-"""string/path/integer/float -> Input, secret -> Input(password), bool -> Switch,
-choice -> Select, multiselect -> SelectionList, structured -> TextArea."""
+"""string/path -> wrapping editor, integer/float -> Input, secret -> Input(password),
+bool/choice/multiselect -> options on the row, structured -> TextArea."""
 
 
 def control_for(question: Question, field: FieldState) -> Widget:
     """Build the input control for a question, prefilled with the field's current value.
 
-    A secret question always gets the masked Input, whatever its kind: no choice list or
+    A secret question always gets the masked Input, whatever its kind: no option row or
     editor may put the value on screen in the clear.
     """
+    control_id = f"ctl-{question.id}"
     if question.secret:
         widget: type[Widget] = Input
     else:
         widget = TextArea if question.multiline else WIDGET_BY_KIND[question.kind]
-    control_id = f"ctl-{question.id}"
-    if widget is ChoiceSelectionList:
-        return ChoiceSelectionList(field.choices, field.value, id=control_id)
-    if widget is ChoiceSelect:
-        return ChoiceSelect(field.choices, field.value, id=control_id)
-    if widget is Switch:
-        return Switch(value=bool(field.value), id=control_id)
+    if widget is InlineOptions:
+        choices = BOOL_CHOICES if question.kind is Kind.BOOL else field.choices
+        return InlineOptions(
+            choices,
+            field.value,
+            multiple=question.kind is Kind.MULTISELECT,
+            id=control_id,
+        )
+    if widget is WrapInput:
+        return WrapInput(_as_text(field.value), id=control_id)
     if widget is TextArea:
         return TextArea(_as_text(field.value), soft_wrap=True, compact=True, id=control_id)
     return Input(
@@ -141,13 +147,7 @@ def control_for(question: Question, field: FieldState) -> Widget:
 
 def read_control(question: Question, control: Widget) -> Any:
     """Read the control's current value."""
-    if isinstance(control, ChoiceSelect):
-        if control.value is Select.NULL:
-            return None
-        return control.choice_values[control.value]
-    if isinstance(control, ChoiceSelectionList):
-        return [control.choice_values[index] for index in sorted(control.selected)]
-    if isinstance(control, Switch):
+    if isinstance(control, InlineOptions):
         return control.value
     if isinstance(control, TextArea):
         return control.text
@@ -177,40 +177,53 @@ class HeaderBar(Horizontal):
         return f"copier-tui · {self._label_context}" if self._label_context else "copier-tui"
 
 
-class FieldRow(Horizontal):
-    """One question on one row: label gutter, control, status glyph."""
+class FieldRow(Vertical):
+    """One question: a caption-and-control line, and the help the focused row shows."""
 
     DEFAULT_CSS = f"""
     FieldRow {{
         height: auto;
-        max-height: 6;
     }}
-    FieldRow:focus-within > .field-label {{
-        text-style: bold;
+    FieldRow:focus-within {{
+        background: {SURFACE_BG};
     }}
-    FieldRow > .field-label {{
-        width: 45%;
-        max-width: {LABEL_WIDTH};
-        height: 1;
-        padding: 0 1 0 0;
-        text-align: right;
-        text-wrap: nowrap;
-        text-overflow: ellipsis;
+    FieldRow > .field-head {{
+        height: auto;
     }}
-    FieldRow > .field-flag {{
+    FieldRow .field-label {{
+        width: {LABEL_WIDTH};
+        height: auto;
+        max-height: {LABEL_LINES};
+        padding: 0 2 0 2;
+        text-align: left;
+        text-wrap: wrap;
+    }}
+    FieldRow .field-flag {{
         width: 2;
         height: 1;
         text-align: center;
     }}
-    FieldRow > Input, FieldRow > Select, FieldRow > SelectionList, FieldRow > TextArea {{
+    FieldRow > .field-head > Input,
+    FieldRow > .field-head > InlineOptions,
+    FieldRow > .field-head > TextArea {{
         width: 1fr;
     }}
-    FieldRow > SelectionList, FieldRow > TextArea {{
+    FieldRow > .field-head > TextArea {{
         height: auto;
         max-height: 6;
     }}
-    FieldRow > Switch {{
-        width: 4;
+    FieldRow > .field-head > WrapInput {{
+        max-height: {VALUE_LINES};
+    }}
+    FieldRow > .field-help {{
+        display: none;
+        height: auto;
+        max-height: {HELP_LINES};
+        padding: 0 2 0 {LABEL_WIDTH};
+        color: {TEXT_MUTED};
+    }}
+    FieldRow:focus-within > .field-help {{
+        display: block;
     }}
     """
 
@@ -235,33 +248,33 @@ class FieldRow(Horizontal):
         self._label = Static(classes="field-label")
         self._control = control_for(question, field)
         self._flag = Static(classes="field-flag", id=f"flag-{question.id}")
+        self._help = Static(classes="field-help", id=f"help-{question.id}")
         self._last_value: Any = None
 
     def compose(self) -> ComposeResult:
-        """The label gutter, the control, then the one-cell status glyph."""
-        yield self._label
-        yield self._control
-        yield self._flag
+        """The caption line with its control, then the help the focused row reveals."""
+        with Horizontal(classes="field-head"):
+            yield self._label
+            yield self._control
+            yield self._flag
+        yield self._help
 
     def on_mount(self) -> None:
-        """Show the label and the glyph; the control already holds its constructed value."""
+        """Show the caption, the help and the glyph; the control holds its own value."""
         self._chrome(self._field)
         self._last_value = self.value
 
     @property
     def field(self) -> FieldState:
-        """The state this row currently shows, for the screen's hint line."""
+        """The state this row currently shows, for the screen's message line."""
         return self._field
 
     def update(self, field: FieldState) -> None:
         """Apply new state: value, choices, default marker, errors.
 
-        A control that has not mounted yet is left alone. It was built from this same
-        state, so there is nothing to write - and writing anyway breaks Select, which
-        stores its value privately in the constructor and only assigns the reactive on
-        mount. An assignment that lands first leaves the reactive already equal to the
-        target, so the watcher that paints the label never fires and the control shows
-        its prompt over a value it is holding.
+        A control that has not mounted yet is left alone. It was built from this same state,
+        so there is nothing to write, and a control that has the focus is left alone because
+        the user is the authority on its value until they leave it.
         """
         self._chrome(field)
         if self._control.is_mounted and not self._control.has_focus:
@@ -273,36 +286,19 @@ class FieldRow(Horizontal):
         self._field = field
         self._label.update(_label_text(self.question, field))
         self._flag.update(_flag_text(field))
+        help = _help_text(self.question, field)
+        self._help.update(help)
+        # an empty Static still occupies its row, and a blank line under every question
+        # that declares no help is the wasted space the whole layout is trying to recover
+        self._help.display = bool(help.plain)
         self._control.disabled = not field.enabled
 
     def _write_value(self, field: FieldState) -> None:
         """Push the state's value into the control."""
         control = self._control
-        if isinstance(control, ChoiceSelect):
-            values = tuple(choice.value for choice in field.choices)
-            if values != control.choice_values:
-                control.choice_values = values
-                control.set_options(
-                    [(choice.label, position) for position, choice in enumerate(field.choices)]
-                )
-            index = _index_of(field.value, control.choice_values)
-            control.value = Select.NULL if index is None else index
-        elif isinstance(control, ChoiceSelectionList):
-            values = tuple(choice.value for choice in field.choices)
-            if values != control.choice_values:
-                control.choice_values = values
-                control.clear_options()
-                control.add_options(
-                    [(choice.label, position) for position, choice in enumerate(field.choices)]
-                )
-            selected = field.value if isinstance(field.value, (list, tuple)) else ()
-            for position, choice in enumerate(field.choices):
-                if choice.value in selected:
-                    control.select(position)
-                else:
-                    control.deselect(position)
-        elif isinstance(control, Switch):
-            control.value = bool(field.value)
+        if isinstance(control, InlineOptions):
+            choices = BOOL_CHOICES if self.question.kind is Kind.BOOL else field.choices
+            control.set_options(choices, field.value)
         elif isinstance(control, TextArea):
             control.text = _as_text(field.value)
         else:
@@ -326,27 +322,8 @@ class FieldRow(Horizontal):
         event.stop()
         self._emit()
 
-    def on_switch_changed(self, event: Switch.Changed) -> None:
-        """A boolean toggled."""
-        event.stop()
-        self._emit()
-
-    def on_select_changed(self, event: Select.Changed) -> None:
-        """A choice picked. The blank is never an answer.
-
-        Rebuilding the options blanks the select for a beat - our own write, not a choice
-        of None. Textual also offers the prompt as a selectable row, so the user can pick
-        the blank; that is not an answer either, and returning bare would leave the control
-        showing `no answer yet` over a value the state still holds and still renders.
-        """
-        event.stop()
-        if event.value is Select.NULL:
-            self._write_value(self._field)
-            return
-        self._emit()
-
-    def on_selection_list_selected_changed(self, event: SelectionList.SelectedChanged) -> None:
-        """A multiselect option toggled."""
+    def on_inline_options_changed(self, event: InlineOptions.Changed) -> None:
+        """An option taken, or a multiselect option ticked."""
         event.stop()
         self._emit()
 
@@ -357,22 +334,38 @@ class FieldRow(Horizontal):
 
 
 def _label_text(question: Question, field: FieldState) -> Text:
-    """The question caption, dimmed while the value is still the computed default.
+    """The question caption, wrapped rather than cut, and never dimmed below the answers.
 
-    A caption longer than the gutter is clipped by the gutter itself, so the width can be
-    a share of the terminal rather than a constant; the focused row's caption is shown in
-    full on the hint line, which is what keeps a long question readable on one line.
+    An untouched default is the answer most in need of checking, so it is not the one to
+    de-emphasise: the caption of a question still carrying its default is the ordinary
+    reading ink, and an answer the user gave is lifted above it rather than the reverse.
     """
-    style = TEXT_SUBTLE if field.is_default else f"bold {CYAN_BRIGHT}"
-    return Text(question.label, style=style, no_wrap=True, overflow="ellipsis")
+    style = f"bold {CYAN_BRIGHT}" if not field.is_default else TEXT
+    return Text(question.label, style=style, overflow="fold")
+
+
+def _help_text(question: Question, field: FieldState) -> Text:
+    """What the focused row says under itself: the problem, else the question's own help.
+
+    Help that only repeats the caption is dropped. copier falls back to the help string for
+    the prompt caption, so a template whose question carries help and nothing else ends up
+    with the same sentence twice, one line above the other, saying nothing the second time.
+    """
+    if field.errors:
+        return Text(field.errors[0], style=ROSE, overflow="fold")
+    help = "" if question.help == question.label else question.help
+    if not display_value(field) and question.placeholder:
+        # a placeholder written into the value column reads as an answer nobody gave; said
+        # here it is plainly guidance, and the field stays visibly empty until it is answered
+        hint = f"for example: {question.placeholder}"
+        help = f"{help}  -  {hint}" if help else hint
+    return Text(help, style=TEXT_MUTED, overflow="fold")
 
 
 def _flag_text(field: FieldState) -> Text:
-    """One glyph for the row's standing: a problem, an unavailable field, or a default."""
+    """One glyph for the row's standing: a problem, or a field this answer set rules out."""
     if field.errors:
         return Text("!", style=f"bold {ROSE}")
     if not field.enabled:
         return Text("-", style=AMBER)
-    if field.is_default:
-        return Text("·", style=TEXT_SUBTLE)
     return Text(" ")
