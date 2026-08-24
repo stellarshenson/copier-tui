@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+import os
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -112,7 +115,8 @@ class ExecutionScreen(Screen[bool]):
         """
         error: BaseException | None = None
         try:
-            self.ui.render(self.dst, **self.copier_kwargs)
+            with _detached_stdin():
+                self.ui.render(self.dst, **self.copier_kwargs)
         except Exception as exc:  # noqa: BLE001 - any failure becomes the screen's verdict
             error = exc
         self.app.call_from_thread(self._finish, error)
@@ -139,6 +143,33 @@ class ExecutionScreen(Screen[bool]):
             status.update(Text(f"failed - {_message(error)}", style=ROSE))
         self.query_one("#exec-verdict", Static).update(Text("press any key to close"))
         self.set_focus(None)
+
+
+@contextmanager
+def _detached_stdin() -> Iterator[None]:
+    """Run the render with stdin on /dev/null, so nothing copier starts can eat the keyboard.
+
+    A template's tasks are ordinary subprocesses and copier hands them this process's own
+    descriptors. Under `--trust` that means a task inherits the terminal Textual is holding
+    in raw mode: anything it reads is a keystroke meant for the form, and a task that asks a
+    question of its own leaves the terminal in whatever mode it chose. The app is still
+    running afterwards and still repainting, but no key reaches it again - which is what
+    "press any key to close" failing actually is.
+
+    Only descriptor 0 is moved. Textual writes the screen through descriptor 1, so putting
+    that on /dev/null for the length of the render would blank the progress bar and the
+    verdict along with the task's output; task chatter printing over the form is cosmetic and
+    the next repaint covers it, whereas a stolen keyboard is terminal.
+    """
+    saved = os.dup(0)
+    null = os.open(os.devnull, os.O_RDONLY)
+    try:
+        os.dup2(null, 0)
+        yield
+    finally:
+        os.dup2(saved, 0)
+        os.close(saved)
+        os.close(null)
 
 
 def _message(error: BaseException) -> str:

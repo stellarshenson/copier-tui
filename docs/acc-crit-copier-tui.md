@@ -322,3 +322,21 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
 - [x] **Placeholders are not answers** - a `placeholder` is offered on the focused row as an example, never written into the value column, where it would read as an answer nobody gave
   - log: 2026-08-24 added
   - log: 2026-08-24 closed: built - tests/unit/test_tui_survey.py, test_tui_widgets.py, test_tui_flow.py (v0.6.9)
+- [x] **Row banding** - the form alternates two grounds down its rows, restriped by position whenever a conditional question appears or disappears
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+- [x] **Typing grounds** - anything the user types into carries a lifted ground that also takes the band; an option row carries none, so only what accepts letters looks like it does
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+- [x] **Option chips** - the option in force sits on a filled chip and the ones passed over do not; taken and dismissed differ by ground, not by which blue is brighter
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+- [x] **Captions carry no state** - a caption is coloured by focus alone, never by whether its answer is still the default
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+- [x] **Edge: row the answers rule out** - a disabled question greys its caption with its control, so a dead row never reads as one merely unfocused
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+- [x] **Render keeps the keyboard** - the copier run happens with stdin on /dev/null, so a template task cannot eat the keystrokes and leave 'press any key to close' dead; descriptors 1 and 2 stay, since Textual paints through 1
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py

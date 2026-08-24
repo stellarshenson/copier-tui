@@ -12,9 +12,37 @@ MINT = "#3fb950"
 ROSE = "#f2554f"
 
 SCREEN_BG = "#1a1f25"
+BASE_BG = "#252b32"
 CHROME_BG = "#2a313a"
 SURFACE_BG = "#303841"
 BORDER = "#5f6b76"
+
+ROW_BG = SCREEN_BG
+ROW_ALT_BG = BASE_BG
+"""The two bands the form alternates between, one step apart on the skill's dark ladder.
+
+A form of thirty near-identical rows gives the eye nothing to count by, and a caption that
+wraps onto a second line is indistinguishable from the next question starting. The band says
+where one question ends without spending a rule or a blank line on saying it."""
+
+FIELD_BG = SURFACE_BG
+FIELD_ALT_BG = "#353d47"
+FIELD_FOCUS_BG = "#39424d"
+"""The ground under anything the user types into, and the same one step lifted under focus.
+
+It is the skill's surface/input/highlight token, above the brightest row band, so a box reads
+as a box on either band and a disabled one reads as inert by dropping back to the band it
+sits on. Only typing surfaces get it: an option row says "pick me" with the chip under the
+answer, and giving it a typing ground as well only invited the reader to type into it.
+
+The ground carries the band as well, because a control spans the row and would otherwise
+paint over the stripe: five text questions in a row merged into one lit block, which is the
+same undifferentiated wall the banding exists to break up."""
+
+PICKED_BG = CYAN
+PICKED_FG = SCREEN_BG
+"""The chip under the option in force. Colour alone separated taken from passed-over only for
+a reader who already knew which hue meant which; a filled chip needs no key."""
 
 TEXT = "#c3c3c3"
 TEXT_MUTED = "#a5a5a5"

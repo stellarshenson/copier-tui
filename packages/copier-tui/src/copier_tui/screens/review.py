@@ -12,7 +12,16 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Footer, Static
 
-from copier_tui.theme import AMBER, CYAN_BRIGHT, LABEL_LINES, LABEL_WIDTH, TEXT, TEXT_SUBTLE
+from copier_tui.theme import (
+    AMBER,
+    CYAN_BRIGHT,
+    LABEL_LINES,
+    LABEL_WIDTH,
+    ROW_ALT_BG,
+    ROW_BG,
+    TEXT,
+    TEXT_SUBTLE,
+)
 from copier_tui.widgets import HeaderBar, display_value
 from copier_ui import TemplateUI
 
@@ -39,6 +48,10 @@ class ReviewScreen(Screen[bool]):
     .review-answer {{
         height: auto;
         width: 100%;
+        background: {ROW_BG};
+    }}
+    .review-answer.row-alt {{
+        background: {ROW_ALT_BG};
     }}
     .review-caption {{
         width: {LABEL_WIDTH};
@@ -95,7 +108,7 @@ class ReviewScreen(Screen[bool]):
         """
         state = self.ui.state()
         lines: list[Static | Horizontal] = []
-        for field_id in state.visible_ids:
+        for position, field_id in enumerate(state.visible_ids):
             field = state.fields[field_id]
             value = display_value(field)
             lines.append(
@@ -114,7 +127,7 @@ class ReviewScreen(Screen[bool]):
                         else Text(UNSET, style=TEXT_SUBTLE),
                         classes="review-value",
                     ),
-                    classes="review-answer",
+                    classes="review-answer row-alt" if position % 2 else "review-answer",
                     id=f"review-{field_id}",
                 )
             )

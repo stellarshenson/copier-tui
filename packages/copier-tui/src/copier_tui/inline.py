@@ -17,16 +17,16 @@ from textual.binding import Binding
 from textual.message import Message
 from textual.widgets import Static
 
-from copier_tui.theme import CYAN_BRIGHT, TEXT, TEXT_MUTED
+from copier_tui.theme import CHROME_BG, PICKED_BG, PICKED_FG, TEXT, TEXT_MUTED
 from copier_ui import Choice
 
 BOOL_CHOICES = (Choice(label="No", value=False), Choice(label="Yes", value=True))
 """A boolean is a two-option question, and reads better as one than as a toggle whose
 current state has to be inferred from which side a knob sits on."""
 
-GAP = "   "
-"""Three spaces between options: wide enough that two labels never read as one, narrow
-enough that five options still fit the line at 100 columns."""
+GAP = " "
+"""One space between chips. Each label already carries a space of its own padding on both
+sides, so the gap the eye sees is the same three columns as before the chips existed."""
 
 
 class InlineOptions(Static):
@@ -149,14 +149,18 @@ class InlineOptions(Static):
         for index, choice in enumerate(self.choices):
             if index:
                 text.append(GAP)
-            style = TEXT_MUTED
             if self._in_force(choice):
-                style = f"bold {CYAN_BRIGHT}"
+                # the answer, on a filled chip: taken and passed-over now differ by ground
+                # rather than by brightness, which is a difference that survives a reader
+                # who does not already know which of two blues means chosen
+                style = f"bold {PICKED_FG} on {PICKED_BG}"
             elif index == self._cursor:
-                style = TEXT
+                style = f"{TEXT} on {CHROME_BG}"
+            else:
+                style = TEXT_MUTED
             if index == self._cursor and self.has_focus:
                 style = f"{style} underline"
-            text.append(choice.label, style=style)
+            text.append(f" {choice.label} ", style=style)
         self.update(text)
 
     def _in_force(self, choice: Choice) -> bool:

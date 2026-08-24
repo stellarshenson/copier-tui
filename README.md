@@ -63,6 +63,12 @@ was passed over stays legible beside what was taken and there is no menu to open
 questions underneath. Left and right move between the options; nothing expands, nothing is
 covered.
 
+Rows alternate between two grounds so the eye can tell where one question ends, and the answer
+to a choice sits on a filled chip while the options passed over stay plain beside it - taken and
+dismissed differ by ground rather than by which blue is brighter. Anything that accepts typing
+carries a lifted ground; an option row does not, so only what takes letters looks like it does.
+A caption is coloured by focus alone and never by whether its answer is still the default.
+
 Captions are copier's own rendered `help`, which is also the only description copier has, so a
 caption is never cut - it wraps to a second line instead. A long free-text answer wraps too,
 rather than scrolling out of sight in a one-line box. The focused question lifts onto a plate

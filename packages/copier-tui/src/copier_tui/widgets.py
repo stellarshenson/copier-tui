@@ -24,14 +24,21 @@ from copier_tui import __version__
 from copier_tui.inline import BOOL_CHOICES, InlineOptions
 from copier_tui.theme import (
     AMBER,
+    CHROME_BG,
+    CYAN,
     CYAN_BRIGHT,
+    FIELD_ALT_BG,
+    FIELD_BG,
+    FIELD_FOCUS_BG,
     HELP_LINES,
     LABEL_LINES,
     LABEL_WIDTH,
     ROSE,
-    SURFACE_BG,
+    ROW_ALT_BG,
+    ROW_BG,
     TEXT,
     TEXT_MUTED,
+    TEXT_SUBTLE,
     VALUE_LINES,
 )
 from copier_ui import FieldState, Kind, Question
@@ -183,9 +190,16 @@ class FieldRow(Vertical):
     DEFAULT_CSS = f"""
     FieldRow {{
         height: auto;
+        background: {ROW_BG};
+        border-left: thick {ROW_BG};
+    }}
+    FieldRow.row-alt {{
+        background: {ROW_ALT_BG};
+        border-left: thick {ROW_ALT_BG};
     }}
     FieldRow:focus-within {{
-        background: {SURFACE_BG};
+        background: {CHROME_BG};
+        border-left: thick {CYAN};
     }}
     FieldRow > .field-head {{
         height: auto;
@@ -194,9 +208,17 @@ class FieldRow(Vertical):
         width: {LABEL_WIDTH};
         height: auto;
         max-height: {LABEL_LINES};
-        padding: 0 2 0 2;
+        padding: 0 2 0 1;
         text-align: left;
         text-wrap: wrap;
+        color: {TEXT};
+    }}
+    FieldRow:focus-within .field-label {{
+        color: {CYAN_BRIGHT};
+        text-style: bold;
+    }}
+    FieldRow.row-off .field-label {{
+        color: {TEXT_SUBTLE};
     }}
     FieldRow .field-flag {{
         width: 2;
@@ -207,6 +229,26 @@ class FieldRow(Vertical):
     FieldRow > .field-head > InlineOptions,
     FieldRow > .field-head > TextArea {{
         width: 1fr;
+    }}
+    FieldRow > .field-head > Input,
+    FieldRow > .field-head > TextArea {{
+        background: {FIELD_BG};
+    }}
+    FieldRow.row-alt > .field-head > Input,
+    FieldRow.row-alt > .field-head > TextArea {{
+        background: {FIELD_ALT_BG};
+    }}
+    FieldRow:focus-within > .field-head > Input,
+    FieldRow:focus-within > .field-head > TextArea {{
+        background: {FIELD_FOCUS_BG};
+    }}
+    FieldRow > .field-head > Input:disabled,
+    FieldRow > .field-head > TextArea:disabled {{
+        background: transparent;
+        color: {TEXT_SUBTLE};
+    }}
+    FieldRow > .field-head > InlineOptions:disabled {{
+        color: {TEXT_SUBTLE};
     }}
     FieldRow > .field-head > TextArea {{
         height: auto;
@@ -284,7 +326,7 @@ class FieldRow(Vertical):
     def _chrome(self, field: FieldState) -> None:
         """Everything about a row that is not the control's value."""
         self._field = field
-        self._label.update(_label_text(self.question, field))
+        self._label.update(_label_text(self.question))
         self._flag.update(_flag_text(field))
         help = _help_text(self.question, field)
         self._help.update(help)
@@ -292,6 +334,10 @@ class FieldRow(Vertical):
         # that declares no help is the wasted space the whole layout is trying to recover
         self._help.display = bool(help.plain)
         self._control.disabled = not field.enabled
+        # the caption greys with the control: a row this answer set rules out must not look
+        # like a row that is merely unfocused, which is what a live caption over a dead
+        # control looked like
+        self.set_class(not field.enabled, "row-off")
 
     def _write_value(self, field: FieldState) -> None:
         """Push the state's value into the control."""
@@ -333,15 +379,17 @@ class FieldRow(Vertical):
         self._emit()
 
 
-def _label_text(question: Question, field: FieldState) -> Text:
-    """The question caption, wrapped rather than cut, and never dimmed below the answers.
+def _label_text(question: Question) -> Text:
+    """The question caption, wrapped rather than cut, and carrying no colour of its own.
 
-    An untouched default is the answer most in need of checking, so it is not the one to
-    de-emphasise: the caption of a question still carrying its default is the ordinary
-    reading ink, and an answer the user gave is lifted above it rather than the reverse.
+    Hue on a caption used to mean "you have changed this", which read as a state of the
+    question rather than of its answer - a blue line looks like a heading or something the
+    form will not let you touch, and it sat on rows the cursor then walked straight into.
+    The row's band, its field grounds and its focus bar say where the cursor is and what can
+    be edited; what the answer happens to be is the answer's own business, so the stylesheet
+    colours this by focus and nothing else.
     """
-    style = f"bold {CYAN_BRIGHT}" if not field.is_default else TEXT
-    return Text(question.label, style=style, overflow="fold")
+    return Text(question.label, overflow="fold")
 
 
 def _help_text(question: Question, field: FieldState) -> Text:

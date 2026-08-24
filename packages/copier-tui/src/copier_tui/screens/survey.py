@@ -194,7 +194,7 @@ class SurveyScreen(Screen[None]):
             if field_id not in wanted:
                 row.remove()
         previous: FieldRow | None = None
-        for field_id in wanted:
+        for position, field_id in enumerate(wanted):
             field = replace(state.fields[field_id], errors=tuple(errors.get(field_id, ())))
             row = rows.get(field_id)
             if row is None:
@@ -205,6 +205,11 @@ class SurveyScreen(Screen[None]):
                     form.mount(row, after=previous)
             else:
                 row.update(field)
+            # banding is by position in the form as it now stands, not by the order rows
+            # were built in: a conditional question appearing or disappearing restripes
+            # everything below it, and a form that keeps the old parity reads as though two
+            # adjacent questions were one
+            row.set_class(position % 2 == 1, "row-alt")
             previous = row
         self._show_hint()
         self._show_position()
