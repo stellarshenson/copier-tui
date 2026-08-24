@@ -1,0 +1,21 @@
+## v1 - 2026-08-24 21:31
+Abstract digital art, dark background (#0a1a24), cyan (#0096d1) and orange (#da8230) color scheme. A tangle of branching luminous filaments on the left resolving into calm ordered parallel rows of light on the right, a few branch points flaring orange where the paths split and rejoin. Subtle grid mesh, glowing particles, depth of field. Technical but artistic. No text, no UI elements, no charts. 16:9 aspect ratio. High quality, 4K.
+[model: stability.stable-image-core-v1:1, us-west-2, seed 7 - orange dominated, not shipped]
+[note: amazon.nova-canvas-v1:0 is refused on this account - marked Legacy by the provider and
+ unused for 30 days; amazon.titan-image-generator v1 and v2 are end-of-life. Stable Image Core
+ in us-west-2 is the working alternative.]
+
+## v2 - 2026-08-24 21:33
+Abstract digital art on a near-black background (#0a1a24). Left half: a dense chaotic tangle of thin glowing cyan (#0096d1) filaments. Right half: the same filaments straightened into calm evenly spaced horizontal rows of light, like ruled lines. Clear left-to-right transition from disorder into order. Sparse orange (#da8230) accents at a few junction points only, cyan strongly dominant. Subtle grid mesh, glowing particles, depth of field. Technical but artistic. No text, no UI elements, no charts.
+[negative: ..., orange dominant -> removed orange from the render entirely; seeds 11/23/42 not shipped]
+
+## v3 - 2026-08-24 21:35
+Abstract digital art on a near-black background (#0a1a24). A branching network of thin glowing filaments, chaotic and knotted on the left, gradually combing itself into calm evenly spaced horizontal lines toward the right edge. Mostly cyan (#0096d1) light, with a few warm orange (#da8230) filaments threading through as accents. Subtle grid mesh, glowing particles, depth of field. Technical but artistic. No text, no UI elements, no charts.
+[negative: text, letters, words, watermark, signature, user interface, buttons, charts, graphs, photograph, people]
+[model: stability.stable-image-core-v1:1, us-west-2, seed 5, 2016x1152 downsampled to 1280x720 - SHIPPED]
+
+## title band - 2026-08-24 21:56
+Title "Terminal UI for Copier" (52px, #4099b3). Subtitle set on two lines at the signature
+40px rather than one line auto-shrunk to 31px: "drop in wrapper for copier, same syntax," /
+"transparent, just prettier" (#da8230). Band geometry unchanged - full width, 243px, centred;
+0.62 dark on the dark cover, 0.80 white on the light and transparent covers.
