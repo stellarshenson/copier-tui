@@ -13,8 +13,11 @@ import os
 from pathlib import Path
 from typing import Any
 
+from textual.widgets import Static
+
 from copier_tui.app import SurveyApp
 from copier_tui.inline import CURSOR, FREE, TAKEN, InlineOptions
+from copier_tui.screens import SurveyScreen
 from copier_tui.screens.execution import _detached_stdin
 from copier_tui.theme import (
     CURSOR_BG,
@@ -24,6 +27,8 @@ from copier_tui.theme import (
     FIELD_FOCUS_BG,
     OPTION_BG,
     PICKED_BG,
+    PULSE_CYCLE,
+    PULSE_INTERVAL,
     ROW_ALT_BG,
     ROW_BG,
     SURFACE_BG,
@@ -262,12 +267,12 @@ async def test_the_cursor_shows_even_when_it_sits_on_the_answer(tmp_path: Path) 
         options = app.screen.query_one("#ctl-advanced", InlineOptions)
         app.screen.set_focus(options)
         await pilot.pause()
-        assert f"{CURSOR}{TAKEN} No" in option_text(options)
+        assert f"{CURSOR} {TAKEN} No" in option_text(options)
 
         await pilot.press("right")
         await pilot.pause()
         painted = option_text(options)
-        assert f"{CURSOR}{TAKEN} Yes" in painted
+        assert f"{CURSOR} {TAKEN} Yes" in painted
         assert painted.count(CURSOR) == 1
 
 
@@ -293,3 +298,56 @@ async def test_short_options_share_a_line_and_long_ones_stack(tmp_path: Path) ->
         assert not long_labels._fits(
             [long_labels._chip(index, choice) for index, choice in enumerate(long_labels.choices)]
         )
+
+
+async def test_the_header_names_the_template_it_is_asking_about(tmp_path: Path) -> None:
+    """Header: which template this is cannot be read off the questions themselves.
+
+    Several questionnaires open at once look alike from the inside, and the source is the one
+    fact none of the questions carries.
+    """
+    async with survey(tmp_path / "out") as (app, _):
+        title = str(app.screen.query_one("#hdr-title", Static).visual)
+        assert "tui_flow questionnaire" in title
+        assert "survey" not in title
+
+
+async def test_ctrl_c_does_not_leave_the_survey(tmp_path: Path) -> None:
+    """Keys: ctrl+c belongs to the terminal, which copies with it.
+
+    It used to be bound to cancel, so reaching for copy threw away every answer given so far.
+    """
+    async with survey(tmp_path / "out") as (app, pilot):
+        await pilot.press("ctrl+c")
+        await pilot.pause()
+        assert app.is_running
+        assert isinstance(app.screen, SurveyScreen)
+
+
+async def test_the_focus_bar_breathes_while_the_cursor_rests_on_a_question(
+    tmp_path: Path,
+) -> None:
+    """Focus bar: the mark beside the focused question cycles shades, and only that one.
+
+    Driven by classes rather than inline styles, because Textual cannot clear an inline style
+    once set - the bar would keep the last shade it was given after the focus had moved on.
+    """
+    async with survey(tmp_path / "out") as (app, pilot):
+        rows = {row.question.id: row for row in app.screen.query(FieldRow)}
+
+        def shade(field_id: str) -> str | None:
+            worn = [name for name in rows[field_id].classes if name.startswith("pulse-")]
+            return worn[0] if worn else None
+
+        seen = []
+        for _ in range(len(PULSE_CYCLE)):
+            seen.append(shade("name"))
+            await pilot.pause(PULSE_INTERVAL + 0.01)
+        assert None not in seen
+        assert len(set(seen)) > 1, seen
+        assert shade("token") is None
+
+        await pilot.press("down")
+        await pilot.pause()
+        assert shade("name") is None
+        assert shade("advanced") is not None

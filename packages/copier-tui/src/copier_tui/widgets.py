@@ -17,6 +17,7 @@ from textual import events
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.message import Message
+from textual.timer import Timer
 from textual.widget import Widget
 from textual.widgets import Input, Static, TextArea
 
@@ -29,6 +30,9 @@ from copier_tui.theme import (
     HELP_LINES,
     LABEL_LINES,
     LABEL_WIDTH,
+    PULSE_CYCLE,
+    PULSE_INTERVAL,
+    PULSE_SHADES,
     ROSE,
     ROW_ALT_BG,
     ROW_BG,
@@ -180,6 +184,13 @@ class HeaderBar(Horizontal):
         return f"copier-tui · {self._label_context}" if self._label_context else "copier-tui"
 
 
+_PULSE_CSS = "\n    ".join(
+    f"FieldRow.pulse-{index}:focus-within {{ border-left: thick {shade}; }}"
+    for index, shade in enumerate(PULSE_SHADES)
+)
+"""One rule per shade, keyed by a class the focused row cycles through."""
+
+
 class FieldRow(Vertical):
     """One question: a caption-and-control line, and the help the focused row shows."""
 
@@ -197,6 +208,7 @@ class FieldRow(Vertical):
         border-left: thick {CYAN};
         margin: 1 0;
     }}
+    {_PULSE_CSS}
     FieldRow > .field-head {{
         height: auto;
     }}
@@ -271,6 +283,8 @@ class FieldRow(Vertical):
         self._flag = Static(classes="field-flag", id=f"flag-{question.id}")
         self._help = Static(classes="field-help", id=f"help-{question.id}")
         self._last_value: Any = None
+        self._pulse: Timer | None = None
+        self._beat = 0
 
     def compose(self) -> ComposeResult:
         """The caption line with its control, then the help the focused row reveals."""
@@ -284,6 +298,28 @@ class FieldRow(Vertical):
         """Show the caption, the help and the glyph; the control holds its own value."""
         self._chrome(self._field)
         self._last_value = self.value
+
+    def on_descendant_focus(self) -> None:
+        """Start the bar breathing when the cursor arrives in this question."""
+        self._beat = 0
+        self._breathe()
+        if self._pulse is None:
+            self._pulse = self.set_interval(PULSE_INTERVAL, self._breathe)
+
+    def on_descendant_blur(self) -> None:
+        """Stop it and drop every shade class, so the stylesheet owns the bar again."""
+        if self._pulse is not None:
+            self._pulse.stop()
+            self._pulse = None
+        for index in range(len(PULSE_SHADES)):
+            self.remove_class(f"pulse-{index}")
+
+    def _breathe(self) -> None:
+        """Move the bar one step round the cycle."""
+        shade = PULSE_CYCLE[self._beat % len(PULSE_CYCLE)]
+        self._beat += 1
+        for index in range(len(PULSE_SHADES)):
+            self.set_class(index == shade, f"pulse-{index}")
 
     @property
     def field(self) -> FieldState:

@@ -33,7 +33,10 @@ class SurveyApp(App[int]):
     TITLE = "copier-tui"
 
     BINDINGS: ClassVar[list[Binding]] = [
-        Binding("ctrl+c", "cancel", "Cancel", priority=True, show=False),
+        # ctrl+c is deliberately not bound. It is what a terminal copies with, and Textual
+        # hands it to a focused input as copy of its own; claiming it here quit the survey
+        # mid-answer instead. Leaving is escape twice, or Textual's own ctrl+q.
+        Binding("ctrl+c", "nothing", show=False, system=True),
     ]
 
     def __init__(self, ui: TemplateUI, dst: Path, copier_kwargs: dict[str, Any]) -> None:
@@ -78,6 +81,9 @@ class SurveyApp(App[int]):
     def action_cancel(self) -> None:
         """Leave without writing anything."""
         self.exit(EXIT_CANCELLED)
+
+    def action_nothing(self) -> None:
+        """Absorb a key the app has no business acting on, so the terminal keeps it."""
 
     def _has_questions(self) -> bool:
         """True when at least one field is visible and not already answered by --data."""

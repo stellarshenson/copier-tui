@@ -193,7 +193,7 @@ class InlineOptions(Static):
         """
         chosen = self._in_force(choice)
         here = index == self._cursor and self._has_cursor
-        label = f"{TAKEN if chosen else FREE} {choice.label} "
+        label = f" {TAKEN if chosen else FREE} {choice.label} "
         # the shape already says which option is chosen, which leaves the ground free to say
         # where the cursor is - two facts that hold at once, since the cursor starts on the
         # answer every time. Under the cursor the ground inverts: bright with dark ink, in

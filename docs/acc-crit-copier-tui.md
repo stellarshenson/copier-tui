@@ -373,3 +373,15 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
 - [x] **Cursor carries three cues** - the cursor shows as a bright caret on the row ground, a brighter chip and bold text together; an underline alone was close to invisible
   - log: 2026-08-24 added
   - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+- [x] **Header names the template** - the header carries the template's own short name and calls the screen a questionnaire, since which template is being filled in is the one fact none of its questions carries
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+- [x] **ctrl+c belongs to the terminal** - ctrl+c never leaves the survey; it is what a terminal copies with, and Textual hands it to a focused input as copy of its own
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+- [x] **Answers carry their own ink** - an answer is written in pale yellow and the answer being edited in a warm one, so values are told apart from the captions around them at a glance
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+- [x] **Focus bar breathes** - the bar beside the focused question cycles shades over about two seconds and stops when focus leaves, driven by classes since Textual cannot clear an inline style
+  - log: 2026-08-24 added
+  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py

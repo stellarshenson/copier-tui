@@ -63,8 +63,11 @@ was passed over stays legible beside what was taken and there is no menu to open
 questions underneath. Left and right move between the options; nothing expands, nothing is
 covered.
 
-Rows alternate between two grounds so the eye can tell where one question ends, and the focused
-question keeps a blank line above and below it. Every option is a chip carrying a filled circle
+The header names the template being filled in - the one fact none of its questions carries -
+and answers are written in a pale yellow, warming under the cursor, so a value is never
+mistaken for the caption beside it. Rows alternate between two grounds so the eye can tell
+where one question ends, the focused question keeps a blank line above and below it, and the
+bar beside it breathes slowly rather than sitting still. Every option is a chip carrying a filled circle
 when it is the answer and an empty one when it is not, so being chosen is said in the shape as
 well as in the colour. The answer sits on the one hue in the row, the option under the cursor on
 the brightest neutral, and the rest a step back but fully legible - they are the alternatives
@@ -75,7 +78,8 @@ multiselect option reads exactly like a chosen single one. Options share a line 
 and stack one per line once they do not, so no alternative runs off the edge. Anything that
 accepts typing carries a lifted ground; an option row does not, so only what takes letters looks
 like it does. A caption is coloured by focus alone and never by whether its answer is still the
-default, and the cursor only ever stops on a control.
+default, and the cursor only ever stops on a control. `ctrl+c` is left to the terminal, which
+is what copies with it; leaving is `esc` twice.
 
 Captions are copier's own rendered `help`, which is also the only description copier has, so a
 caption is never cut - it wraps to a second line instead. A long free-text answer wraps too,

@@ -94,6 +94,18 @@ class TemplateAdapter:
             raise TemplateLoadError(str(error)) from error
         return adapter
 
+    def source_name(self) -> str:
+        """The template's short name: the last segment of wherever it came from.
+
+        copier accepts a local path, a git URL and its own `gh:owner/repo` shorthand, and on an
+        update it takes the source from the answers file rather than the command line, so the
+        name is read back off the worker instead of the argument. A `.git` suffix is dropped
+        because it names the transport, not the template.
+        """
+        source = self._worker.src_path or getattr(self._worker.template, "url", "") or ""
+        tail = str(source).rstrip("/").rsplit("/", 1)[-1].rsplit(":", 1)[-1]
+        return tail.removesuffix(".git") or "template"
+
     def questions(self) -> tuple[Question, ...]:
         """Normalised questions in copier.yml declaration order."""
         if self._questions is None:

@@ -123,6 +123,11 @@ class TemplateUI:
         target = self._dst if dst is None else Path(dst)
         self._adapter.run(target, {**self._extra, **self.answers()}, **copier_kwargs)
 
+    @property
+    def template_name(self) -> str:
+        """The template's short name, for a frontend that wants to say which one this is."""
+        return self._adapter.source_name()
+
     def close(self) -> None:
         """Release the template's temporary clone."""
         self._adapter.close()

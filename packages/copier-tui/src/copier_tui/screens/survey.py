@@ -104,7 +104,7 @@ class SurveyScreen(Screen[None]):
 
     def compose(self) -> ComposeResult:
         """Header, the scrolling form, the key legend, footer."""
-        yield HeaderBar("survey")
+        yield HeaderBar(f"{self.ui.template_name} questionnaire")
         yield _Form(id="survey-form")
         yield self._hint
         yield Footer()
@@ -246,11 +246,15 @@ class SurveyScreen(Screen[None]):
         self._hint.update(Text(KEY_HINT, style=TEXT_MUTED))
 
     def _show_position(self) -> None:
-        """The header says which field of how many, so the eye has an anchor while scrolling."""
+        """The header names the template and says which field of how many.
+
+        Which template is being filled in is the one thing a questionnaire cannot be read off
+        its own questions, and it is what a person needs when several are open at once.
+        """
         rows = list(self.query(FieldRow))
         row = self._focused_owner((FieldRow,))
         place = f"{rows.index(row) + 1} of {len(rows)}" if row in rows else f"{len(rows)} fields"
-        self.query_one(HeaderBar).set_context(f"survey - {place}")
+        self.query_one(HeaderBar).set_context(f"{self.ui.template_name} questionnaire - {place}")
 
     def _focus_first(self) -> None:
         """Put the cursor in the first field."""

@@ -17,6 +17,15 @@ CHROME_BG = "#2a313a"
 SURFACE_BG = "#303841"
 BORDER = "#5f6b76"
 
+PULSE_SHADES = ("#46bcf0", "#2f9fd8", "#1b7fae", "#12648b")
+PULSE_CYCLE = (0, 1, 2, 3, 2, 1)
+PULSE_INTERVAL = 0.35
+"""The bar beside the focused question breathes through these shades and back.
+
+Six steps at a third of a second is a little over two seconds a cycle - slow enough to read as
+breathing rather than blinking, which is the difference between an indicator and an alarm. The
+dimmest shade still carries the bar against the row, so the mark never disappears mid-cycle."""
+
 ROW_BG = SCREEN_BG
 ROW_ALT_BG = "#2a313a"
 """The two bands the form alternates between.
@@ -30,13 +39,20 @@ enough to read at a glance."""
 FIELD_BG = "#39424d"
 FIELD_ALT_BG = "#3f4854"
 FIELD_FOCUS_BG = "#495362"
-FIELD_FOCUS_FG = "#e8e8e8"
+ANSWER_FG = "#e3d9a8"
+ANSWER_FOCUS_FG = "#ffc857"
 """The ground under anything the user types into, per band, and lifted again under focus.
 
 Only typing surfaces get one: an option row says "pick me" with its chips, and a typing
 ground there invites the reader to type into a widget that ignores every letter. The ground
 carries the band as well, because a control spans the row and would otherwise paint over the
-stripe - five text questions in a row merged into one lit block."""
+stripe - five text questions in a row merged into one lit block.
+
+An answer is written in pale yellow and the answer being edited in a warm one, so the values
+carry a colour of their own rather than the reading grey of the captions around them: on a
+form this long the question text and the answers to it are the two things most worth telling
+apart at a glance. Both clear the contrast floor on the ground they sit on, 7.16:1 and
+5.06:1."""
 
 OPTION_BG = "#363e49"
 OPTION_FG = "#b8b8b8"
@@ -178,6 +194,7 @@ Input, TextArea, SelectionList {{
 FieldRow > .field-head > Input,
 FieldRow > .field-head > TextArea {{
     background: {FIELD_BG};
+    color: {ANSWER_FG};
 }}
 FieldRow.row-alt > .field-head > Input,
 FieldRow.row-alt > .field-head > TextArea {{
@@ -186,7 +203,7 @@ FieldRow.row-alt > .field-head > TextArea {{
 FieldRow:focus-within > .field-head > Input,
 FieldRow:focus-within > .field-head > TextArea {{
     background: {FIELD_FOCUS_BG};
-    color: {FIELD_FOCUS_FG};
+    color: {ANSWER_FOCUS_FG};
 }}
 FieldRow > .field-head > Input:disabled,
 FieldRow > .field-head > TextArea:disabled {{
