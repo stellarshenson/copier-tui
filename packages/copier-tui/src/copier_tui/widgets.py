@@ -50,7 +50,8 @@ from copier_ui import FieldState, Kind, Question
 
 BRANCH_MORE = "\u251c\u2500 "
 BRANCH_LAST = "\u2514\u2500 "
-_BRANCH_TAIL = {BRANCH_MORE: "\u2502  ", BRANCH_LAST: "   "}
+RAIL = "\u2502"
+_BRANCH_TAIL = {BRANCH_MORE: f"{RAIL}  ", BRANCH_LAST: "   "}
 """The connectors a conditional question prints before its caption, and what carries on down
 the lines its caption wraps onto.
 
@@ -237,7 +238,15 @@ class FieldRow(Vertical):
     FieldRow:focus-within {{
         background: {ROW_FOCUS_BG};
         border-left: thick {CYAN};
-        padding: 1 0;
+    }}
+    FieldRow > .field-rail {{
+        display: none;
+        height: 1;
+        padding: 0 0 0 1;
+        color: {TEXT_SUBTLE};
+    }}
+    FieldRow:focus-within > .field-rail {{
+        display: block;
     }}
     /* the bar is restated here because a banded conditional row matches on two classes and
        would otherwise outrank the focus rule and keep its own ground colour on the bar */
@@ -317,6 +326,8 @@ class FieldRow(Vertical):
         self._field = field
         self._label = Static(classes="field-label")
         self._branch = ""
+        self._rail_above = Static(classes="field-rail")
+        self._rail_below = Static(classes="field-rail")
         self._control = control_for(question, field)
         self._flag = Static(classes="field-flag", id=f"flag-{question.id}")
         self._help = Static(classes="field-help", id=f"help-{question.id}")
@@ -325,12 +336,19 @@ class FieldRow(Vertical):
         self._beat = 0
 
     def compose(self) -> ComposeResult:
-        """The caption line with its control, then the help the focused row reveals."""
+        """A spacer line, the caption line with its control, the help, and a spacer again.
+
+        The spacers are the blank line the focused row keeps either side of itself. They are
+        widgets rather than padding because a run of children has to cross them: padding is
+        empty by definition, so the tree broke wherever the cursor landed inside a run.
+        """
+        yield self._rail_above
         with Horizontal(classes="field-head"):
             yield self._label
             yield self._control
             yield self._flag
         yield self._help
+        yield self._rail_below
 
     def on_mount(self) -> None:
         """Show the caption, the help and the glyph; the control holds its own value."""
@@ -351,13 +369,17 @@ class FieldRow(Vertical):
             self._pulse = None
         for index in range(len(PULSE_SHADES)):
             self.remove_class(f"pulse-{index}")
+        if isinstance(self._control, InlineOptions):
+            self._control.set_mark_shade(CYAN_BRIGHT)
 
     def _breathe(self) -> None:
-        """Move the bar one step round the cycle."""
+        """Move the bar one step round the cycle, and the cursor mark with it."""
         shade = PULSE_CYCLE[self._beat % len(PULSE_CYCLE)]
         self._beat += 1
         for index in range(len(PULSE_SHADES)):
             self.set_class(index == shade, f"pulse-{index}")
+        if isinstance(self._control, InlineOptions):
+            self._control.set_mark_shade(PULSE_SHADES[shade])
 
     @property
     def field(self) -> FieldState:
@@ -392,12 +414,17 @@ class FieldRow(Vertical):
         # control looked like
         self.set_class(not field.enabled, "row-off")
 
-    def set_branch(self, glyph: str) -> None:
-        """Print a tree connector before the caption, or clear the one already there.
+    def set_branch(self, glyph: str, sibling_above: bool = False) -> None:
+        """Print a tree connector before the caption, and carry the run over the spacers.
 
-        The form owns the glyph because only the form knows what sits under this row, and a
-        connector is a statement about the rows around it rather than about this question.
+        The form owns both because only the form knows what sits around this row, and a
+        connector is a statement about its neighbours rather than about this question. A
+        spacer carries the run only where the run actually crosses it - under a row with a
+        sibling below, over a row with one above - so a rail never points at nothing.
         """
+        rail = Text(RAIL, style=TEXT_SUBTLE)
+        self._rail_above.update(rail if sibling_above else Text(""))
+        self._rail_below.update(rail if glyph == BRANCH_MORE else Text(""))
         if glyph == self._branch:
             return
         self._branch = glyph

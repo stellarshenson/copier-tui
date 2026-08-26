@@ -40,7 +40,7 @@ from copier_tui.theme import (
     ROW_FOCUS_BG,
     SURFACE_BG,
 )
-from copier_tui.widgets import BRANCH_LAST, BRANCH_MORE, FieldRow
+from copier_tui.widgets import BRANCH_LAST, BRANCH_MORE, RAIL, FieldRow
 from copier_ui import Choice, TemplateUI
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
@@ -493,15 +493,18 @@ async def test_the_focused_row_paints_the_blank_line_either_side_of_itself(
 ) -> None:
     """Row ground: the spacing around the focused row belongs to the row, not to the gap.
 
-    The blank lines are padding rather than margin. Margin sits outside the widget, so it
-    took the form's ground and cut the focused row's plate into a strip with the screen
-    showing through above and below it.
+    The blank lines are two widgets of the row's own rather than margin or padding. Margin
+    sits outside the widget, so it took the form's ground and cut the plate into a strip with
+    the screen showing through; padding took the ground but stayed empty, and a run of
+    children has to cross it.
     """
     async with survey(tmp_path / "out") as (app, _):
         row = rows(app)[0]  # `name`, focused on mount
-        assert row.styles.padding.top == 1
-        assert row.styles.padding.bottom == 1
+        rails = list(row.query(".field-rail"))
+        assert len(rails) == 2
+        assert all(rail.display for rail in rails)
         assert row.styles.margin.top == 0
+        assert row.region.height == 3
 
         painted = {
             segment.style.bgcolor.triplet.hex.lower()
@@ -565,3 +568,59 @@ async def test_a_wrapped_child_caption_hangs_off_its_connector(tmp_path: Path) -
         assert captions["region"][0].startswith(BRANCH_LAST)
         assert all(line.startswith("   ") for line in captions["region"][1:])
         assert not any(line.startswith("\u2502") for line in captions["region"][1:])
+
+
+async def test_the_run_crosses_the_blank_line_the_cursor_opens(tmp_path: Path) -> None:
+    """Tree connectors: the spacing around the focused row does not break the run.
+
+    The blank line the cursor opens either side of itself landed in the middle of a run of
+    children and cut the column the connectors are read down. It carries the run now, and
+    only where the run actually crosses it - never above a first child or below a last.
+    """
+    async with survey(tmp_path / "out", template="tui_tree") as (app, pilot):
+
+        def rails(field_id: str) -> list[str]:
+            row = {r.question.id: r for r in rows(app)}[field_id]
+            return [str(rail.visual) for rail in row.query(".field-rail")]
+
+        app.screen.set_focus(app.screen.query_one("#ctl-bucket"))
+        await pilot.pause()
+        assert rails("bucket") == ["", RAIL]  # nothing above a first child, the run below it
+
+        app.screen.set_focus(app.screen.query_one("#ctl-region"))
+        await pilot.pause()
+        assert rails("region") == [RAIL, ""]  # the run above a last child, nothing below it
+
+        app.screen.set_focus(app.screen.query_one("#ctl-owner"))
+        await pilot.pause()
+        assert rails("owner") == ["", ""]  # a row in no run at all opens two blank lines
+
+
+async def test_the_cursor_mark_breathes_with_the_bar(tmp_path: Path) -> None:
+    """Focus bar: the mark on the option row takes its colour from the row's own beat.
+
+    Two things breathing on separate timers drift apart and read as two signals rather than
+    one row being answered, so the row drives both and the mark never keeps a beat of its own.
+    """
+    async with survey(tmp_path / "out") as (app, pilot):
+        row = {r.question.id: r for r in rows(app)}["advanced"]
+        app.screen.set_focus(app.screen.query_one("#ctl-advanced", InlineOptions))
+        await pilot.pause()
+
+        def mark_ink() -> str:
+            for line in range(max(1, row.size.height)):
+                for segment in row.query_one("#ctl-advanced", InlineOptions).render_line(line):
+                    if CURSOR in segment.text and segment.style and segment.style.color:
+                        return segment.style.color.triplet.hex.lower()
+            raise AssertionError("the cursor mark was never painted")
+
+        # the beat is driven by hand here: the row's own timer keeps running through an
+        # awaited pause, so a sampled cycle skips phases and misses the ends of the ramp
+        row._pulse.stop()
+        row._beat = 0
+        seen = set()
+        for _ in range(len(PULSE_CYCLE)):
+            row._breathe()
+            await pilot.pause()
+            seen.add(mark_ink())
+        assert seen == {shade.lower() for shade in PULSE_SHADES}

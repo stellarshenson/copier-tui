@@ -95,6 +95,7 @@ class InlineOptions(Static):
         # finished setting when it delivers the Focus event: painting from it drew the row as
         # though it were still blurred, so the cursor mark never appeared on arrival
         self._has_cursor = False
+        self._mark_shade = CYAN_BRIGHT
         self.set_options(choices, value)
 
     def set_options(self, choices: Sequence[Choice], value: Any) -> None:
@@ -208,7 +209,7 @@ class InlineOptions(Static):
             # set back a step, never dimmed out of legibility: these are the alternatives the
             # reader is deciding against, so they have to stay readable to be worth showing
             style = f"{OPTION_FG} on {OPTION_BG}"
-        mark = (CURSOR, f"bold {CYAN_BRIGHT}") if here else (" ", "")
+        mark = (CURSOR, f"bold {self._mark_shade}") if here else (" ", "")
         return [mark, (label, style)]
 
     def _fits(self, chips: list[list[tuple[str, str]]]) -> bool:
@@ -226,6 +227,19 @@ class InlineOptions(Static):
         if self._multiple:
             return choice.value in (self._value or [])
         return choice.value == self._value
+
+    def set_mark_shade(self, shade: str) -> None:
+        """Take the next colour of the row's breath, so mark and bar are never out of phase.
+
+        The row owns the beat rather than the control keeping one of its own: two things
+        breathing on separate timers drift apart, and the pair reads as two signals rather
+        than one row being answered.
+        """
+        if shade == self._mark_shade:
+            return
+        self._mark_shade = shade
+        if self._has_cursor:
+            self._paint()
 
     def on_focus(self) -> None:
         """Repaint so the cursor mark appears."""

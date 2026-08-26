@@ -67,11 +67,19 @@ async def test_only_visible_askable_questions_are_shown(tmp_path: Path) -> None:
 
 
 async def test_a_plain_field_costs_exactly_one_row(tmp_path: Path) -> None:
-    """Label, control and status glyph share one line, so a long survey stays short."""
+    """Label, control and status glyph share one line, so a long survey stays short.
+
+    The caption line is measured rather than the row, because the focused row also carries
+    the blank line it keeps either side of itself - that spacing is the point of it, and
+    asserting on the row alone would call the row under the cursor a regression.
+    """
     async with survey(tmp_path / "out", template="tui_kinds") as (app, _):
         for field_id in ("text", "where", "count", "ratio", "enabled", "flavour", "token"):
             row = app.screen.query_one(f"#row-{field_id}", FieldRow)
-            assert row.size.height == 1, f"{field_id} is {row.size.height} rows tall"
+            head = row.query_one(".field-head")
+            assert head.size.height == 1, f"{field_id} caption is {head.size.height} rows tall"
+            if not row.has_focus_within:
+                assert row.size.height == 1, f"{field_id} is {row.size.height} rows tall"
 
 
 async def test_the_whole_form_is_about_one_line_per_question(tmp_path: Path) -> None:

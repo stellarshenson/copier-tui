@@ -234,7 +234,7 @@ class SurveyScreen(Screen[None]):
             # indents its caption: `condition_ids` is what its `when` reads, so the renderer
             # never has to know what the rule says to know there is one
             row.set_class(bool(row.question.condition_ids), "row-cond")
-            row.set_branch(_branch_glyph(self.ui, wanted, position))
+            row.set_branch(*_branch(self.ui, wanted, position))
             previous = row
         self._show_hint()
         self._show_position()
@@ -299,8 +299,8 @@ def _at_edge(owner: Widget, key: str) -> bool | None:
     return None
 
 
-def _branch_glyph(ui: TemplateUI, order: list[str], position: int) -> str:
-    """The connector the row at this position prints, empty when it is not conditional.
+def _branch(ui: TemplateUI, order: list[str], position: int) -> tuple[str, bool]:
+    """The connector the row prints, and whether a sibling sits directly above it.
 
     `condition_ids` is what a question's `when` reads, so the renderer never has to know what
     the rule says to know there is one, or which answer it hangs from.
@@ -310,11 +310,12 @@ def _branch_glyph(ui: TemplateUI, order: list[str], position: int) -> str:
     if not parents or not any(parent in order for parent in parents):
         # an answer supplied with --data is never asked for, so its children would otherwise
         # hang off a row that is not on the form
-        return ""
-    following = order[position + 1] if position + 1 < len(order) else None
-    if following is not None and schema.by_id(following).condition_ids == parents:
-        return BRANCH_MORE
-    return BRANCH_LAST
+        return "", False
+
+    def shares(index: int) -> bool:
+        return 0 <= index < len(order) and schema.by_id(order[index]).condition_ids == parents
+
+    return (BRANCH_MORE if shares(position + 1) else BRANCH_LAST), shares(position - 1)
 
 
 def askable_ids(state: State) -> list[str]:

@@ -404,3 +404,9 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
 - [x] **Wrapped child captions clear the connector** - a conditional caption too long for its gutter wraps with a hanging indent, the lines after the first carrying the run down on a child with siblings below it and blank on the last, so prose never lands in the connector column
   - log: 2026-08-26 added
   - log: 2026-08-26 closed: built - tests/unit/test_tui_appearance.py (v1.0.9)
+- [x] **Run crosses the cursor's gap** - the blank line the focused row keeps either side of itself carries the run down when a sibling sits across it, so landing the cursor inside a run of children never breaks the connector column
+  - log: 2026-08-26 added
+  - log: 2026-08-26 closed: built - tests/unit/test_tui_appearance.py; the spacing became two widgets of the row's own, since padding cannot carry a glyph (v1.0.10)
+- [x] **Cursor mark breathes with the bar** - the mark on an option row takes each shade from the row's own beat, so mark and focus bar are never out of phase
+  - log: 2026-08-26 added
+  - log: 2026-08-26 closed: built - tests/unit/test_tui_appearance.py (v1.0.10)
