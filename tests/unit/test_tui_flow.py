@@ -11,7 +11,7 @@ import copier
 import pytest
 from textual.containers import VerticalScroll
 from textual.pilot import Pilot
-from textual.widgets import ProgressBar, Static
+from textual.widgets import ProgressBar, RichLog, Static
 from textual.widgets._progress_bar import Bar
 
 from copier_tui.app import SurveyApp
@@ -148,6 +148,25 @@ async def test_a_confirmed_render_writes_the_project_and_exits_zero(tmp_path: Pa
         await pilot.press("space")
         assert await wait_until(pilot, lambda: not app.is_running)
         assert app.return_value == EXIT_OK
+
+
+async def test_the_render_lists_what_it_writes(tmp_path: Path) -> None:
+    """The destination is the run's only account of itself, so the screen reads it back.
+
+    copier reports nothing while it works, and a bar that only pulses says the run is alive
+    without saying it is doing anything - on a template cloned over a slow line that is the
+    difference between waiting and wondering.
+    """
+    dst = tmp_path / "out"
+    async with running(dst) as (app, pilot):
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        listed = app.screen.query_one("#exec-files", RichLog)
+        assert await wait_until(
+            pilot, lambda: any("name.txt" in strip.text for strip in listed.lines)
+        )
 
 
 async def test_a_failed_render_shows_the_message_and_keeps_partial_output(

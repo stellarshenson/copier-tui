@@ -441,3 +441,22 @@ async def test_the_terminal_size_prompt_comes_and_goes(tmp_path: Path) -> None:
             await pilot.resize_terminal(100, 40)
             await pilot.pause()
             assert not app.screen.query("#resize-prompt")
+
+
+async def test_the_survey_says_where_the_template_will_be_rendered(tmp_path: Path) -> None:
+    """The destination sits beside the key legend, home-relative where that shortens it.
+
+    It is the one fact a person filling in thirty answers cannot recover from anything else on
+    the screen, and by then the command line that carried it has scrolled away.
+    """
+    dst = tmp_path / "out"
+    async with survey(dst) as (app, _):
+        assert str(dst) in str(app.screen.query_one("#survey-where", Static).visual)
+
+    home = Path.home() / "somewhere-under-home"
+    with TemplateUI.from_template(str(FIXTURES / "tui_flow"), dst=home) as ui:
+        app = SurveyApp(ui, home, {})
+        async with app.run_test(size=(100, 40)) as pilot:
+            await pilot.pause()
+            shown = str(app.screen.query_one("#survey-where", Static).visual)
+    assert shown.endswith("~/somewhere-under-home"), shown

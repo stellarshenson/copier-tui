@@ -57,7 +57,7 @@ class SurveyApp(App[int]):
         self.register_theme(THEME)
         self.theme = THEME.name
         if self._has_questions():
-            self._push(SurveyScreen(self.ui))
+            self._push(SurveyScreen(self.ui, self.dst))
         else:
             self._open_review()
 

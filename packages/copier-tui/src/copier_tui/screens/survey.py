@@ -3,19 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 from typing import ClassVar
 
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import VerticalScroll
+from textual.containers import Horizontal, VerticalScroll
 from textual.css.query import NoMatches
 from textual.message import Message
 from textual.screen import Screen
 from textual.widget import Widget
 from textual.widgets import Footer, Static, TextArea
 
-from copier_tui.theme import ROSE, TEXT_MUTED
+from copier_tui.theme import ROSE, TEXT_MUTED, TEXT_SUBTLE
 from copier_tui.widgets import BRANCH_LAST, BRANCH_MORE, FieldRow, HeaderBar
 from copier_ui import State, TemplateUI
 
@@ -80,11 +81,21 @@ class SurveyScreen(Screen[None]):
         padding: 1 2 0 0;
         scrollbar-size-vertical: 1;
     }}
-    #survey-hint {{
+    #survey-status {{
         height: 1;
         width: 100%;
+    }}
+    #survey-hint {{
+        width: 1fr;
         padding: 0 1;
         color: {TEXT_MUTED};
+    }}
+    #survey-where {{
+        width: auto;
+        max-width: 60%;
+        padding: 0 1;
+        color: {TEXT_SUBTLE};
+        text-align: right;
     }}
     """
 
@@ -95,10 +106,11 @@ class SurveyScreen(Screen[None]):
         Binding("up", "focus_previous", "Previous field", show=False, priority=True),
     ]
 
-    def __init__(self, ui: TemplateUI) -> None:
-        """Hold the template UI the rows are built from."""
+    def __init__(self, ui: TemplateUI, dst: Path) -> None:
+        """Hold the template UI the rows are built from, and where the answers will land."""
         super().__init__(id="survey-screen")
         self.ui = ui
+        self.dst = dst
         self._hint = Static(id="survey-hint")
         self._armed = False
 
@@ -106,7 +118,10 @@ class SurveyScreen(Screen[None]):
         """Header, the scrolling form, the key legend, footer."""
         yield HeaderBar(f"{self.ui.template_name} questionnaire")
         yield _Form(id="survey-form")
-        yield self._hint
+        # the destination sits beside the legend rather than in the header, which is already
+        # carrying the template name and the field position - and it is the one fact a person
+        # filling in thirty answers cannot recover from anything else on the screen
+        yield Horizontal(self._hint, Static(_where_text(self.dst), id="survey-where"))
         yield Footer()
 
     async def on_mount(self) -> None:
@@ -297,6 +312,19 @@ def _at_edge(owner: Widget, key: str) -> bool | None:
         last = owner.document.line_count - 1
         return True if (row == 0 if key == "up" else row >= last) else None
     return None
+
+
+def _where_text(dst: Path) -> Text:
+    """Where the answers will be written, shortened to the home-relative form when it helps.
+
+    An absolute path under the home directory is mostly prefix, and the prefix is the part a
+    person already knows; the tail is the part that says which project this is.
+    """
+    shown = str(dst)
+    home = str(Path.home())
+    if shown.startswith(home + "/"):
+        shown = "~" + shown[len(home) :]
+    return Text(f"\u2192 {shown}", style=TEXT_SUBTLE, overflow="ellipsis", no_wrap=True)
 
 
 def _branch(ui: TemplateUI, order: list[str], position: int) -> tuple[str, bool]:

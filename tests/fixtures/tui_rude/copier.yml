@@ -1,0 +1,8 @@
+_subdirectory: template
+
+_tasks:
+    # the two ways a template's own tasks have taken the keyboard away from the form: one
+    # that reads whatever stdin offers it, and one that puts the line discipline back to
+    # cooked on a terminal the app is holding raw
+    - ["python3", "-c", "import sys; sys.stdin.read()"]
+    - "stty sane < /dev/tty || true"

@@ -260,6 +260,12 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
 - [x] **Execution screen** - instantiation runs on its own screen with progress and a final success or failure verdict
   - log: 2026-08-22 criterion added (v0.1.0)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_flow.py
+- [x] **The render names what it writes** - files appear on the execution screen as they are written, since copier reports nothing back and a bar that only pulses says the run is alive but not that it is doing anything
+  - log: 2026-08-26 added
+  - log: 2026-08-27 closed: built - tests/unit/test_tui_flow.py
+- [x] **Destination in sight** - the survey's status line names where the template will be rendered, home-relative where that shortens it; it is the one fact a person filling in thirty answers cannot recover from anything else on the screen
+  - log: 2026-08-26 added
+  - log: 2026-08-27 closed: built - tests/unit/test_tui_survey.py
 - [x] **Exit code** - the process exits 0 on a completed render, non-zero on a failed render or a user cancel
   - log: 2026-08-22 criterion added (v0.1.0)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_flow.py
@@ -337,9 +343,13 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
 - [x] **Edge: row the answers rule out** - a disabled question greys its caption with its control, so a dead row never reads as one merely unfocused
   - log: 2026-08-24 added
   - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
-- [x] **Render keeps the keyboard** - the copier run happens with stdin on /dev/null, so a template task cannot eat the keystrokes and leave 'press any key to close' dead; descriptors 1 and 2 stay, since Textual paints through 1
+- [x] **Render keeps the keyboard** - everything the copier run starts gets a stdin of /dev/null, so a template task cannot eat the keystrokes and leave 'press any key to close' dead; the app's own descriptors are never swapped, and 1 and 2 stay open since Textual paints through 1
   - log: 2026-08-24 added
   - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-27 amended: the children get /dev/null, not this process - pointing descriptor 0 there spun Textual's input thread on end-of-file and left the app deaf; test moved to tests/unit/test_tui_terminal.py
+- [x] **Render keeps the terminal mode** - the line discipline is put back the way the driver set it once the render is over, so a task that cooks the terminal cannot leave the form deaf to a keystroke that carries no newline
+  - log: 2026-08-27 added
+  - log: 2026-08-27 closed: built - tests/unit/test_tui_terminal.py, which drives the whole app through a pty against a template whose tasks go for the terminal
 - [x] **Every option is a chip** - every option carries a ground, so a bare label never reads as prose and the question's caption never reads as one of its own answers
   - log: 2026-08-24 added
   - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py

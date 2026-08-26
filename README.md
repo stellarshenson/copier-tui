@@ -20,6 +20,7 @@ A drop-in wrapper for [copier](https://copier.readthedocs.io) with a terminal UI
 - **Drop-in for `copier`** - same subcommands, arguments, flags and short forms
 - **Every template works unchanged** - copier stays the engine, answers go in through its Python API
 - **Conditional fields nest** - a `when` field appears under the answer that governs it
+- **The run is accounted for** - the survey names where the template will land, and the render lists the files as they are written
 - **Reusable core** - `copier-ui` needs no terminal or event loop, so a web or HTTP frontend reuses it
 
 ## Installation

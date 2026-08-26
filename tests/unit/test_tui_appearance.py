@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-import os
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +17,6 @@ from textual.widgets import Static
 from copier_tui.app import SurveyApp
 from copier_tui.inline import CURSOR, FREE, TAKEN, InlineOptions
 from copier_tui.screens import SurveyScreen
-from copier_tui.screens.execution import _detached_stdin
 from copier_tui.theme import (
     CURSOR_BG,
     CURSOR_PICKED_BG,
@@ -172,22 +170,6 @@ async def test_a_row_the_answers_rule_out_is_marked_inert(tmp_path: Path) -> Non
         for row in broken.values():
             assert "row-off" in row.classes
             assert row.query_one(f"#ctl-{row.question.id}").disabled
-
-
-def test_the_render_runs_with_stdin_detached() -> None:
-    """Exit: nothing copier starts inherits the keyboard the form is reading.
-
-    A template's tasks are subprocesses holding this process's own descriptors, so under
-    `--trust` a task that reads stdin eats the keystrokes meant for the app - after which
-    "press any key to close" never fires again. Descriptor 0 is moved for the render and put
-    back afterwards; 1 and 2 stay, because Textual paints the screen through 1.
-    """
-    before = os.fstat(0)
-    with _detached_stdin():
-        inside = os.stat(os.devnull)
-        assert os.fstat(0).st_rdev == inside.st_rdev
-    after = os.fstat(0)
-    assert (after.st_dev, after.st_ino) == (before.st_dev, before.st_ino)
 
 
 async def test_the_first_field_holds_the_focus_as_soon_as_the_form_opens(tmp_path: Path) -> None:
