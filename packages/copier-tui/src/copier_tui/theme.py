@@ -99,9 +99,30 @@ wraps onto a second line is indistinguishable from the next question starting. T
 terminal intact and still could not be seen, so the band is worth nothing until it is wide
 enough to read at a glance."""
 
+ROW_COND_BG = "#1a271f"
+ROW_ALT_COND_BG = "#2a3934"
+"""Each band again, for a question another answer decides whether to ask.
+
+Green rather than more blue, because the cursor already owns the blue lean and two tints of
+the same hue a few parts apart are one tint the reader cannot place. Green is raised 8 and
+blue dropped 6, so the lean is a hue and not a brightness - the ground gains under half a
+percent of luminance, and a caption on it still measures 8.80:1 and 6.87:1.
+
+The same 8 and 6 lean the typing ground on a conditional row - `FIELD_COND_BG` and
+`FIELD_ALT_COND_BG` beside the grounds below - since a control spans the row and a ground
+that stayed neutral would cut the tint in half across the widest part of the question.
+
+A conditional row indents its caption as well, because a tint this small is not worth
+carrying a meaning on its own. The cursor's tint wins on both grounds while the row has
+focus: the indent still says the question is conditional, and two leans on one ground read
+as neither.
+"""
+
 FIELD_BG = "#39424d"
 FIELD_ALT_BG = "#3f4854"
 FIELD_FOCUS_BG = "#495362"
+FIELD_COND_BG = "#394a47"
+FIELD_ALT_COND_BG = "#3f504e"
 ANSWER_FG = "#dcdcdc"
 ANSWER_FOCUS_FG = "#ffb866"
 """The ground under anything the user types into, per band, and lifted again under focus.
@@ -265,10 +286,22 @@ FieldRow.row-alt > .field-head > Input,
 FieldRow.row-alt > .field-head > TextArea {{
     background: {FIELD_ALT_BG};
 }}
+FieldRow.row-cond > .field-head > Input,
+FieldRow.row-cond > .field-head > TextArea {{
+    background: {FIELD_COND_BG};
+}}
+FieldRow.row-alt.row-cond > .field-head > Input,
+FieldRow.row-alt.row-cond > .field-head > TextArea {{
+    background: {FIELD_ALT_COND_BG};
+}}
 FieldRow:focus-within > .field-head > Input,
 FieldRow:focus-within > .field-head > TextArea {{
     background: {FIELD_FOCUS_BG};
     color: {ANSWER_FOCUS_FG};
+}}
+FieldRow.row-alt.row-cond:focus-within > .field-head > Input,
+FieldRow.row-alt.row-cond:focus-within > .field-head > TextArea {{
+    background: {FIELD_FOCUS_BG};
 }}
 FieldRow > .field-head > Input:disabled,
 FieldRow > .field-head > TextArea:disabled {{

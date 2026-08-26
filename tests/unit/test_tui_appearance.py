@@ -19,11 +19,14 @@ from copier_tui.app import SurveyApp
 from copier_tui.inline import CURSOR, FREE, TAKEN, InlineOptions
 from copier_tui.screens import SurveyScreen
 from copier_tui.screens.execution import _detached_stdin
+from copier_tui.screens.survey import BRANCH_LAST, BRANCH_MORE
 from copier_tui.theme import (
     CURSOR_BG,
     CURSOR_PICKED_BG,
     FIELD_ALT_BG,
+    FIELD_ALT_COND_BG,
     FIELD_BG,
+    FIELD_COND_BG,
     FIELD_FOCUS_BG,
     OPTION_BG,
     PICKED_BG,
@@ -31,8 +34,10 @@ from copier_tui.theme import (
     PULSE_INTERVAL,
     PULSE_SHADES,
     ROW_ALT_BG,
+    ROW_ALT_COND_BG,
     ROW_ALT_FOCUS_BG,
     ROW_BG,
+    ROW_COND_BG,
     ROW_FOCUS_BG,
     SURFACE_BG,
 )
@@ -47,10 +52,13 @@ BAND = "row-alt"
 
 @asynccontextmanager
 async def survey(
-    dst: Path, template: str = "tui_flow", size: tuple[int, int] = (100, 40)
+    dst: Path,
+    template: str = "tui_flow",
+    size: tuple[int, int] = (100, 40),
+    data: dict[str, Any] | None = None,
 ) -> AsyncIterator[tuple[SurveyApp, Any]]:
     """A running survey over a fixture template, paused on its first screen."""
-    with TemplateUI.from_template(str(FIXTURES / template), dst=dst) as ui:
+    with TemplateUI.from_template(str(FIXTURES / template), dst=dst, data=data) as ui:
         app = SurveyApp(ui, dst, {"quiet": True, "unsafe": True})
         async with app.run_test(size=size) as pilot:
             await pilot.pause()
@@ -395,3 +403,144 @@ async def test_the_focused_row_leans_its_ground_towards_blue(tmp_path: Path) -> 
 
         assert blue(ROW_FOCUS_BG) - blue(ROW_BG) < blue(ROW_ALT_BG) - blue(ROW_BG)
         assert blue(ROW_ALT_FOCUS_BG) > blue(ROW_ALT_BG)
+
+
+async def test_a_conditional_row_leans_green_and_hangs_off_its_answer(tmp_path: Path) -> None:
+    """Row ground: a question another answer decides whether to ask says so twice.
+
+    Green because the cursor owns the blue lean, and a tree connector because a tint this
+    small cannot carry the meaning alone. `detail` is the only conditional question in the
+    fixture, so the other three rows are what says the cue is not simply on everything.
+    """
+    async with survey(tmp_path / "out") as (app, pilot):
+        app.screen.set_focus(app.screen.query_one("#ctl-advanced", InlineOptions))
+        await pilot.press("right")
+        await pilot.pause()
+
+        marked = {row.question.id for row in rows(app) if "row-cond" in row.classes}
+        assert marked == {"detail"}
+
+        by_id = {row.question.id: row for row in rows(app)}
+        assert by_id["detail"].styles.background.hex6.lower() == ROW_COND_BG
+        assert by_id["token"].styles.background.hex6.lower() == ROW_ALT_BG
+        # the control spans the row, so a neutral typing ground would cut the tint in half
+        # across the widest part of the question
+        assert (
+            by_id["detail"].query_one("#ctl-detail").styles.background.hex6.lower()
+            == FIELD_COND_BG
+        )
+        assert (
+            by_id["token"].query_one("#ctl-token").styles.background.hex6.lower() == FIELD_ALT_BG
+        )
+
+        def caption(field_id: str) -> str:
+            return str(by_id[field_id].query_one(".field-label", Static).visual)
+
+        assert caption("detail").startswith(BRANCH_LAST)
+        assert not caption("token").startswith((BRANCH_LAST, BRANCH_MORE))
+
+
+def test_the_two_row_tints_lean_on_different_channels() -> None:
+    """Row ground: focus leans blue and a conditional question leans green, by construction.
+
+    Two tints a few parts apart on one channel are one tint the reader cannot place, so the
+    axes are asserted rather than the hexes - either lean may be retuned, but not onto the
+    other's channel.
+    """
+
+    def channels(colour: str) -> tuple[int, int, int]:
+        return tuple(int(colour[i : i + 2], 16) for i in (1, 3, 5))
+
+    for band, focus, cond in (
+        (ROW_BG, ROW_FOCUS_BG, ROW_COND_BG),
+        (ROW_ALT_BG, ROW_ALT_FOCUS_BG, ROW_ALT_COND_BG),
+    ):
+        _, band_green, band_blue = channels(band)
+        _, focus_green, focus_blue = channels(focus)
+        _, cond_green, cond_blue = channels(cond)
+        assert focus_blue > band_blue and focus_green - band_green <= 1
+        assert cond_green > band_green and cond_blue < band_blue
+
+
+async def test_a_banded_conditional_row_still_yields_its_grounds_to_the_cursor(
+    tmp_path: Path,
+) -> None:
+    """Row ground: the cursor wins on a row wearing both classes, ground and control alike.
+
+    Textual ranks by specificity first, and a row matching on two classes outranks the focus
+    rule that matches on one - so the combination has to be spelled out or the focused row
+    keeps its conditional tint and stops looking focused. The fixture's one conditional
+    question always lands on the plain band, so the band is put on it here.
+    """
+    async with survey(tmp_path / "out") as (app, pilot):
+        app.screen.set_focus(app.screen.query_one("#ctl-advanced", InlineOptions))
+        await pilot.press("right")
+        await pilot.pause()
+
+        row = {r.question.id: r for r in rows(app)}["detail"]
+        row.add_class(BAND)
+        await pilot.pause()
+        assert row.styles.background.hex6.lower() == ROW_ALT_COND_BG
+        assert row.query_one("#ctl-detail").styles.background.hex6.lower() == FIELD_ALT_COND_BG
+
+        app.screen.set_focus(row.query_one("#ctl-detail"))
+        await pilot.pause()
+        assert row.styles.background.hex6.lower() == ROW_ALT_FOCUS_BG
+        assert row.query_one("#ctl-detail").styles.background.hex6.lower() == FIELD_FOCUS_BG
+
+
+async def test_the_focused_row_paints_the_blank_line_either_side_of_itself(
+    tmp_path: Path,
+) -> None:
+    """Row ground: the spacing around the focused row belongs to the row, not to the gap.
+
+    The blank lines are padding rather than margin. Margin sits outside the widget, so it
+    took the form's ground and cut the focused row's plate into a strip with the screen
+    showing through above and below it.
+    """
+    async with survey(tmp_path / "out") as (app, _):
+        row = rows(app)[0]  # `name`, focused on mount
+        assert row.styles.padding.top == 1
+        assert row.styles.padding.bottom == 1
+        assert row.styles.margin.top == 0
+
+        painted = {
+            segment.style.bgcolor.triplet.hex.lower()
+            for line in range(row.region.height)
+            for segment in row.render_line(line)
+            if segment.style and segment.style.bgcolor
+        }
+        assert painted == {ROW_FOCUS_BG}
+
+
+async def test_children_of_one_answer_are_drawn_as_a_run(tmp_path: Path) -> None:
+    """Tree connectors: only the last child of an answer closes the run.
+
+    Two questions hanging off the same answer both printing the last-child connector reads
+    as two runs of one rather than one run of two.
+    """
+    async with survey(tmp_path / "out", template="tui_tree") as (app, _):
+
+        def caption(field_id: str) -> str:
+            row = {r.question.id: r for r in rows(app)}[field_id]
+            return str(row.query_one(".field-label", Static).visual)
+
+        assert [row.question.id for row in rows(app)] == ["storage", "bucket", "region", "owner"]
+        assert caption("bucket").startswith(BRANCH_MORE)
+        assert caption("region").startswith(BRANCH_LAST)
+        assert not caption("storage").startswith((BRANCH_MORE, BRANCH_LAST))
+        assert not caption("owner").startswith((BRANCH_MORE, BRANCH_LAST))
+
+
+async def test_a_child_whose_answer_was_supplied_draws_no_connector(tmp_path: Path) -> None:
+    """Tree connectors: nothing hangs off a row that is not on the form.
+
+    An answer given with --data is never asked for, so its children are on their own and a
+    connector under them points at the question above, which decides nothing about them.
+    """
+    async with survey(tmp_path / "out", template="tui_tree", data={"storage": "s3"}) as (app, _):
+        shown = [row.question.id for row in rows(app)]
+        assert "storage" not in shown
+        for row in rows(app):
+            caption = str(row.query_one(".field-label", Static).visual)
+            assert not caption.startswith((BRANCH_MORE, BRANCH_LAST)), row.question.id

@@ -37,6 +37,14 @@ arrows that walk the form."""
 _ARROW_OWNERS = (TextArea,)
 """Controls that move a cursor of their own with up and down, at anything but their edge."""
 
+BRANCH_MORE = "\u251c\u2500 "
+BRANCH_LAST = "\u2514\u2500 "
+"""The connectors a conditional question prints before its caption, through and last.
+
+A question another answer decides whether to ask is drawn as that answer's child. Where
+several children of one answer sit together, all but the last take the through connector: a
+row claiming to be the last child of a run it is in the middle of reads as two runs."""
+
 KEY_HINT = "up down  move    left right  choose    enter  review and create"
 """The legend under the form. Every key that moves or changes something is named, because a
 survey nobody can navigate is worse than one that spends a row saying how."""
@@ -230,6 +238,11 @@ class SurveyScreen(Screen[None]):
             # everything below it, and a form that keeps the old parity reads as though two
             # adjacent questions were one
             row.set_class(position % 2 == 1, "row-alt")
+            # a question another answer decides whether to ask leans its ground green and
+            # indents its caption: `condition_ids` is what its `when` reads, so the renderer
+            # never has to know what the rule says to know there is one
+            row.set_class(bool(row.question.condition_ids), "row-cond")
+            row.set_branch(_branch_glyph(self.ui, wanted, position))
             previous = row
         self._show_hint()
         self._show_position()
@@ -292,6 +305,24 @@ def _at_edge(owner: Widget, key: str) -> bool | None:
         last = owner.document.line_count - 1
         return True if (row == 0 if key == "up" else row >= last) else None
     return None
+
+
+def _branch_glyph(ui: TemplateUI, order: list[str], position: int) -> str:
+    """The connector the row at this position prints, empty when it is not conditional.
+
+    `condition_ids` is what a question's `when` reads, so the renderer never has to know what
+    the rule says to know there is one, or which answer it hangs from.
+    """
+    schema = ui.schema()
+    parents = schema.by_id(order[position]).condition_ids
+    if not parents or not any(parent in order for parent in parents):
+        # an answer supplied with --data is never asked for, so its children would otherwise
+        # hang off a row that is not on the form
+        return ""
+    following = order[position + 1] if position + 1 < len(order) else None
+    if following is not None and schema.by_id(following).condition_ids == parents:
+        return BRANCH_MORE
+    return BRANCH_LAST
 
 
 def askable_ids(state: State) -> list[str]:

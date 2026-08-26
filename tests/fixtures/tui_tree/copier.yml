@@ -1,0 +1,20 @@
+_subdirectory: template
+
+storage:
+    type: str
+    default: s3
+    choices: [s3, azure]
+
+bucket:
+    type: str
+    default: demo-bucket
+    when: "{{ storage == 's3' }}"
+
+region:
+    type: str
+    default: eu-west-1
+    when: "{{ storage == 's3' }}"
+
+owner:
+    type: str
+    default: demo

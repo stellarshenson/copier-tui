@@ -352,9 +352,10 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
 - [x] **Every stop is actionable** - the cursor only ever stops on a control; the scrolling form is not itself a tab stop
   - log: 2026-08-24 added
   - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
-- [x] **Focused row is spaced** - the focused question keeps a blank line above and below it, so the row being answered separates from its neighbours
+- [x] **Focused row is spaced** - the focused question keeps a blank line above and below it, both carrying its own ground, so the row being answered reads as one plate rather than a strip with the form showing through
   - log: 2026-08-24 added
   - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-26 the blank lines became padding, so they take the row's ground instead of the form's (v1.0.7)
 - [x] **Grounds live in app CSS** - the form's typing grounds are declared in the app stylesheet, since Textual ranks app CSS above a widget's default sheet whatever the specificity
   - log: 2026-08-24 added
   - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
@@ -390,3 +391,13 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
 - [x] **Focused row ground** - the row under the cursor tints its band a little towards blue, on either band, staying nearer its own band than the other one
   - log: 2026-08-24 added
   - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+- [x] **Conditional rows** - a question another answer decides whether to ask leans its ground green, on either band and on its typing ground too, since a control spans the row; the cursor's blue lean wins while the row has focus, so two tints never sit on one ground
+  - log: 2026-08-26 added
+  - log: 2026-08-26 closed: built - tests/unit/test_tui_appearance.py (v1.0.7)
+  - log: 2026-08-26 the green lean extended to the typing ground (v1.0.7)
+- [x] **Conditional rows hang off their answer** - a conditional question prints a tree connector before its caption, so it reads as a child of the answer that decides it; consecutive children of one answer share the run and only the last closes it
+  - log: 2026-08-26 added
+  - log: 2026-08-26 closed: built - tests/unit/test_tui_appearance.py, fixture tests/fixtures/tui_tree (v1.0.7)
+- [x] **Edge: child whose answer was supplied** - a conditional question whose governing answer came in with --data draws no connector, since the row it would hang from is never asked for
+  - log: 2026-08-26 added
+  - log: 2026-08-26 closed: built - tests/unit/test_tui_appearance.py (v1.0.7)

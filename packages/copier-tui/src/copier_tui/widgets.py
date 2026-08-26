@@ -35,8 +35,10 @@ from copier_tui.theme import (
     PULSE_SHADES,
     ROSE,
     ROW_ALT_BG,
+    ROW_ALT_COND_BG,
     ROW_ALT_FOCUS_BG,
     ROW_BG,
+    ROW_COND_BG,
     ROW_FOCUS_BG,
     TEXT,
     TEXT_MUTED,
@@ -206,13 +208,24 @@ class FieldRow(Vertical):
         background: {ROW_ALT_BG};
         border-left: thick {ROW_ALT_BG};
     }}
+    FieldRow.row-cond {{
+        background: {ROW_COND_BG};
+        border-left: thick {ROW_COND_BG};
+    }}
+    FieldRow.row-alt.row-cond {{
+        background: {ROW_ALT_COND_BG};
+        border-left: thick {ROW_ALT_COND_BG};
+    }}
     FieldRow:focus-within {{
         background: {ROW_FOCUS_BG};
         border-left: thick {CYAN};
-        margin: 1 0;
+        padding: 1 0;
     }}
+    /* the bar is restated here because a banded conditional row matches on two classes and
+       would otherwise outrank the focus rule and keep its own ground colour on the bar */
     FieldRow.row-alt:focus-within {{
         background: {ROW_ALT_FOCUS_BG};
+        border-left: thick {CYAN};
     }}
     {_PULSE_CSS}
     FieldRow > .field-head {{
@@ -285,6 +298,7 @@ class FieldRow(Vertical):
         self.question = question
         self._field = field
         self._label = Static(classes="field-label")
+        self._branch = ""
         self._control = control_for(question, field)
         self._flag = Static(classes="field-flag", id=f"flag-{question.id}")
         self._help = Static(classes="field-help", id=f"help-{question.id}")
@@ -347,7 +361,7 @@ class FieldRow(Vertical):
     def _chrome(self, field: FieldState) -> None:
         """Everything about a row that is not the control's value."""
         self._field = field
-        self._label.update(_label_text(self.question))
+        self._label.update(_label_text(self.question, self._branch))
         self._flag.update(_flag_text(field))
         help = _help_text(self.question, field)
         self._help.update(help)
@@ -359,6 +373,17 @@ class FieldRow(Vertical):
         # like a row that is merely unfocused, which is what a live caption over a dead
         # control looked like
         self.set_class(not field.enabled, "row-off")
+
+    def set_branch(self, glyph: str) -> None:
+        """Print a tree connector before the caption, or clear the one already there.
+
+        The form owns the glyph because only the form knows what sits under this row, and a
+        connector is a statement about the rows around it rather than about this question.
+        """
+        if glyph == self._branch:
+            return
+        self._branch = glyph
+        self._label.update(_label_text(self.question, self._branch))
 
     def _write_value(self, field: FieldState) -> None:
         """Push the state's value into the control."""
@@ -400,8 +425,11 @@ class FieldRow(Vertical):
         self._emit()
 
 
-def _label_text(question: Question) -> Text:
-    """The question caption, wrapped rather than cut, and carrying no colour of its own.
+def _label_text(question: Question, branch: str = "") -> Text:
+    """The question caption behind its tree connector, wrapped rather than cut.
+
+    The connector keeps a colour of its own, muted, because it is structure rather than
+    words - it must not brighten with the caption when the cursor arrives on the row.
 
     Hue on a caption used to mean "you have changed this", which read as a state of the
     question rather than of its answer - a blue line looks like a heading or something the
@@ -410,7 +438,11 @@ def _label_text(question: Question) -> Text:
     be edited; what the answer happens to be is the answer's own business, so the stylesheet
     colours this by focus and nothing else.
     """
-    return Text(question.label, overflow="fold")
+    caption = Text(overflow="fold")
+    if branch:
+        caption.append(branch, style=TEXT_SUBTLE)
+    caption.append(question.label)
+    return caption
 
 
 def _help_text(question: Question, field: FieldState) -> Text:
