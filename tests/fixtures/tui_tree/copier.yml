@@ -9,11 +9,13 @@ bucket:
     type: str
     default: demo-bucket
     when: "{{ storage == 's3' }}"
+    help: "Bucket the run writes to, named long enough that its caption has to wrap onto a second line in the gutter"
 
 region:
     type: str
     default: eu-west-1
     when: "{{ storage == 's3' }}"
+    help: "Region the bucket lives in, named long enough that its caption has to wrap onto a second line as well"
 
 owner:
     type: str

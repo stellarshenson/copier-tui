@@ -16,7 +16,7 @@ from textual.widget import Widget
 from textual.widgets import Footer, Static, TextArea
 
 from copier_tui.theme import ROSE, TEXT_MUTED
-from copier_tui.widgets import FieldRow, HeaderBar
+from copier_tui.widgets import BRANCH_LAST, BRANCH_MORE, FieldRow, HeaderBar
 from copier_ui import State, TemplateUI
 
 _ACTION_KEY = {
@@ -36,14 +36,6 @@ arrows that walk the form."""
 
 _ARROW_OWNERS = (TextArea,)
 """Controls that move a cursor of their own with up and down, at anything but their edge."""
-
-BRANCH_MORE = "\u251c\u2500 "
-BRANCH_LAST = "\u2514\u2500 "
-"""The connectors a conditional question prints before its caption, through and last.
-
-A question another answer decides whether to ask is drawn as that answer's child. Where
-several children of one answer sit together, all but the last take the through connector: a
-row claiming to be the last child of a run it is in the middle of reads as two runs."""
 
 KEY_HINT = "up down  move    left right  choose    enter  review and create"
 """The legend under the form. Every key that moves or changes something is named, because a

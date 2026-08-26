@@ -401,3 +401,6 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
 - [x] **Edge: child whose answer was supplied** - a conditional question whose governing answer came in with --data draws no connector, since the row it would hang from is never asked for
   - log: 2026-08-26 added
   - log: 2026-08-26 closed: built - tests/unit/test_tui_appearance.py (v1.0.7)
+- [x] **Wrapped child captions clear the connector** - a conditional caption too long for its gutter wraps with a hanging indent, the lines after the first carrying the run down on a child with siblings below it and blank on the last, so prose never lands in the connector column
+  - log: 2026-08-26 added
+  - log: 2026-08-26 closed: built - tests/unit/test_tui_appearance.py (v1.0.9)

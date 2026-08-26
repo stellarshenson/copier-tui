@@ -19,7 +19,6 @@ from copier_tui.app import SurveyApp
 from copier_tui.inline import CURSOR, FREE, TAKEN, InlineOptions
 from copier_tui.screens import SurveyScreen
 from copier_tui.screens.execution import _detached_stdin
-from copier_tui.screens.survey import BRANCH_LAST, BRANCH_MORE
 from copier_tui.theme import (
     CURSOR_BG,
     CURSOR_PICKED_BG,
@@ -41,7 +40,7 @@ from copier_tui.theme import (
     ROW_FOCUS_BG,
     SURFACE_BG,
 )
-from copier_tui.widgets import FieldRow
+from copier_tui.widgets import BRANCH_LAST, BRANCH_MORE, FieldRow
 from copier_ui import Choice, TemplateUI
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
@@ -544,3 +543,25 @@ async def test_a_child_whose_answer_was_supplied_draws_no_connector(tmp_path: Pa
         for row in rows(app):
             caption = str(row.query_one(".field-label", Static).visual)
             assert not caption.startswith((BRANCH_MORE, BRANCH_LAST)), row.question.id
+
+
+async def test_a_wrapped_child_caption_hangs_off_its_connector(tmp_path: Path) -> None:
+    """Tree connectors: the lines a caption wraps onto keep clear of the connector column.
+
+    A caption long enough to wrap ran its second line back under the connector, which put
+    prose where the tree is and broke the column the connectors are read down. The run is
+    carried on down a child with more siblings below it and left blank on the last.
+    """
+    async with survey(tmp_path / "out", template="tui_tree") as (app, _):
+        captions = {
+            row.question.id: str(row.query_one(".field-label", Static).visual).splitlines()
+            for row in rows(app)
+        }
+        assert len(captions["bucket"]) > 1, captions["bucket"]
+        assert captions["bucket"][0].startswith(BRANCH_MORE)
+        assert all(line.startswith("\u2502  ") for line in captions["bucket"][1:])
+
+        assert len(captions["region"]) > 1, captions["region"]
+        assert captions["region"][0].startswith(BRANCH_LAST)
+        assert all(line.startswith("   ") for line in captions["region"][1:])
+        assert not any(line.startswith("\u2502") for line in captions["region"][1:])

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 import json
+from textwrap import wrap
 from typing import Any
 
 from rich.text import Text
@@ -46,6 +47,23 @@ from copier_tui.theme import (
     VALUE_LINES,
 )
 from copier_ui import FieldState, Kind, Question
+
+BRANCH_MORE = "\u251c\u2500 "
+BRANCH_LAST = "\u2514\u2500 "
+_BRANCH_TAIL = {BRANCH_MORE: "\u2502  ", BRANCH_LAST: "   "}
+"""The connectors a conditional question prints before its caption, and what carries on down
+the lines its caption wraps onto.
+
+A question another answer decides whether to ask is drawn as that answer's child. Where
+several children of one answer sit together, all but the last take the through connector: a
+row claiming to be the last child of a run it is in the middle of reads as two runs.
+
+The tail is why the caption is wrapped here rather than left to Rich. A caption long enough
+to wrap ran its second line back under the connector, which put prose where the tree is and
+broke the column the connectors are read down."""
+
+_CAPTION_WIDTH = LABEL_WIDTH - 3
+"""Columns the caption itself has: the gutter less the one and two it is padded by."""
 
 _INPUT_TYPE = {Kind.INTEGER: "integer", Kind.FLOAT: "number"}
 
@@ -438,10 +456,14 @@ def _label_text(question: Question, branch: str = "") -> Text:
     be edited; what the answer happens to be is the answer's own business, so the stylesheet
     colours this by focus and nothing else.
     """
+    if not branch:
+        return Text(question.label, overflow="fold")
     caption = Text(overflow="fold")
-    if branch:
-        caption.append(branch, style=TEXT_SUBTLE)
-    caption.append(question.label)
+    for index, line in enumerate(wrap(question.label, _CAPTION_WIDTH - len(branch)) or [""]):
+        if index:
+            caption.append("\n")
+        caption.append(branch if index == 0 else _BRANCH_TAIL[branch], style=TEXT_SUBTLE)
+        caption.append(line)
     return caption
 
 
