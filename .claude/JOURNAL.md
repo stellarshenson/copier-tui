@@ -138,3 +138,6 @@ This journal tracks substantive work on documents, diagrams, and documentation c
 
 45. **Task [Short] - Faster, brighter cursor blink** (v1.0.18): Star Colonel asked for the cursor square to blink four times faster, in bright orange<br>
     **Result**: `ORANGE_BRIGHT` (`#ff9a2e`) added to `theme.py` as the mark's second state; `FieldRow._breathe` in `widgets.py` now switches ink every four phases of the 32-phase bar cycle - about 0.24 s per state - instead of once per half-cycle.
+
+46. **Task [Short] - Pale orange, slower blink** (v1.0.19): Star Colonel wanted the mark's orange close to white and the blink at half the 1.0.19 rate<br>
+    **Result**: `ORANGE_BRIGHT` replaced by `ORANGE_PALE` (`#ffdcb0`) in `theme.py`; `FieldRow._breathe` switches ink every eight phases of the 32-phase bar cycle, about 0.48 s per state.

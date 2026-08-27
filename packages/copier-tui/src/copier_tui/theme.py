@@ -7,7 +7,7 @@ from textual.theme import Theme
 CYAN = "#21a8e4"
 CYAN_BRIGHT = "#46bcf0"
 ORANGE = "#da8230"
-ORANGE_BRIGHT = "#ff9a2e"
+ORANGE_PALE = "#ffdcb0"
 AMBER = "#e6c660"
 MINT = "#3fb950"
 ROSE = "#f2554f"
@@ -46,8 +46,8 @@ PULSE_SHADES = (
     "#1e79a2",
     "#1e78a1",
 )
-MARK_SHADES = ("#ffffff", ORANGE_BRIGHT)
-"""The cursor mark's blink: white and bright orange, four blinks per breath of the bar.
+MARK_SHADES = ("#ffffff", ORANGE_PALE)
+"""The cursor mark's blink: white and a pale orange a step off it, two blinks per breath of the bar.
 
 The bar breathes in blues on a dark ground; a mark breathing in cyan washed out against it,
 and a ramp into orange still read as a fade. Two plain states, on the bar's own clock, read
