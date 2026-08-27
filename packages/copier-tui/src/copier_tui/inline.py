@@ -26,7 +26,7 @@ from copier_tui.theme import (
     CURSOR_FG,
     CURSOR_PICKED_BG,
     CURSOR_PICKED_FG,
-    CYAN_BRIGHT,
+    MARK_SHADES,
     OPTION_BG,
     OPTION_FG,
     PICKED_BG,
@@ -195,7 +195,7 @@ class InlineOptions(Static):
         # though it were still blurred, so the cursor mark never appeared on arrival
         self._has_cursor = False
         self._stacked = False
-        self._mark_shade = CYAN_BRIGHT
+        self._mark_shade = MARK_SHADES[0]
         self.set_options(choices, value)
 
     def set_options(self, choices: Sequence[Choice], value: Any) -> None:

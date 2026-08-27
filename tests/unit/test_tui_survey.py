@@ -501,7 +501,9 @@ async def test_the_survey_names_a_relative_destination_in_full(tmp_path: Path) -
     # cropped from the left when it is long, so what survives is the end - the directory the
     # answers are going into, which is the half of a path that identifies anything
     assert shown.rstrip().endswith(tmp_path.resolve().name), shown
-    assert shown.strip() != "\u2192 .", "a bare dot names the one place the reader is standing"
+    assert shown.strip() != "destination: .", (
+        "a bare dot names the one place the reader is standing"
+    )
 
 
 async def test_ctrl_x_quits_from_the_survey(tmp_path: Path) -> None:
@@ -742,12 +744,12 @@ async def test_the_header_never_wraps_and_so_never_loses_the_path(tmp_path: Path
 async def test_a_destination_too_long_for_the_bar_loses_its_head_not_its_tail(
     tmp_path: Path,
 ) -> None:
-    """What survives a crop is the end of the path, because that is what names the project.
+    """What survives a crop is the end of the project name, because that is what names it.
 
-    The stylesheet's own ellipsis takes characters off the right, which on a path removes the
-    answer and leaves the reader holding a temp-directory prefix. The header shortens from the
-    left first, and it does so against the width the row actually has - a constant was both too
-    aggressive on a wide terminal and no help on a narrow one.
+    The stylesheet's own ellipsis takes characters off the right, which on a name removes the
+    part that tells two projects apart. The header shortens from the left first, and it does
+    so against the width the row actually has - a constant was both too aggressive on a wide
+    terminal and no help on a narrow one.
     """
     dst = tmp_path / "a-project-with-a-name-far-too-long-for-a-narrow-terminal-bar"
     dst.mkdir()
@@ -759,7 +761,9 @@ async def test_a_destination_too_long_for_the_bar_loses_its_head_not_its_tail(
             title = app.screen.query_one("#hdr-title", Static)
             shown = str(title.visual)
             assert title.region.height == 1
-            assert shown.endswith("terminal-bar"), shown
+            # the project word sits between the app name and the context, cropped from the
+            # left: its end is what tells two projects apart
+            assert "terminal-bar ⸱ review" in shown, shown
             assert str(tmp_path) not in shown, "the head was kept and the project name cut"
 
 

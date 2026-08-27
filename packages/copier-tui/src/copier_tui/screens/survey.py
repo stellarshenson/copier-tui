@@ -18,7 +18,7 @@ from textual.timer import Timer
 from textual.widget import Widget
 from textual.widgets import Footer, Static, TextArea
 
-from copier_tui.paths import fit_path, shown_path
+from copier_tui.paths import fit_path, project_name, shown_path
 from copier_tui.theme import ROSE, TEXT_MUTED, TEXT_SUBTLE
 from copier_tui.widgets import BRANCH_LAST, BRANCH_MORE, HEADER_PATH_FLOOR, FieldRow, HeaderBar
 from copier_ui import State, TemplateUI
@@ -44,9 +44,9 @@ _ARROW_OWNERS = (TextArea,)
 CANCEL_HINT = "press escape again to discard every answer and quit"
 """Shown by the first escape; a second one within the arming window quits."""
 
-_WHERE_CHROME = 4
-"""What the destination line spends on things that are not the path: two columns of padding
-from `#survey-where`, and two for the arrow that introduces it."""
+_WHERE_CHROME = len("destination: ")
+"""What the destination line spends on things that are not the path: the word that
+introduces it. Padding is not counted - `size` is the content box and has it off already."""
 
 CANCEL_WINDOW = 3.0
 """Seconds an armed escape stays armed. After that the safety goes back on by itself."""
@@ -89,7 +89,9 @@ class SurveyScreen(Screen[None]):
         width: 100%;
     }}
     #survey-hint {{
-        width: 1fr;
+        /* as wide as what it says and no wider, so an empty hint leaves the whole row
+           to the destination beside it */
+        width: auto;
         padding: 0 1;
         color: {TEXT_MUTED};
         /* the third of the three one-row lines, and the last to get the rule. Wrapping, its
@@ -99,8 +101,9 @@ class SurveyScreen(Screen[None]):
         text-overflow: ellipsis;
     }}
     #survey-where {{
-        width: auto;
-        max-width: 60%;
+        /* the rest of the row after the hint, not a fixed share: the hint is empty most of
+           the time, and a fixed 60% left a path cropped beside a blank */
+        width: 1fr;
         height: 1;
         padding: 0 1;
         color: {TEXT_SUBTLE};
@@ -157,13 +160,15 @@ class SurveyScreen(Screen[None]):
 
     def compose(self) -> ComposeResult:
         """Header, the scrolling form, the status line, footer."""
-        yield HeaderBar(f"{self.ui.template_name} questionnaire")
+        yield HeaderBar(f"{self.ui.template_name} questionnaire", project=project_name(self.dst))
         yield _Form(id="survey-form")
         # the destination shares the status line rather than sitting in the header, which is
         # already carrying the template name and the field position - and it is the one fact a
         # person filling in thirty answers cannot recover from anything else on the screen
         yield Horizontal(
-            self._hint, Static(_where_text(self.dst, 0), id="survey-where"), id="survey-status"
+            self._hint,
+            _Destination(_where_text(self.dst, 0), id="survey-where"),
+            id="survey-status",
         )
         yield Footer()
 
@@ -185,10 +190,13 @@ class SurveyScreen(Screen[None]):
         protect. The constant was also wrong: `max-width: 60%` at MIN_WIDTH leaves 34 columns,
         not the 56 it was set to, so the CSS won at every width a person actually uses.
         """
-        room = int(self.size.width * 0.6) - _WHERE_CHROME
-        self.query_one("#survey-where", Static).update(
-            _where_text(self.dst, max(room, HEADER_PATH_FLOOR))
-        )
+        self.fit_destination()
+
+    def fit_destination(self) -> None:
+        """Crop the destination to the box it has right now - re-run whenever that box moves."""
+        where = self.query_one("#survey-where", Static)
+        room = where.size.width - _WHERE_CHROME
+        where.update(_where_text(self.dst, max(room, HEADER_PATH_FLOOR)))
 
     async def on_screen_resume(self) -> None:
         """Coming back from review: re-read the state, keeping scroll and focus as they were."""
@@ -476,6 +484,20 @@ def _at_edge(owner: Widget, key: str) -> bool | None:
     return True if (row == 0 if key == "up" else row >= last) else None
 
 
+class _Destination(Static):
+    """The destination line, which re-fits its path whenever its own box changes size.
+
+    The box is the rest of the row after the hint, so it moves when a hint appears or
+    goes - not only when the terminal does - and the screen's own resize never sees that.
+    """
+
+    def on_resize(self) -> None:
+        """Ask the screen to crop the path to the new width."""
+        screen = self.screen
+        if isinstance(screen, SurveyScreen):
+            screen.fit_destination()
+
+
 def _where_text(dst: Path, room: int) -> Text:
     """Where the answers will be written, cropped from the left to the room it has.
 
@@ -483,8 +505,8 @@ def _where_text(dst: Path, room: int) -> Text:
     resize - and the path goes out whole for the stylesheet to crop until `on_resize` arrives.
     """
     if room <= 0:
-        return Text(f"\u2192 {shown_path(dst)}", style=TEXT_SUBTLE)
-    return Text(f"\u2192 {fit_path(dst, room)}", style=TEXT_SUBTLE)
+        return Text(f"destination: {shown_path(dst)}", style=TEXT_SUBTLE)
+    return Text(f"destination: {fit_path(dst, room)}", style=TEXT_SUBTLE)
 
 
 def _branch(ui: TemplateUI, order: list[str], position: int) -> tuple[str, bool]:

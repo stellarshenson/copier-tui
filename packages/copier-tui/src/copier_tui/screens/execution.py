@@ -20,8 +20,18 @@ from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Footer, ProgressBar, RichLog, Static
 
-from copier_tui.paths import fit_path
-from copier_tui.theme import MINT, ORANGE, ROSE, SURFACE_BG, TEXT_MUTED, TEXT_SUBTLE
+from copier_tui.changes import Changes, diff, snapshot
+from copier_tui.paths import fit_path, project_name
+from copier_tui.theme import (
+    CHROME_BG,
+    MINT,
+    ORANGE,
+    ROSE,
+    SURFACE_BG,
+    TEXT,
+    TEXT_MUTED,
+    TEXT_SUBTLE,
+)
 from copier_tui.widgets import HEADER_PATH_FLOOR, HeaderBar
 from copier_ui import TemplateUI
 
@@ -53,6 +63,24 @@ class ExecutionScreen(Screen[bool]):
     """Runs copier in a worker thread and reports success or failure."""
 
     DEFAULT_CSS = f"""
+    ExecutionScreen {{
+        layers: base overlay;
+        align: center middle;
+    }}
+    #exec-banner {{
+        layer: overlay;
+        display: none;
+        width: auto;
+        height: auto;
+        max-width: 90%;
+        padding: 1 3;
+        background: {CHROME_BG};
+        border: round {MINT};
+        color: {TEXT};
+    }}
+    #exec-banner.failed {{
+        border: round {ROSE};
+    }}
     #exec-body {{
         width: 100%;
         height: 1fr;
@@ -138,7 +166,7 @@ class ExecutionScreen(Screen[bool]):
         says which run it is, and repeating the path three times said nothing extra.
         """
         verb = "checking" if self.pretend else "rendering"
-        yield HeaderBar("dry run" if self.pretend else "render")
+        yield HeaderBar("dry run" if self.pretend else "render", project=project_name(self.dst))
         yield Vertical(
             Static(Text(f"{verb} the template"), id="exec-status"),
             ProgressBar(total=None, show_percentage=False, show_eta=False, id="exec-progress"),
@@ -151,10 +179,17 @@ class ExecutionScreen(Screen[bool]):
             RichLog(id="exec-files", markup=False, wrap=True, min_width=0, auto_scroll=True),
             id="exec-body",
         )
+        # the finish banner: a content-sized box on its own layer, so only its own cells
+        # cover the log and the rows behind it stay readable. A full-size wrapper would
+        # paint over the whole base layer, transparent or not
+        yield Static(id="exec-banner")
         yield Footer()
 
     def on_mount(self) -> None:
         """Start the render worker, and watch the destination fill up while it runs."""
+        # taken before the worker starts: the banner's counts are the difference between
+        # this and the tree the render leaves behind
+        self._before = snapshot(self.dst)
         self.run_worker(self._run_copier, thread=True, name="render")
         self._watch = self.set_interval(WATCH_INTERVAL, self._show_new_files)
 
@@ -367,7 +402,54 @@ class ExecutionScreen(Screen[bool]):
         self.query_one("#exec-verdict", Static).update(
             Text("arrows read the list  -  any other key closes")
         )
+        self._show_banner(error)
         self.set_focus(None)
+
+    def _show_banner(self, error: BaseException | None) -> None:
+        """Put the verdict and the four counts in a box over the log."""
+        banner = self.query_one("#exec-banner", Static)
+        if error is not None:
+            text = Text("failed", style=f"bold {ROSE}")
+            text.append("\n\n" + _message(error), style=TEXT)
+        elif self.pretend:
+            text = Text("dry run - nothing written", style=f"bold {MINT}")
+        else:
+            text = Text("done", style=f"bold {MINT}")
+            text.append("\n\n")
+            text.append(_counts_line(diff(self._before, snapshot(self.dst))))
+        text.append("\n\nany key closes", style=TEXT_SUBTLE)
+        banner.update(text)
+        banner.set_class(error is not None, "failed")
+        banner.display = True
+
+
+CONFLICTS_LISTED = 8
+"""Conflicted paths the banner names before it says how many more there are."""
+
+
+def _counts_line(changes: Changes) -> Text:
+    """`3 added · 2 changed · 1 deleted · 1 conflict`, and the conflicted paths under it.
+
+    Zero counts are still printed: a person running `update` wants to see `0 conflicts`
+    written down, not infer it from an absence.
+    """
+    conflicts = len(changes.conflicted)
+    text = Text()
+    text.append(f"{len(changes.added)} added", style=MINT if changes.added else TEXT_MUTED)
+    text.append("  \u2e31  ", style=TEXT_MUTED)
+    text.append(f"{len(changes.changed)} changed", style=ORANGE if changes.changed else TEXT_MUTED)
+    text.append("  \u2e31  ", style=TEXT_MUTED)
+    text.append(f"{len(changes.deleted)} deleted", style=ROSE if changes.deleted else TEXT_MUTED)
+    text.append("  \u2e31  ", style=TEXT_MUTED)
+    word = "conflict" if conflicts == 1 else "conflicts"
+    text.append(f"{conflicts} {word}", style=f"bold {ROSE}" if conflicts else TEXT_MUTED)
+    if conflicts:
+        text.append("\n\nto resolve:", style=TEXT_SUBTLE)
+        for path in changes.conflicted[:CONFLICTS_LISTED]:
+            text.append(f"\n  {path}", style=ROSE)
+        if conflicts > CONFLICTS_LISTED:
+            text.append(f"\n  and {conflicts - CONFLICTS_LISTED} more", style=TEXT_MUTED)
+    return text
 
 
 @contextmanager

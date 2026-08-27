@@ -169,6 +169,49 @@ async def test_the_render_lists_what_it_writes(tmp_path: Path) -> None:
         )
 
 
+async def test_the_finish_banner_counts_what_the_render_did(tmp_path: Path) -> None:
+    """The box over the log says how many files were added, changed, deleted and conflicted.
+
+    The numbers come from the destination before and after, because copier reports nothing
+    back. A file left with a `.rej` beside it or an inline marker is a conflict to resolve,
+    and the banner names it.
+    """
+    dst = tmp_path / "out"
+    dst.mkdir()
+    (dst / "stale.txt").write_text("old\n")
+    (dst / "gone.txt").write_text("bye\n")
+    with TemplateUI.from_template(str(FIXTURES / "tui_flow"), dst=dst) as ui:
+        real = ui.render
+
+        def render_then_conflict(target: Any = None, **copier_kwargs: Any) -> None:
+            real(target, **copier_kwargs)
+            (dst / "stale.txt").write_text("new\n")
+            (dst / "gone.txt").unlink()
+            (dst / "merge.txt").write_text(
+                "<<<<<<< before updating\na\n=======\nb\n>>>>>>> after\n"
+            )
+
+        ui.render = render_then_conflict  # type: ignore[method-assign]
+        app = SurveyApp(ui, dst, {})
+        async with app.run_test(size=(100, 40)) as pilot:
+            await pilot.pause()
+            await pilot.press("enter")
+            await pilot.pause()
+            await pilot.press("enter")
+            await pilot.pause()
+            banner = app.screen.query_one("#exec-banner", Static)
+            assert await wait_until(pilot, lambda: banner.display)
+            shown = str(banner.visual)
+            assert "done" in shown
+            assert "changed" in shown and "1 deleted" in shown and "1 conflict" in shown
+            assert "merge.txt" in shown, shown
+            assert "stale.txt" not in shown.split("to resolve")[1]
+
+            await pilot.press("enter")
+            assert await wait_until(pilot, lambda: not app.is_running)
+            assert app.return_value == EXIT_OK
+
+
 async def test_a_failed_render_shows_the_message_and_keeps_partial_output(
     tmp_path: Path,
 ) -> None:
@@ -194,6 +237,8 @@ async def test_a_failed_render_shows_the_message_and_keeps_partial_output(
             # the reason is in the log, not on the one-row status line that would crop it
             log = app.screen.query_one("#exec-files", RichLog)
             assert any("copier gave up" in str(line) for line in log.lines)
+            banner = app.screen.query_one("#exec-banner", Static)
+            assert banner.display and "copier gave up" in str(banner.visual)
 
             await pilot.press("space")
             assert await wait_until(pilot, lambda: not app.is_running)

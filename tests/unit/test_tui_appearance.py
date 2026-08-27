@@ -36,6 +36,7 @@ from copier_tui.theme import (
     FIELD_COND_BG,
     FIELD_COND_FOCUS_BG,
     FIELD_FOCUS_BG,
+    MARK_SHADES,
     OPTION_BG,
     OPTION_FG,
     PICKED_BG,
@@ -616,7 +617,7 @@ async def test_the_cursor_mark_breathes_with_the_bar(tmp_path: Path) -> None:
             row._breathe()
             await pilot.pause()
             seen.add(mark_ink())
-        assert seen == {shade.lower() for shade in PULSE_SHADES}
+        assert seen == {shade.lower() for shade in MARK_SHADES}
 
 
 def _relative_luminance(colour: str) -> float:
@@ -695,7 +696,6 @@ def test_no_new_glyph_the_tui_prints_has_an_ambiguous_width() -> None:
         0x2514,  # └
         0x25CB,  # ○ the option not taken
         0x25CF,  # ● the option in force
-        0x2192,  # → the destination line's arrow
     }
     found: set[int] = set()
     for source in Path(inline.__file__).parent.rglob("*.py"):

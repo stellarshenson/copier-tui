@@ -11,7 +11,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import replace
 import json
-from pathlib import Path
 from textwrap import wrap
 from typing import Any
 
@@ -26,7 +25,7 @@ from textual.widgets import Input, Static, TextArea
 
 from copier_tui import __version__
 from copier_tui.inline import BOOL_CHOICES, InlineOptions
-from copier_tui.paths import fit_path
+from copier_tui.paths import fit_name
 from copier_tui.theme import (
     AMBER,
     CYAN,
@@ -35,6 +34,7 @@ from copier_tui.theme import (
     HELP_LINES,
     LABEL_LINES,
     LABEL_WIDTH,
+    MARK_SHADES,
     PULSE_CYCLE,
     PULSE_INTERVAL,
     PULSE_SHADES,
@@ -228,11 +228,14 @@ def read_control(question: Question, control: Widget) -> Any:
 class HeaderBar(Horizontal):
     """One-row header: app name and context left, version right."""
 
-    def __init__(self, context: str = "", path: Path | None = None) -> None:
-        """Build the header, with an optional context and a path that may need shortening."""
+    def __init__(self, context: str = "", project: str | None = None) -> None:
+        """Build the header: the screen's context, and the project - the destination
+        directory's name, which is what the run is FOR and the one word that names it on
+        every screen. It replaced the review's full path, whose only surviving part after a
+        crop was this same word."""
         super().__init__(id="app-header")
         self._label_context = context
-        self._path = path
+        self._project = project
 
     def compose(self) -> ComposeResult:
         """The title cell and the version cell."""
@@ -255,11 +258,12 @@ class HeaderBar(Horizontal):
         self.query_one("#hdr-title", Static).update(self._title())
 
     def _title(self) -> str:
-        """The title cell's text: the app name, the screen's context, and any path after it.
+        """The title cell's text: the app name, the project, and the screen's context.
 
-        A path is shortened from the left when the row cannot hold it, so what survives is the
-        end - the part that says which project this is. The stylesheet crops from the right as
-        a backstop, which on a path removes exactly the answer, so this has to get there first.
+        A project name too long for the row is shortened from the left, so what survives is
+        its end. The stylesheet crops from the right as a backstop, and on a name like
+        `customer-portal-v2` that removes exactly the part that tells two projects apart, so
+        this has to get there first.
 
         The separator is U+2E31 WORD SEPARATOR MIDDLE DOT rather than the U+00B7 middle dot it
         looks identical to. U+00B7 has an ambiguous East Asian width, so a terminal configured
@@ -270,11 +274,11 @@ class HeaderBar(Horizontal):
         parts = ["copier-tui"]
         if self._label_context:
             parts.append(self._label_context)
-        if self._path is not None:
+        if self._project:
             # what the row has left, once the fixed halves have taken theirs: the version cell,
             # this bar's padding, and the words already in `parts`
             room = self.size.width - len(" ⸱ ".join(parts)) - len(__version__) - HEADER_FIXED
-            parts.append(fit_path(self._path, max(room, HEADER_PATH_FLOOR)))
+            parts.insert(1, fit_name(self._project, max(room, HEADER_PATH_FLOOR)))
         return " ⸱ ".join(parts)
 
 
@@ -532,7 +536,7 @@ class FieldRow(Vertical):
         for index in range(len(PULSE_SHADES)):
             self.remove_class(f"pulse-{index}")
         if isinstance(self._control, InlineOptions):
-            self._control.set_mark_shade(CYAN_BRIGHT)
+            self._control.set_mark_shade(MARK_SHADES[0])
 
     def _breathe(self) -> None:
         """Move the bar one step round the cycle, and the cursor mark with it."""
@@ -541,7 +545,7 @@ class FieldRow(Vertical):
         for index in range(len(PULSE_SHADES)):
             self.set_class(index == shade, f"pulse-{index}")
         if isinstance(self._control, InlineOptions):
-            self._control.set_mark_shade(PULSE_SHADES[shade])
+            self._control.set_mark_shade(MARK_SHADES[shade])
 
     @property
     def field(self) -> FieldState:

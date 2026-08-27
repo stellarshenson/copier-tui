@@ -79,3 +79,13 @@ def test_a_fitted_path_keeps_the_end_and_marks_what_it_dropped() -> None:
     assert fitted.endswith("my-project"), fitted
     assert fitted.startswith("..."), fitted
     assert "…" not in fitted, "the marker must be ASCII - U+2026 is ambiguous width"
+
+
+def test_a_name_too_wide_for_its_box_keeps_its_end() -> None:
+    """A project name is cropped from the left behind a marker, never from the right."""
+    from copier_tui.paths import fit_name
+
+    assert fit_name("customer-portal-v2", 30) == "customer-portal-v2"
+    assert fit_name("customer-portal-v2", 12) == "...portal-v2"
+    assert fit_name("customer-portal-v2", 3) == "-v2"
+    assert fit_name("日本語プロジェクト", 9) == "...ェクト"

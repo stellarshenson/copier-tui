@@ -34,6 +34,11 @@ def shown_path(dst: Path) -> str:
     return shown
 
 
+def project_name(dst: Path) -> str:
+    """The destination directory's own name - resolved, because `update` arrives as `.`."""
+    return Path(dst).expanduser().resolve().name or str(dst)
+
+
 PREFIX = ".../"
 """What marks a path that has had its leading components dropped.
 
@@ -57,6 +62,20 @@ def _tail(text: str, limit: int) -> str:
         kept.append(char)
         used += width
     return "".join(reversed(kept))
+
+
+def fit_name(name: str, limit: int) -> str:
+    """`name`, or its last cells behind a `...` marker when it is wider than `limit`.
+
+    For a single word with no separators to cut at - a project name in the header - where
+    the end is still the part that tells two projects apart.
+    """
+    if cell_len(name) <= limit:
+        return name
+    marker = "..."
+    if limit <= len(marker):
+        return _tail(name, limit)
+    return marker + _tail(name, limit - len(marker))
 
 
 def fit_path(dst: Path, limit: int) -> str:

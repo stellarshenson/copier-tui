@@ -12,7 +12,7 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Footer, Static
 
-from copier_tui.paths import fit_path
+from copier_tui.paths import fit_path, project_name
 from copier_tui.theme import (
     AMBER,
     CYAN_BRIGHT,
@@ -96,7 +96,7 @@ class ReviewScreen(Screen[bool]):
         """Header, one line per answer, the destination warning, footer."""
         # the path goes to the header whole; it crops it to the width the row actually has,
         # keeping the tail, because the project name is the half that identifies anything
-        yield HeaderBar("review", self.dst)
+        yield HeaderBar("review", project=project_name(self.dst))
         yield VerticalScroll(*self._answer_lines(), id="review-list")
         yield Static(self._destination_note(), id="review-warning")
         yield Footer()
