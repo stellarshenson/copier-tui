@@ -1,0 +1,7 @@
+_subdirectory: template
+
+_tasks:
+    # a task that never returns. A template can hang for reasons of its own - a network
+    # fetch with no timeout, a tool waiting on a lock - and the render window is then a
+    # screen with no verdict on it, which is exactly when a way out has to work
+    - ["python3", "-c", "import time; time.sleep(600)"]

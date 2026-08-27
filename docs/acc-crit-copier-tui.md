@@ -191,21 +191,31 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
   - log: 2026-08-22 reworded for the one-row-per-field layout; help and messages moved to the reserved hint line (v0.6.4)
   - log: 2026-08-22 label is now the question's caption, not its identifier (v0.6.9)
   - log: 2026-08-24 reworded for the options-in-place layout; help moved from the shared line onto the focused row, which is where the question it explains is (v0.6.9)
-- [x] `ACC-TUI-55` **One row per question** - a question is one row: right-aligned label gutter, control, one status glyph; only a multiline editor and a multiselect grow, and both are capped, so a template of two dozen questions is one screen and not several
+  - log: 2026-08-27 the plate is now one ground on every row rather than one per band, so walking the form with the arrows no longer makes the lifted row flicker between two shades; the single exception is a conditional question, which keeps its green lean while focused, since that is the moment the fact matters most
+- [x] `ACC-TUI-55` **One row per question** - a question is one row: a label gutter that is a share of the row capped at 56 columns, the control, one status glyph; only a multiline editor and a multiselect grow, and both are capped, so a template of two dozen questions is one screen and not several
   - related: DEF-SRVY-1 - the clipped survey body contradicts this layout claim
   - log: 2026-08-22 criterion added (v0.6.5)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py (v0.6.5)
   - log: 2026-08-27 regression fixed: the status row took a Horizontal's default 1fr and halved the screen, so a form that fit one screen was cut and scrolled; see DEF-SRVY-1
-- [x] `ACC-TUI-56` **Key legend** - one line below the form names every key that moves or changes something, and never changes, so it is a legend rather than a message the eye must re-read
+  - log: 2026-08-27 edited text
+- [x] `ACC-TUI-56` **Line under the form** - the line below the form is reserved, not filled - it stays blank, and carries the cancel arming warning while that is up and a count of the answers still needing attention after a refused enter; the keys are named in the footer, and a field's own help, its example and the reason its answer was refused all print under the row they concern, which is where the question is
   - log: 2026-08-22 criterion added (v0.6.5)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py (v0.6.5)
   - log: 2026-08-22 help outranks the open-the-list hint, which was hiding it on every choice field (v0.6.9)
   - log: 2026-08-24 replaced the per-field hint line: help and errors belong on the row of the question they concern, and the freed line says how to drive the form (v0.6.9)
+  - log: 2026-08-27 edited text
+  - log: 2026-08-27 reversed: the user called the constant legend clutter, and a line of unchanging text sat between the reader and the questions; tests/unit/test_tui_survey.py
+  - log: 2026-08-27 edited title
+  - log: 2026-08-27 corrected: the claim that the line carries a validation message overstates it - a message set there is cleared by the focus move that puts the cursor on the offending field, so in practice the line carries the cancel arming warning and nothing else. The field's own error prints under its row, which is where per-field text was deliberately moved
+  - log: 2026-08-27 edited text
+  - log: 2026-08-27 corrected: the body says the line carries a validation message and the log below says a message set there is cleared by the focus move - neither is now true. A refusal puts the reason on the offending row and a count on the shared line, and the count is held through the focus move that follows
+  - log: 2026-08-27 edited text
 - [x] `ACC-TUI-57` **Two-press cancel** - the first `escape` arms the cancel and says so in the hint line, a second quits, and any other key disarms it, so one stray key cannot discard a survey
   - related: DEF-KEYS-4 - two escapes in quick succession do not quit
   - log: 2026-08-22 criterion added (v0.6.5)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py (v0.6.5)
   - log: 2026-08-27 strengthened: mouse motion reporting is off, so no terminal report can be mistaken for the second escape's introducer; see DEF-KEYS-4
+  - log: 2026-08-27 corrected: the strengthening logged above credits mouse reporting being off, and that reading was wrong - a terminal's report carries its own ESC byte, so it never had a keystroke to take; the real fault was this end disarming itself on a focus report, fixed by disarming only on a focus that actually moved; see DEF-KEYS-4
 - [x] `ACC-TUI-58` **Arrow handoff** - `up` and `down` step between fields except inside a control with a cursor of its own, which keeps them until its first or last line and then hands the focus on
   - log: 2026-08-22 criterion added (v0.6.5)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py (v0.6.5)
@@ -267,11 +277,13 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
 - [x] `ACC-TUI-75` **The render names what it writes** - files appear on the execution screen as they are written, since copier reports nothing back and a bar that only pulses says the run is alive but not that it is doing anything
   - log: 2026-08-26 added
   - log: 2026-08-27 closed: built - tests/unit/test_tui_flow.py
-- [x] `ACC-TUI-76` **Destination in sight** - the survey's status line names where the template will be rendered, home-relative where that shortens it; it is the one fact a person filling in thirty answers cannot recover from anything else on the screen
+- [x] `ACC-TUI-76` **Destination in sight** - the survey's status line names where the template will be rendered, resolved to an absolute path and written home-relative, so a relative destination such as `update`'s default `.` still names the project; it is the one fact a person filling in thirty answers cannot recover from anything else on the screen
   - related: DEF-SRVY-3 - the destination is not visible on screen
   - log: 2026-08-26 added
   - log: 2026-08-27 closed: built - tests/unit/test_tui_survey.py
   - log: 2026-08-27 strengthened: the destination is cropped to its one row rather than wrapped, and the test now reads the row's height rather than only its text; see DEF-SRVY-3
+  - log: 2026-08-27 edited text
+  - log: 2026-08-27 the crop changed direction and owner: the header and the status line shorten a path from the LEFT, keeping the tail, because the stylesheet's ellipsis takes characters off the right - which on a path removes the part that names the project. The header does it against the width the row actually has; a constant was too aggressive at 120 columns and no help at 70
 - [x] `ACC-TUI-77` **Exit code** - the process exits 0 on a completed render, non-zero on a failed render or a user cancel
   - log: 2026-08-22 criterion added (v0.1.0)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_flow.py
@@ -299,6 +311,8 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
 - [x] `ACC-TUI-85` **Edge: terminal too small** - below the minimum usable size the app shows a resize prompt instead of a broken layout
   - log: 2026-08-22 criterion added (v0.1.0)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py
+  - log: 2026-08-27 the prompt is amber rather than rose: rose is this app's failure colour and a heavy rose border read as a crash dialog, where a terminal narrower than the form is an advisory the reader fixes by dragging an edge. It stays non-modal - it does not block the screen underneath, which is deliberate: the form still works, it is just cramped
+  - log: 2026-08-27 corrected: the log above describes the prompt as an overlay that does not block the screen; it is a row of the layout now, mounted before the footer, because every overlay placement covered something that mattered - the form gives up a row instead
 - [x] `ACC-TUI-86` **Edge: not a tty** - launched without a terminal, the app exits with a clear message rather than a traceback
   - log: 2026-08-22 criterion added (v0.1.0)
   - log: 2026-08-22 closed: built - tests/unit/test_tui_cli.py
@@ -319,6 +333,8 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
 - [x] `ACC-TUI-91` **Captions arrive whole** - a caption too long for its gutter wraps to a second line and is never cut with an ellipsis, on the survey and on the review alike; copier has no description separate from the caption, so a cut caption deletes the only description a question has
   - log: 2026-08-24 added
   - log: 2026-08-24 closed: built - tests/unit/test_tui_survey.py, test_tui_widgets.py, test_tui_flow.py (v0.6.9)
+  - log: 2026-08-27 strengthened on the review screen: its captions had the same two-line cap as the survey's, so a long caption was cut there too - on the one screen whose whole job is that the words are read before anything is written. The cap is gone from the review; the survey keeps it, because thirty rows have to fit one screen
+  - log: 2026-08-27 the cap is three lines, not two. Two was sized against a fixed gutter; once the gutter became a share of the row it cut seven of the reference template's captions at 60 columns, four at 70 and two at 80
 - [x] `ACC-TUI-92` **Alternatives stay visible** - a question answered by picking shows every option it was picked from, the one in force lit and the rest legible beside it, so what was passed over never has to be recalled
   - log: 2026-08-24 added
   - log: 2026-08-24 closed: built - tests/unit/test_tui_survey.py, test_tui_widgets.py, test_tui_flow.py (v0.6.9)
@@ -337,6 +353,7 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
 - [x] `ACC-TUI-97` **Row banding** - the form alternates two grounds down its rows, restriped by position whenever a conditional question appears or disappears
   - log: 2026-08-24 added
   - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-27 the step between the two bands was halved from 16-21 per channel to 8-10, at the user's request, because the wider step read as two different surfaces rather than one form counted in twos
 - [x] `ACC-TUI-98` **Typing grounds** - anything the user types into carries a lifted ground that also takes the band; an option row carries none, so only what accepts letters looks like it does
   - log: 2026-08-24 added
   - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
@@ -381,6 +398,10 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
 - [x] `ACC-TUI-111` **Cursor on the answer** - the cursor mark shows even when the cursor sits on the chosen option, since where you are and what is chosen are two facts that must both read
   - log: 2026-08-24 added
   - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-27 the mark glyph is U+25BA BLACK RIGHT-POINTING POINTER, not U+25B8; the small triangle was hard to see at a normal terminal font size, and U+25B6 is emoji-presented in enough terminals to take two columns and shift everything after it
+  - log: 2026-08-27 verified: U+25BA has East_Asian_Width N (neutral), so no terminal may render it double-width; U+25B6 has East_Asian_Width A (ambiguous) and widens to two cells in any terminal configured for CJK ambiguous-wide, while rich.cells.cell_len counts it as 1 either way - that mismatch would shift every column after the mark. The old U+25B8 was also neutral and safe, and was replaced only because it was too small to see
+  - log: 2026-08-27 the glyph guard that backs this criterion originally scanned source characters and so could not see any constant written as an escape, which is all of them; it now parses the source and skips documentation strings. Six ambiguous-width glyphs it had missed are listed and accepted - the four box-drawing connectors, for which no width-neutral set exists, and the two option marks
+  - log: 2026-08-27 the mark is now U+25FC BLACK MEDIUM SQUARE, at the user's choice from seven width-neutral candidates rendered side by side in a real terminal. A square rather than a circle because the chip's own mark is a circle, and rather than U+25A0 - the obvious black square - because that one is ambiguous-width; U+25FC is neutral
 - [x] `ACC-TUI-112` **Option layout** - options share a line while they fit the row's real width and stack one per line once they do not, so no alternative runs off the edge
   - log: 2026-08-24 added
   - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
@@ -408,13 +429,17 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
   - log: 2026-08-24 added
   - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
   - log: 2026-08-24 ramp widened to 32 cosine-eased phases, no step over 10 of 255
-- [x] `ACC-TUI-120` **Focused row ground** - the row under the cursor tints its band a little towards blue, on either band, staying nearer its own band than the other one
+- [x] `ACC-TUI-120` **Focused row ground** - the row under the cursor lifts onto one ground, the same ground on either band, so walking the form with the arrows does not make the lifted row flicker between two shades; the band the row belongs to still reads from the rows around it
   - log: 2026-08-24 added
   - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
-- [x] `ACC-TUI-121` **Conditional rows** - a question another answer decides whether to ask leans its ground green, on either band and on its typing ground too, since a control spans the row; the cursor's blue lean wins while the row has focus, so two tints never sit on one ground
+  - log: 2026-08-27 edited text
+  - log: 2026-08-27 reversed: the focus tint used to be applied per band, so the plate under the cursor changed shade as the cursor moved; the user asked for a lifted area that looks the same wherever it stands - "the bg of the selected item must not change ... the 'zoomed' area looks always the same"; tests/unit/test_tui_appearance.py
+- [x] `ACC-TUI-121` **Conditional rows** - a question another answer decides whether to ask leans its ground green, on either band and on its typing ground too, since a control spans the row; the green lean SURVIVES focus - the focused conditional row lifts onto its own green plate rather than the plain one, because being conditional is the fact that matters most at the moment the cursor arrives
   - log: 2026-08-26 added
   - log: 2026-08-26 closed: built - tests/unit/test_tui_appearance.py (v1.0.7)
   - log: 2026-08-26 the green lean extended to the typing ground (v1.0.7)
+  - log: 2026-08-27 edited text
+  - log: 2026-08-27 reversed: the blue focus lean used to win over the green one, so a conditional row lost the only cue that said so exactly when it was being answered; the user asked for the opposite - "except for conditional items when it gains greenish tint"; the lean is +8 green / -6 blue against the plain focus plate; tests/unit/test_tui_appearance.py
 - [x] `ACC-TUI-122` **Conditional rows hang off their answer** - a conditional question prints a tree connector before its caption, so it reads as a child of the answer that decides it; consecutive children of one answer share the run and only the last closes it
   - log: 2026-08-26 added
   - log: 2026-08-26 closed: built - tests/unit/test_tui_appearance.py, fixture tests/fixtures/tui_tree (v1.0.7)
@@ -430,3 +455,28 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
 - [x] `ACC-TUI-126` **Cursor mark breathes with the bar** - the mark on an option row takes each shade from the row's own beat, so mark and focus bar are never out of phase
   - log: 2026-08-26 added
   - log: 2026-08-26 closed: built - tests/unit/test_tui_appearance.py (v1.0.10)
+- [x] `ACC-TUI-127` **Quit key** - `ctrl+x` quits from every screen, and Textual's own `ctrl+q` is routed to the same place; ctrl+x is named by each screen rather than by the app, so the key list does not reorder as the cursor moves, and it carries priority because Textual's own text controls claim ctrl+x for `cut`; a finished render leaves with its own verdict as the exit code, a render still running is abandoned and the process leaves with the FAILURE code, saying on the way out whether anything was left on disk - copier removes a destination it created and leaves one it did not, and a cancel is the promise that nothing was written
+  - log: 2026-08-27 added
+  - log: 2026-08-27 closed: built - tests/unit/test_tui_survey.py and tests/unit/test_tui_terminal.py
+  - log: 2026-08-27 corrected: the claim that a finished render leaves with its own verdict was false as written - ctrl+x on that screen hung the app, and so did enter and escape. Fixed; see DEF-EXEC-8 and DEF-KEYS-11. An abandoned render now leaves as a failure, not a cancel, and says on the way out that the destination was partly written
+  - log: 2026-08-27 edited text
+  - log: 2026-08-27 edited text
+- [x] `ACC-TUI-128` **A render can always be left** - a template task that never returns does not trap the app; ctrl+x ends the run's children so the render unwinds and the process exits; an ordinary keystroke never aborts a running render
+  - log: 2026-08-27 added
+  - log: 2026-08-27 edited text
+  - log: 2026-08-27 closed: built - tests/unit/test_tui_terminal.py
+- [x] `ACC-TUI-129` **No command palette** - the app disables Textual's command palette; it offers a survey nothing a named key does not already do, and it opens a panel over the questions, which this form never does
+  - log: 2026-08-27 added
+  - log: 2026-08-27 edited text
+  - log: 2026-08-27 closed: built - `ENABLE_COMMAND_PALETTE = False` in packages/copier-tui/src/copier_tui/app.py
+  - log: 2026-08-27 corrected: the palette also carried the only key panel in the app, which was the one place the `space` key was named for a multiselect; removing it took that with it. Replaced by the row's own help - see ACC-TUI-131
+- [x] `ACC-TUI-130` **Update refuses a dirty destination at launch** - `update` checks the destination the way copier does and refuses before a single question is drawn: not a git repository, or a repository with uncommitted work, ends the run with copier's own wording and copier's own exit code; the check runs before the template is fetched, so a reader with uncommitted work is told to commit it rather than sent looking for a template that was never the problem
+  - log: 2026-08-27 added
+  - log: 2026-08-27 closed: built - the check lives in copier_ui.adapter, since it is a copier semantic and copier_tui holds none; tests/unit/test_ui_edges.py, and verified through a real pty that the interactive path prints the refusal and never reaches a question
+  - log: 2026-08-27 closed: built - see the log above
+- [x] `ACC-TUI-131` **Every question is answerable by a key the interface names** - a multiselect names `space` under itself while it has the focus, because nothing else on the screen does: the arrows walk its options without ticking any, the footer names only the keys that work everywhere, and the key legend and the command palette's key panel - the two places that used to name it - are both gone; the hint costs no row, because a row's help opens a line only while the cursor is on it
+  - log: 2026-08-27 added
+  - log: 2026-08-27 closed: built - tests/unit/test_tui_survey.py asserts a multiselect says it, a single choice does not, and the key still works where it is not named
+  - log: 2026-08-27 closed: built - see the log above
+  - log: 2026-08-27 extended to the two kinds where the editor owns enter: a json or multiline row loses the screen's Review entry from the footer while the cursor is on it, leaving two keys on screen that both abandon the run. The row now names the way forward, on the same line and the same rule - a fact about this row, not about the screen
+  - log: 2026-08-27 corrected: the log above says a single choice names no key, which the code and its test now contradict - every picking row names the keys that answer it, because the key a reader guesses on a stacked list is the form's own and space quietly commits an answer

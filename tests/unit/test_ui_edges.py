@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
 import sys
 
 import pytest
@@ -143,3 +144,44 @@ def test_edge_unsafe_flag_admits_a_template_with_extensions(
     with TemplateUI.from_template(str(template), dst=tmp_path / "dst", unsafe=True) as ui:
         assert ui.schema().ids() == ("name",)
     assert (tmp_path / "marker").exists()
+
+
+def _git(repo: Path, *args: str) -> None:
+    """Run one git command in `repo`, quietly, with an identity the runner need not have."""
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", *args],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+    )
+
+
+def test_edge_update_refuses_a_dirty_destination_before_asking_anything(tmp_path: Path) -> None:
+    """Edge: an update onto uncommitted work is refused at load, in copier's own words.
+
+    copier makes this check when it runs, which for a survey front end is after every question
+    has been answered - so the refusal arrives holding a filled-in form to throw away. It is
+    made here instead, while there is still nothing to lose, and before the template is
+    fetched: a reader with uncommitted work needs to be told to commit it, not sent looking
+    for a template that was never the problem.
+    """
+    dst = tmp_path / "project"
+    dst.mkdir()
+    _git(dst, "init", "-q", ".")
+    (dst / "committed.txt").write_text("done", encoding="utf-8")
+    _git(dst, "add", "-A")
+    _git(dst, "commit", "-qm", "init")
+    (dst / "uncommitted.txt").write_text("work in progress", encoding="utf-8")
+
+    with pytest.raises(TemplateLoadError) as refused:
+        TemplateUI.from_template(None, dst=dst, operation="update")
+    assert "dirty" in str(refused.value)
+
+
+def test_edge_update_on_a_destination_that_is_not_a_repository_says_so(tmp_path: Path) -> None:
+    """Edge: an update outside git is refused for that reason, not as a missing template."""
+    dst = tmp_path / "loose"
+    dst.mkdir()
+    with pytest.raises(TemplateLoadError) as refused:
+        TemplateUI.from_template(None, dst=dst, operation="update")
+    assert "git-tracked" in str(refused.value)

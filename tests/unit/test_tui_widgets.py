@@ -12,11 +12,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from rich.cells import cell_len
 from textual.app import App, ComposeResult
 from textual.widgets import Input, TextArea
 
 from copier_tui.app import SurveyApp
-from copier_tui.inline import InlineOptions
+from copier_tui.inline import FREE, TAKEN, InlineOptions
 from copier_tui.widgets import (
     WIDGET_BY_KIND,
     FieldRow,
@@ -24,7 +25,7 @@ from copier_tui.widgets import (
     display_value,
     read_control,
 )
-from copier_ui import Choice, Kind, TemplateUI
+from copier_ui import Choice, FieldState, Kind, TemplateUI
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 
@@ -226,16 +227,22 @@ narrow one, which is the decision the row has to get right."""
 class _OneRow(App[None]):
     """The smallest app that can give a control a real width."""
 
+    def __init__(self, choices: list[Choice] | None = None) -> None:
+        """Hold the options to mount, defaulting to a real template's five."""
+        super().__init__()
+        self._choices = choices or list(STORAGE)
+
     def compose(self) -> ComposeResult:
         """Nothing but the options under test."""
-        yield InlineOptions(STORAGE, "none", id="opts")
+        yield InlineOptions(self._choices, self._choices[0].value, id="opts")
 
 
 @asynccontextmanager
-async def one_row(width: int) -> AsyncIterator[InlineOptions]:
+async def one_row(width: int, labels: list[str] | None = None) -> AsyncIterator[InlineOptions]:
     """The options mounted at a given terminal width, laid out and settled."""
-    app = _OneRow()
-    async with app.run_test(size=(width, 10)) as pilot:
+    choices = [Choice(label=text, value=text) for text in labels] if labels else None
+    app = _OneRow(choices)
+    async with app.run_test(size=(width, 20)) as pilot:
         await pilot.pause()
         yield app.query_one("#opts", InlineOptions)
 
@@ -272,3 +279,85 @@ async def test_options_stack_when_the_width_cannot_hold_them() -> None:
     alternative the reader never learns about."""
     async with one_row(40) as options:
         assert lines(options) == len(STORAGE)
+
+
+def test_a_structured_answer_is_not_flattened_into_a_comma_list() -> None:
+    """A `type: json` value that parses to a sequence keeps its own rendering.
+
+    The label-joining branch was gated on the value being a list rather than on the question
+    having choices, so it captured every structured answer too - and `["a, b"]` and
+    `["a", "b"]` both came out as `a, b` on the last screen before anything is written.
+    """
+
+    def state(value: Any, choices: tuple[Choice, ...]) -> FieldState:
+        return FieldState(
+            id="f",
+            value=value,
+            visible=True,
+            enabled=True,
+            is_default=False,
+            preset=False,
+            secret=False,
+            choices=choices,
+            errors=(),
+        )
+
+    # no choices: a structured answer, which keeps its own rendering
+    assert display_value(state([1, 2, 3], ())) == "[ 1, 2, 3 ]"
+    # with choices: a multiselect, which reads in the words it was ticked with
+    picked = (Choice(label="Ex", value="x"), Choice(label="Why", value="y"))
+    assert display_value(state(["x", "y"], picked)) == "Ex, Why"
+
+
+WIDE_LABELS = [
+    ("ascii", ["pyproject.toml", "requirements.txt", "setup.cfg"]),
+    ("emoji", ["\U0001f525 PyTorch", "\U0001f680 JAX with Flax", "⚡ TensorFlow"]),
+    ("cjk", ["日本語の選択肢", "English", "中文选项"]),
+    # a break inside a label is the input that defeats a wrapper: the splitter does not treat
+    # it as a break, so one returned entry paints as two lines and the count is short
+    ("newline", ["Postgres\n(recommended)", "SQLite", "MySQL / MariaDB"]),
+]
+
+
+@pytest.mark.parametrize(("name", "labels"), WIDE_LABELS, ids=[n for n, _ in WIDE_LABELS])
+@pytest.mark.parametrize("width", [20, 30, 40, 54, 60, 66, 81, 90, 104, 120])
+async def test_an_option_list_reserves_exactly_the_lines_it_paints(
+    name: str, labels: list[str], width: int
+) -> None:
+    """The height a stacked list asks for is the height it uses, whatever the labels contain.
+
+    This is the invariant the wrapping rewrite exists to hold, and it had no test - the same
+    reserve-versus-paint drift shipped twice before it, each time closed on a measurement that
+    did not span the widths where it fails. A measurement is not a guard.
+
+    The wide cases are the ones that matter: a label is wrapped and padded by cell width, not
+    by character count, because a terminal draws cells. Counted by characters, an emoji or CJK
+    label overflows the column, Rich re-wraps it inside a box sized from the character count,
+    and the surplus lines - whole later options - are clipped away with nothing reporting it.
+    """
+    async with one_row(width, labels) as options:
+        reserved = options.get_content_height(options.size, options.size, options.size.width)
+        painted = str(options.render()).splitlines()
+        assert reserved == len(painted), (
+            f"{name} at {width}: reserved {reserved}, painted {len(painted)}"
+        )
+        for line in painted:
+            assert cell_len(line) <= options.size.width, (
+                f"{name} at {width}: a line is {cell_len(line)} cells in {options.size.width}"
+            )
+        strip = "".join(painted)
+        shapes = strip.count(TAKEN) + strip.count(FREE)
+        assert shapes == len(labels), (
+            f"{name} at {width}: {shapes} shapes drawn for {len(labels)} options"
+        )
+        # and every label's own characters survive. This is the assertion that catches a
+        # wrapper measuring the wrong thing, and the first version of this test dropped it:
+        # a label may legitimately break mid-token, so it is not a contiguous substring of the
+        # strip, and rather than compare what survives a break it was replaced by the shape
+        # count - which `_stack` emits unconditionally and which therefore cannot fail. With
+        # only that, reverting the wrapper to a character-counting one passed 30 of 30 while
+        # the widget painted `JAX with Fla` and dropped the word.
+        letters = "".join(strip.split())
+        for label in labels:
+            wanted = "".join(label.split())
+            assert wanted in letters, f"{name} at {width}: {label!r} is not painted whole"

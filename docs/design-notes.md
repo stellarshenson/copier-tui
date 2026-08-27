@@ -1,7 +1,9 @@
 # Design Notes - copier-ui and copier-tui
 
 Module map, public signatures and copier API notes for the two packages. This document is the
-implementation contract: the names and signatures below are fixed, the bodies are not.
+record of the design as the packages were laid out. Where a name or signature below
+disagrees with the code, the code is right: `README.md` and the docstrings are kept
+current and this is not, so read it for the reasoning rather than for the surface.
 Acceptance criteria live in [acc-crit-copier-tui.md](acc-crit-copier-tui.md).
 
 ## Contents
@@ -297,16 +299,19 @@ Palette and shared CSS from the `text-user-interface` skill. Constants only, no 
 Kind to widget mapping and the field row. Holds no semantics: label, help, value, choices, error
 and default-ness all arrive from `copier_ui` state.
 
-- `WIDGET_BY_KIND: Mapping[Kind, type[Widget]]` - string/path -> `Input`, secret -> `Input`
-  (`password=True`), bool -> `Switch`, integer/float -> `Input` (numeric), choice -> `Select`,
-  multiselect -> `SelectionList`, structured -> `TextArea`
+- `WIDGET_BY_KIND: Mapping[Kind, type[Widget]]` - string/path -> `WrapInput`, secret -> `Input`
+  (`password=True`), integer/float -> `Input` (numeric), bool/choice/multiselect ->
+  `InlineOptions` (every option printed on the question's own row rather than behind a menu),
+  structured -> `TextArea`
 - `control_for(question: Question, field: FieldState) -> Widget` - the control alone, prefilled
 - `read_control(question: Question, control: Widget) -> Any` - the control's current value
-- `HeaderBar(Horizontal)` - app name left, version right; `__init__(context: str = "")`
-- `FieldRow(Horizontal)` - one row: label gutter, control, one status glyph. Help and validation
-  messages belong to the screen's hint line, not to the row
+- `HeaderBar(Horizontal)` - app name left, version right;
+  `__init__(context: str = "", path: Path | None = None)`; crops the path to the row's width
+- `FieldRow(Vertical)` - one row: label gutter, control, one status glyph. Help and validation
+  messages belong to the focused row, under the question they concern; the screen's hint line
+  carries the cancel arming warning and the count of refused answers
   - `__init__(question: Question, field: FieldState)`
-  - `update(field: FieldState) -> None` - leaves an unmounted control alone: `Select` stores its
+  - `update(field: FieldState) -> None` - leaves an unmounted control alone: a control stores its
     constructed value privately and only assigns the reactive on mount, so an earlier write
     leaves the reactive unchanged and the control renders its prompt over a real answer
   - `field: FieldState` - property, what the row currently shows
@@ -320,11 +325,11 @@ One screen per module, re-exported from `screens/__init__.py`.
 `screens/survey.py` - the whole visible survey as one scrolling form, which is what makes free
 back-and-forward navigation and live revisibility fall out for nothing.
 
-- `SurveyScreen(Screen[None])` - `__init__(ui: TemplateUI)`. It never dismisses itself: review is
+- `SurveyScreen(Screen[None])` - `__init__(ui: TemplateUI, dst: Path)`. It never dismisses itself: review is
   stacked over it, so the form is never rebuilt and keeps its scroll offset and focused field.
   Posts `SurveyScreen.Confirmed` and `SurveyScreen.Cancelled` for the app to act on. Rebuilds rows
   from `ui.state()` after every `FieldRow.Changed` and on resume; skips fields that are not
-  `visible` or are `preset`; marks errors on the row and names them in the hint line
+  `visible` or are `preset`; marks errors on the row, which is where they are read
 - `check_action` is the one key-ownership rule: enter reaches an open menu and a multiline editor
   and confirms everywhere else; up and down reach a control with a cursor of its own until its
   first or last line, then step between fields

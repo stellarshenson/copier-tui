@@ -58,7 +58,8 @@ Flags keep copier's semantics rather than being re-implemented:
 | `space` | cycle a choice forward, or tick the option under the cursor in a multiselect |
 | `enter` | confirm the screen; inside a multiline editor it breaks the line |
 | `esc` | go back, or cancel - on the survey it arms first and quits on a second press |
-| `ctrl+p` | command palette |
+| `ctrl+x` | quit from any screen; on a render still running it ends the run's tasks and leaves |
+| `ctrl+q` | the same as `ctrl+x` |
 | `ctrl+c` | left to the terminal, so it still copies |
 
 The survey is driven from the keyboard alone and asks the terminal for no mouse reporting, so

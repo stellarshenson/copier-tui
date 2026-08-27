@@ -190,7 +190,10 @@ async def test_a_failed_render_shows_the_message_and_keeps_partial_output(
             await pilot.press("enter")
             await pilot.pause()
             status = app.screen.query_one("#exec-status", Static)
-            assert await wait_until(pilot, lambda: "copier gave up" in str(status.visual))
+            assert await wait_until(pilot, lambda: "failed" in str(status.visual))
+            # the reason is in the log, not on the one-row status line that would crop it
+            log = app.screen.query_one("#exec-files", RichLog)
+            assert any("copier gave up" in str(line) for line in log.lines)
 
             await pilot.press("space")
             assert await wait_until(pilot, lambda: not app.is_running)
@@ -224,7 +227,7 @@ async def test_a_non_empty_destination_warns_before_confirmation(tmp_path: Path)
         await pilot.press("enter")
         await pilot.pause()
         warning = app.screen.query_one("#review-warning", Static)
-        assert "not empty" in str(warning.visual)
+        assert "may be overwritten" in str(warning.visual)
 
         await pilot.press("escape")
         assert await wait_until(pilot, lambda: isinstance(app.screen, SurveyScreen))

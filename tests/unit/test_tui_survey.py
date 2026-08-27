@@ -4,22 +4,26 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+import os
 from pathlib import Path
 from typing import Any
 
 import pytest
 from textual.containers import VerticalScroll
-from textual.widgets import Static, TextArea
+from textual.widgets import Footer, Static, TextArea
 
 from copier_tui.app import SurveyApp
+from copier_tui.errors import EXIT_CANCELLED
 from copier_tui.inline import InlineOptions
 from copier_tui.screens import ReviewScreen, SurveyScreen
 from copier_tui.screens import survey as survey_screen
-from copier_tui.screens.survey import CANCEL_HINT, KEY_HINT
+from copier_tui.screens.survey import CANCEL_HINT
+from copier_tui.theme import MIN_HEIGHT, MIN_WIDTH
 from copier_tui.widgets import FieldRow
 from copier_ui import TemplateUI
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
+REFERENCE = Path("/home/lab/workspace/private/copier-data-science")
 
 
 @asynccontextmanager
@@ -181,20 +185,32 @@ async def test_a_description_is_the_caption_and_is_never_cut(tmp_path: Path) -> 
 
 
 async def test_the_same_sentence_is_never_printed_twice(tmp_path: Path) -> None:
-    """With help and caption identical, repeating it under the row would say nothing."""
+    """A caption is never repeated under its own row - only what the caption does not say."""
     async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
         app.screen.query_one("#ctl-flavour").focus()
         await pilot.pause()
-        assert field_help(app, "flavour") == ""
+        shown = field_help(app, "flavour")
+        assert app.screen.query(FieldRow).first().question.label not in shown
+        # what it does carry is the one key that answers a picking question, which the footer
+        # cannot name because it means something else on every other row. One clause, not two
+        # joined by a hyphen: the pair wrapped at the narrow sizes and left the hyphen hanging
+        # at the end of a line, reading as a subtraction
+        assert shown == "space cycles the answer", shown
 
 
-async def test_the_line_under_the_form_says_what_the_keys_do(tmp_path: Path) -> None:
-    """Every key that moves or changes something is named where the eye already rests."""
+async def test_the_line_under_the_form_stays_blank_until_it_has_something_to_say(
+    tmp_path: Path,
+) -> None:
+    """The status line is reserved, not filled.
+
+    It carried a legend of every key that moves or changes something. The footer names those
+    keys already and the focused row prints its own help under itself, so the legend was a
+    line of text between the reader and the questions that never changed. The row is still
+    there, still one line, so nothing on screen moves when a message does arrive.
+    """
     async with survey(tmp_path / "out", template="tui_kinds") as (app, _):
-        legend = hint(app)
-        assert legend == KEY_HINT
-        for key in ("up", "down", "left", "right", "enter"):
-            assert key in legend
+        assert hint(app) == ""
+        assert app.screen.query_one("#survey-status").size.height == 1
 
 
 async def test_every_option_is_on_the_row_not_behind_a_menu(tmp_path: Path) -> None:
@@ -451,7 +467,10 @@ async def test_the_survey_says_where_the_template_will_be_rendered(tmp_path: Pat
     """
     dst = tmp_path / "out"
     async with survey(dst) as (app, _):
-        assert str(dst) in str(app.screen.query_one("#survey-where", Static).visual)
+        shown = str(app.screen.query_one("#survey-where", Static).visual)
+        # the tail is what names the project, so that is what a crop has to keep. A pytest
+        # tmp_path runs past the line's width, which is the case a real deep path is in too
+        assert shown.endswith(f"{dst.parent.name}/out"), shown
 
     home = Path.home() / "somewhere-under-home"
     with TemplateUI.from_template(str(FIXTURES / "tui_flow"), dst=home) as ui:
@@ -460,6 +479,47 @@ async def test_the_survey_says_where_the_template_will_be_rendered(tmp_path: Pat
             await pilot.pause()
             shown = str(app.screen.query_one("#survey-where", Static).visual)
     assert shown.endswith("~/somewhere-under-home"), shown
+
+
+async def test_the_survey_names_a_relative_destination_in_full(tmp_path: Path) -> None:
+    """A destination given relatively is still named on screen, by the part that names it.
+
+    `copier-tui update` defaults its destination to the current directory, and the survey
+    printed the `.` it was handed - a line that says the answers are going where the reader
+    already is, which is the one thing they did not need telling.
+    """
+    here = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with TemplateUI.from_template(str(FIXTURES / "tui_flow"), dst=Path(".")) as ui:
+            app = SurveyApp(ui, Path("."), {})
+            async with app.run_test(size=(100, 40)) as pilot:
+                await pilot.pause()
+                shown = str(app.screen.query_one("#survey-where", Static).visual)
+    finally:
+        os.chdir(here)
+    # cropped from the left when it is long, so what survives is the end - the directory the
+    # answers are going into, which is the half of a path that identifies anything
+    assert shown.rstrip().endswith(tmp_path.resolve().name), shown
+    assert shown.strip() != "\u2192 .", "a bare dot names the one place the reader is standing"
+
+
+async def test_ctrl_x_quits_from_the_survey(tmp_path: Path) -> None:
+    """One key, no arming, and it is offered in the footer.
+
+    Escape is a single ambiguous byte, so a second one can be read as the introducer of
+    whatever the terminal says next and never arrive. ctrl+x introduces nothing.
+    """
+    dst = tmp_path / "out"
+    async with survey(dst) as (app, pilot):
+        assert app.active_bindings["ctrl+x"].binding.description == "Quit"
+        # escape keeps its own footer entry: two bindings sharing one action name leave only
+        # one of them showing, and which one survives depends on the screen
+        assert app.active_bindings["escape"].binding.description == "Cancel"
+        await pilot.press("ctrl+x")
+        await pilot.pause()
+    assert app.return_value == EXIT_CANCELLED
+    assert not dst.exists(), "a quit before the review writes nothing"
 
 
 async def test_the_form_gets_every_row_the_chrome_is_not_using(tmp_path: Path) -> None:
@@ -494,18 +554,28 @@ async def test_a_form_that_fits_neither_scrolls_nor_shows_a_bar(tmp_path: Path) 
         assert not form.show_vertical_scrollbar
 
 
+@pytest.mark.skipif(
+    not Path("/home/lab/workspace/private/copier-data-science").is_dir(),
+    reason="the reference template is not checked out",
+)
 async def test_a_form_too_tall_for_the_screen_still_scrolls(tmp_path: Path) -> None:
     """The other half of the claim: a form that genuinely overflows keeps its scrollbar.
 
-    Narrow rather than short, so the captions wrap and the content outgrows a screen that is
-    still above the minimum usable size and carries no resize prompt.
+    It takes a template with more questions than the screen has rows. This used to be done by
+    running a twelve-question fixture in a narrow terminal, on the reasoning that the captions
+    would wrap and outgrow the screen - which stopped being true when the gutter became a share
+    of the row, since a caption re-wrapped into a narrower gutter is still capped in height.
+    The reference template asks twenty-three, which no supported height can hold.
     """
     dst = tmp_path / "out"
-    async with survey(dst, template="tui_kinds", size=(60, 20)) as (app, _):
-        form = app.screen.query_one("#survey-form", VerticalScroll)
-        assert form.virtual_size.height > form.container_size.height, form.virtual_size
-        assert form.max_scroll_y > 0
-        assert form.show_vertical_scrollbar
+    with TemplateUI.from_template(str(REFERENCE), dst=dst, unsafe=True) as ui:
+        app = SurveyApp(ui, dst, {"quiet": True, "unsafe": True})
+        async with app.run_test(size=(100, MIN_HEIGHT)) as pilot:
+            await pilot.pause()
+            form = app.screen.query_one("#survey-form", VerticalScroll)
+            assert form.virtual_size.height > form.container_size.height, form.virtual_size
+            assert form.max_scroll_y > 0
+            assert form.show_vertical_scrollbar
 
 
 async def test_a_long_destination_is_cropped_rather_than_wrapped(tmp_path: Path) -> None:
@@ -539,3 +609,454 @@ async def test_the_cursor_stops_at_the_first_field(tmp_path: Path) -> None:
         for _ in range(6):
             await pilot.press("up")
         assert app.screen.focused is app.screen.focus_chain[0]
+
+
+async def test_a_multiselect_names_the_key_that_ticks_an_option(tmp_path: Path) -> None:
+    """The focused multiselect says `space` under itself; no other question does.
+
+    A multiselect answers to nothing else - the arrows walk its options without ticking any of
+    them - and the key was named in exactly two places, the key legend and the command
+    palette's key panel, both since removed. That left a question no key the interface names
+    can answer.
+    """
+    async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
+        screen = app.screen
+        screen.set_focus(screen.query_one("#ctl-extras", InlineOptions))
+        await pilot.pause()
+        assert "space ticks" in field_help(app, "extras")
+
+        screen.set_focus(screen.query_one("#ctl-flavour", InlineOptions))
+        await pilot.pause()
+        # a single choice names space too - it cycles the answer, and a reader who has just
+        # learned it on a multiselect row will try it here
+        assert "space cycles" in field_help(app, "flavour")
+
+
+async def test_the_tick_key_still_works_where_it_is_not_named(tmp_path: Path) -> None:
+    """Naming the key on one kind of question must not take it from the others."""
+    async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
+        options = app.screen.query_one("#ctl-flavour", InlineOptions)
+        app.screen.set_focus(options)
+        await pilot.pause()
+        before = options.value
+        await pilot.press("space")
+        await pilot.pause()
+        assert options.value != before, "space still walks a single choice forward"
+
+
+async def test_help_belongs_to_the_focused_row_and_costs_the_others_nothing(
+    tmp_path: Path,
+) -> None:
+    """A row's help opens a line under it only while it has the focus.
+
+    The line was opened by an inline `display`, which overrode the very stylesheet rule that
+    keeps help to the focused row - so every question carrying help spent a second line
+    whether or not anyone was reading it, on a layout whose whole point is one row each.
+    """
+    async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
+        screen = app.screen
+        rows = {row.question.id: row for row in screen.query(FieldRow)}
+        screen.set_focus(screen.query_one("#ctl-extras", InlineOptions))
+        await pilot.pause()
+        focused = rows["extras"].region.height
+
+        screen.set_focus(screen.query_one("#ctl-flavour", InlineOptions))
+        await pilot.pause()
+        assert rows["extras"].region.height < focused, (
+            "the help line must close again when the cursor leaves the row"
+        )
+
+
+async def test_the_quit_key_quits_from_every_kind_of_field(tmp_path: Path) -> None:
+    """ctrl+x is the way out from any row, including the ones that want the key for cut.
+
+    Textual's own `Input` and `TextArea` bind ctrl+x to `cut`, and a focused widget's binding
+    beats the screen's - so without priority the advertised quit key silently became the
+    editor's cut on every text field, which is five rows in six. Nothing tested it: the only
+    quit test pressed the key on the first field and never walked the form.
+    """
+    async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
+        seen = set()
+        for _ in range(12):
+            focused = app.focused
+            assert focused is not None
+            bound = {
+                binding.action
+                for _, binding, _, _ in app.active_bindings.values()
+                if binding.key == "ctrl+x"
+            }
+            assert bound == {"app.quit_now"}, (
+                f"ctrl+x is {bound} on {type(focused).__name__}, not the quit key the footer names"
+            )
+            seen.add(type(focused).__name__)
+            await pilot.press("down")
+            await pilot.pause()
+        assert {"WrapInput", "Input", "TextArea", "InlineOptions"} <= seen, seen
+
+
+async def test_an_armed_cancel_does_not_survive_a_trip_to_review(tmp_path: Path) -> None:
+    """Escape, review, back, escape - the survey is NOT discarded.
+
+    No focus event fires when the review screen is popped: the field that had the cursor still
+    has it. So nothing disarmed, and one escape on return threw away every answer. Four presses
+    inside the three-second window, which is not a long reach for a hesitant hand.
+    """
+    async with survey(tmp_path / "out") as (app, pilot):
+        screen = app.screen
+        await pilot.press("escape")
+        await pilot.pause()
+        assert screen._armed
+
+        await pilot.press("enter")  # to review
+        await pilot.pause()
+        await pilot.press("escape")  # and back again
+        await pilot.pause()
+        assert not screen._armed, "the cancel came back from review still armed"
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert app.return_value is None, "one escape after review discarded the survey"
+
+
+async def test_the_header_never_wraps_and_so_never_loses_the_path(tmp_path: Path) -> None:
+    """The header bar is one row, so its title is cropped rather than wrapped.
+
+    A wrapped title keeps only its first line, and that line ends at the last space it fitted -
+    which on the review screen took the whole destination off the screen at 80 columns and left
+    a dangling separator. The review screen is the last thing read before anything is written,
+    and where it will be written is the fact it exists to confirm.
+    """
+    dst = tmp_path / "churn-pipeline"
+    dst.mkdir()
+    with TemplateUI.from_template(str(FIXTURES / "tui_flow"), dst=dst) as ui:
+        for width in (120, 100, 80, 70, 60):
+            app = SurveyApp(ui, dst, {})
+            async with app.run_test(size=(width, 24)) as pilot:
+                await pilot.press("enter")  # onto the review screen
+                await pilot.pause()
+                title = app.screen.query_one("#hdr-title", Static)
+                assert title.region.height == 1, f"the title wrapped at {width} columns"
+                assert dst.name in str(title.visual), f"the destination is unnamed at {width}"
+
+
+async def test_a_destination_too_long_for_the_bar_loses_its_head_not_its_tail(
+    tmp_path: Path,
+) -> None:
+    """What survives a crop is the end of the path, because that is what names the project.
+
+    The stylesheet's own ellipsis takes characters off the right, which on a path removes the
+    answer and leaves the reader holding a temp-directory prefix. The header shortens from the
+    left first, and it does so against the width the row actually has - a constant was both too
+    aggressive on a wide terminal and no help on a narrow one.
+    """
+    dst = tmp_path / "a-project-with-a-name-far-too-long-for-a-narrow-terminal-bar"
+    dst.mkdir()
+    with TemplateUI.from_template(str(FIXTURES / "tui_flow"), dst=dst) as ui:
+        app = SurveyApp(ui, dst, {})
+        async with app.run_test(size=(70, 24)) as pilot:
+            await pilot.press("enter")
+            await pilot.pause()
+            title = app.screen.query_one("#hdr-title", Static)
+            shown = str(title.visual)
+            assert title.region.height == 1
+            assert shown.endswith("terminal-bar"), shown
+            assert str(tmp_path) not in shown, "the head was kept and the project name cut"
+
+
+async def test_the_review_prints_the_words_the_answer_was_given_in(tmp_path: Path) -> None:
+    """The last screen before a write says `Yes`, not `True`, and names what was ticked.
+
+    A bool's two labels live in the renderer, not in the state, so nothing resolved them and
+    the review printed the value behind the answer. On the reference template that is eleven
+    of twenty-three questions reading as Python on the screen that asks for confirmation.
+    """
+    async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
+        app.ui.set("enabled", True)
+        app.ui.set("extras", ["x", "y"])
+        await pilot.press("enter")
+        await pilot.pause()
+        printed = {
+            str(row.query(Static)[0].visual): str(row.query(Static)[1].visual)
+            for row in app.screen.query(".review-answer")
+            if len(row.query(Static)) == 2
+        }
+        assert printed["enabled (bool)"] == "Yes", printed["enabled (bool)"]
+        assert printed["extras"] == "x, y", printed["extras"]
+
+
+async def test_a_multiselect_nobody_ticked_reads_as_a_choice_not_an_absence(
+    tmp_path: Path,
+) -> None:
+    """Ticking none of the options is a decision, and reads as one.
+
+    `[]` is not how a person writes an answer, but neither is `not set` - that is what the
+    review says about a question nobody reached, in the same words and the same grey, so
+    "I chose none of these" and "I skipped this" were indistinguishable on the screen whose
+    job is to be read before anything is written.
+    """
+    async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
+        await pilot.press("enter")
+        await pilot.pause()
+        printed = {
+            str(row.query(Static)[0].visual): str(row.query(Static)[1].visual)
+            for row in app.screen.query(".review-answer")
+            if len(row.query(Static)) == 2
+        }
+        assert printed["extras"] == "none selected", printed["extras"]
+
+
+async def test_arriving_on_a_failing_row_does_not_make_it_speak(tmp_path: Path) -> None:
+    """A focus alone leaves a failing row silent; only an edit or a refused enter speaks.
+
+    Focus once promoted the row, but nothing re-rendered on a focus - so the sentence
+    surfaced on the next unrelated keystroke and moved the form under a cursor that was
+    somewhere else by then. The template fails at mount, because a value changed after
+    mount is news the reader caused and rightly speaks.
+    """
+    (tmp_path / "template").mkdir()
+    (tmp_path / "template" / "README.md").write_text("x\n")
+    (tmp_path / "copier.yml").write_text(
+        "_subdirectory: template\n"
+        "first:\n  type: str\n  default: ''\n"
+        '  validator: "{% if not first %}first is required{% endif %}"\n'
+        "second:\n  type: str\n  default: ''\n"
+    )
+    dst = tmp_path / "out"
+    with TemplateUI.from_template(str(tmp_path), dst=dst) as ui:
+        app = SurveyApp(ui, dst, {"quiet": True})
+        async with app.run_test(size=(100, 40)) as pilot:
+            await pilot.pause()
+            await pilot.press("down")
+            await pilot.pause()
+            await pilot.press("up")
+            await pilot.pause()
+            await pilot.press("down")
+            await pilot.pause()
+            await pilot.press("z")  # an edit on the OTHER row
+            await pilot.pause()
+            assert field_help(app, "first") == "", "a focus alone made the row speak"
+
+
+async def test_a_blocked_enter_disarms_the_cancel(tmp_path: Path) -> None:
+    """escape, an enter the validator refuses, escape - the survey is NOT discarded.
+
+    The refused branch overwrites the arming warning with a validation message, and it re-
+    focuses a field that already had the cursor, so `set_focus` returns early and no focus
+    event fires. The safety's whole visible state was replaced while the safety stayed on, and
+    the next escape - the gesture for dismissing a message - threw away every answer.
+    """
+    async with survey(tmp_path / "out") as (app, pilot):
+        screen = app.screen
+        app.ui.set("name", "")
+        await screen._refresh_rows()
+        await pilot.pause()
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert screen._armed
+
+        await pilot.press("enter")  # refused by the validator
+        await pilot.pause()
+        assert not screen._armed, "a blocked enter left the cancel armed and its warning gone"
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert app.return_value is None, "escape after a blocked enter discarded the survey"
+
+
+async def test_an_answer_is_legible_at_the_width_the_app_asks_for(tmp_path: Path) -> None:
+    """At MIN_WIDTH every row shows its answer, not just its caption.
+
+    The caption gutter was a constant 56 in a terminal the app itself declares usable at 60,
+    so the answer column was 0 columns wide and every row showed a question and nothing else -
+    with no resize prompt, because 60 is not too small. The gutter is a share of the row now.
+    """
+    async with survey(tmp_path / "out", template="tui_kinds", size=(MIN_WIDTH, 30)) as (app, _):
+        for row in app.screen.query(FieldRow):
+            control = row.query_one(f"#ctl-{row.question.id}")
+            assert control.size.width >= 12, f"{row.question.id} has {control.size.width} columns"
+
+
+async def test_the_destination_keeps_its_tail_at_the_narrowest_supported_width(
+    tmp_path: Path,
+) -> None:
+    """The status line crops from the left, so the directory being written to survives."""
+    dst = tmp_path / "deeply" / "nested" / "somewhere" / "my-analytics-project"
+    dst.mkdir(parents=True)
+    with TemplateUI.from_template(str(FIXTURES / "tui_flow"), dst=dst) as ui:
+        app = SurveyApp(ui, dst, {})
+        async with app.run_test(size=(MIN_WIDTH, 24)) as pilot:
+            await pilot.pause()
+            shown = str(app.screen.query_one("#survey-where", Static).visual)
+            assert shown.endswith(dst.name), shown
+
+
+async def test_the_overwrite_warning_leads_with_the_risk(tmp_path: Path) -> None:
+    """The one line that says an existing project may be overwritten says it first.
+
+    It is one row over a wrapping Static, so led by the path it wrapped and the second line was
+    clipped - at 60 columns it read as an amber path and nothing else.
+    """
+    dst = tmp_path / "already-here"
+    dst.mkdir()
+    (dst / "mine.txt").write_text("keep me", encoding="utf-8")
+    with TemplateUI.from_template(str(FIXTURES / "tui_flow"), dst=dst) as ui:
+        app = SurveyApp(ui, dst, {})
+        async with app.run_test(size=(MIN_WIDTH, 24)) as pilot:
+            await pilot.press("enter")
+            await pilot.pause()
+            warning = app.screen.query_one("#review-warning", Static)
+            assert warning.region.height == 1
+            assert str(warning.visual).startswith("existing files may be overwritten")
+
+
+@pytest.mark.skipif(not REFERENCE.is_dir(), reason="the reference template is not checked out")
+@pytest.mark.parametrize("width", [60, 80, 100, 120])
+async def test_walking_the_form_does_not_change_a_single_answer(
+    width: int, tmp_path: Path
+) -> None:
+    """Holding `down` to the bottom of the survey rewrites nothing.
+
+    `down` is the form's own key. Binding it to a stacked option list looked right - a column
+    read with the arrows that read a column - and was a data-loss defect: moving is choosing
+    on a single-choice question, so every stacked answer the cursor passed was committed to
+    its next option. Twelve of twenty-three at 60 columns, silently, with nothing on screen
+    saying so and no way to arrow back to what had been there.
+
+    Which keys do answer the question is said on the row's own help line instead.
+    """
+    dst = tmp_path / "out"
+    with TemplateUI.from_template(str(REFERENCE), dst=dst, unsafe=True) as ui:
+        app = SurveyApp(ui, dst, {"quiet": True, "unsafe": True})
+        async with app.run_test(size=(width, 40)) as pilot:
+            await pilot.pause()
+            state = ui.state()
+            before = {id: state.fields[id].value for id in state.visible_ids}
+            for _ in range(60):
+                await pilot.press("down")
+                await pilot.pause()
+            state = ui.state()
+            changed = {
+                id: (before.get(id), state.fields[id].value)
+                for id in state.visible_ids
+                if before.get(id, "<new>") != state.fields[id].value
+            }
+            assert not changed, changed
+
+
+async def test_options_on_one_line_leave_the_arrows_to_the_form(tmp_path: Path) -> None:
+    """Unstacked, the options read as a row, so up and down still move between questions."""
+    async with survey(tmp_path / "out", template="tui_kinds", size=(140, 30)) as (app, pilot):
+        options = app.screen.query_one("#ctl-flavour", InlineOptions)
+        app.screen.set_focus(options)
+        await pilot.pause()
+        assert not options.stacked, "this width was chosen so the list fits one line"
+
+        await pilot.press("down")
+        await pilot.pause()
+        assert app.focused is not options, "down should have moved to the next question"
+
+
+@pytest.mark.parametrize("width", [60, 80, 100])
+async def test_the_cancel_warning_is_readable_whole(width: int, tmp_path: Path) -> None:
+    """The app's one destructive keystroke says what it does, at every supported width.
+
+    The warning shares its row with the destination, which claims up to 60 percent of it, so
+    at 60 columns it was ellipsised to `press escape again to` - the reader told to press a key
+    again and not told that it throws away every answer. It takes the whole row while it is up:
+    the destination is on the review screen and in the header, and this sentence has nowhere
+    else to be.
+    """
+    dst = tmp_path / "clients" / "acme" / "data-platform" / "ingest-service"
+    dst.mkdir(parents=True)
+    with TemplateUI.from_template(str(FIXTURES / "tui_flow"), dst=dst) as ui:
+        app = SurveyApp(ui, dst, {})
+        async with app.run_test(size=(width, 24)) as pilot:
+            await pilot.press("escape")
+            await pilot.pause()
+            box = app.screen.query_one("#survey-hint", Static)
+            assert box.size.width >= len(CANCEL_HINT), (
+                f"the warning has {box.size.width} columns for {len(CANCEL_HINT)} characters"
+            )
+            assert not app.screen.query_one("#survey-where", Static).display
+
+
+@pytest.mark.parametrize("size", [(100, 17), (80, 17), (59, 24), (30, 8)])
+async def test_the_resize_advisory_covers_nothing_that_carries_a_warning(
+    size: tuple[int, int], tmp_path: Path
+) -> None:
+    """The prompt takes a row from the form; it never paints over one that says something.
+
+    Three attempts at this widget each fixed the last and broke a neighbour: centred it covered
+    six rows of the form, docked flush it covered the footer where the keys are named, lifted
+    one row it covered the status line - which is where the cancel warning says that a second
+    escape discards every answer. Both bottom rows of every screen are load-bearing, so there
+    was never a free row to overlay; it is a row of the layout now.
+    """
+    dst = tmp_path / "out"
+    with TemplateUI.from_template(str(FIXTURES / "tui_flow"), dst=dst) as ui:
+        app = SurveyApp(ui, dst, {})
+        async with app.run_test(size=size) as pilot:
+            await pilot.press("escape")
+            await pilot.pause()
+            prompt = app.screen.query("#resize-prompt")
+            assert prompt, f"no prompt at {size}, which is under the minimum"
+            taken = {
+                app.screen.query_one("#survey-status").region.y,
+                app.screen.query(Footer).first().region.y,
+            }
+            assert prompt.first(Static).region.y not in taken
+            assert str(app.screen.query_one("#survey-hint", Static).visual) == CANCEL_HINT
+
+
+@pytest.mark.parametrize("park_on", ["ctl-name", "ctl-advanced", "ctl-token"])
+async def test_a_refused_enter_says_why_wherever_the_cursor_was(
+    park_on: str, tmp_path: Path
+) -> None:
+    """Enter that the validator refuses explains itself, whatever row the cursor was on.
+
+    Pressing enter from anywhere but the bad row used to jump the cursor across a form of two
+    dozen questions and say nothing at all: the message was written and then the focus move it
+    triggers blanked it. The test that covered this pressed enter on the already-focused field,
+    where `set_focus` returns early and no focus event fires; its own docstring said so.
+
+    The reason lives on the row now and the shared line counts what is left, so this asserts
+    both - the same words in both places was one sentence on screen twice, rose both times,
+    with the shared copy the one that gets cropped.
+    """
+    async with survey(tmp_path / "out") as (app, pilot):
+        screen = app.screen
+        app.ui.set("name", "")
+        await screen._refresh_rows()
+        await pilot.pause()
+        screen.set_focus(screen.query_one(f"#{park_on}"))
+        await pilot.pause()
+
+        await pilot.press("enter")
+        await pilot.pause()
+        # the reason is on the offending row, in full, wherever the cursor started
+        assert "required" in field_help(app, "name")
+        # and the shared line carries the one fact no row can state
+        assert "attention" in str(screen.query_one("#survey-hint", Static).visual)
+
+
+@pytest.mark.parametrize("size", [(30, 8), (40, 10), (59, 24)])
+async def test_the_resize_advisory_reads_as_advice_and_keeps_its_numbers(
+    size: tuple[int, int], tmp_path: Path
+) -> None:
+    """The advisory is ink like the warnings beside it, one row, and never loses its numbers.
+
+    Filled amber across the width it was the loudest thing on screen and the least urgent -
+    both real warnings are ink, so a fill outranked them, and this one is permanent where the
+    cancel warning lives three seconds. It also wrapped, so at 30 columns it clipped away the
+    size it exists to name.
+    """
+    with TemplateUI.from_template(str(FIXTURES / "tui_flow"), dst=tmp_path / "out") as ui:
+        app = SurveyApp(ui, tmp_path / "out", {})
+        async with app.run_test(size=size) as pilot:
+            await pilot.pause()
+            prompt = app.screen.query("#resize-prompt").first(Static)
+            assert prompt.size.height == 1
+            assert not prompt.styles.background.a, "an advisory is ink, not a fill"
+            assert str(MIN_WIDTH) in str(prompt.visual)
+            assert str(MIN_HEIGHT) in str(prompt.visual)

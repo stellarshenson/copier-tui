@@ -1,17 +1,16 @@
 """Headless SVG screenshots of the survey, review and execution screens, into docs/assets.
 
 Run as `python -m copier_tui.screenshots [template-path]`. The render is a real one, so the
-execution capture reports files that were actually written - into a throwaway directory that
-goes away with the run.
+execution capture reports files that were actually written - into `~/demo-proj`, which is
+removed afterwards and is named so no machine path reaches the pictures.
 """
 
 from __future__ import annotations
 
 import asyncio
-import os
 from pathlib import Path
+import shutil
 import sys
-import tempfile
 
 from textual.pilot import Pilot
 
@@ -73,18 +72,21 @@ async def _await_verdict(pilot: Pilot[int], app: SurveyApp) -> None:
 def main() -> None:
     """Capture the three screens over the given template, or copier-data-science.
 
-    The run happens from inside a throwaway directory with a relative destination, so the
-    header bar in the captures reads `demo-proj` rather than a temp path nobody will have.
+    The destination sits directly under the home directory, so every screen that names it reads
+    `~/demo-proj`. It used to be a relative path inside a throwaway directory, on the reasoning
+    that a relative path would be shown as given - which stopped being true when the app began
+    resolving destinations, and quietly baked `/tmp/tmpXXXXXXXX/demo-proj` into a picture the
+    README puts on its front page. A capture must not carry the machine that took it.
     """
     template = Path(sys.argv[1] if len(sys.argv) > 1 else DEFAULT_TEMPLATE).resolve()
     out = OUT.resolve()
-    home = Path.cwd()
-    with tempfile.TemporaryDirectory() as tmp:
-        os.chdir(tmp)
-        try:
-            asyncio.run(_capture(str(template), Path("demo-proj"), out))
-        finally:
-            os.chdir(home)
+    dst = Path.home() / "demo-proj"
+    if dst.exists():
+        raise SystemExit(f"{dst} already exists; move it before capturing")
+    try:
+        asyncio.run(_capture(str(template), dst, out))
+    finally:
+        shutil.rmtree(dst, ignore_errors=True)
 
 
 if __name__ == "__main__":

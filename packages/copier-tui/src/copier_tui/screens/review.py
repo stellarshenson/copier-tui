@@ -12,17 +12,17 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Footer, Static
 
+from copier_tui.paths import fit_path
 from copier_tui.theme import (
     AMBER,
     CYAN_BRIGHT,
-    LABEL_LINES,
     LABEL_WIDTH,
     ROW_ALT_BG,
     ROW_BG,
     TEXT,
     TEXT_SUBTLE,
 )
-from copier_tui.widgets import HeaderBar, display_value
+from copier_tui.widgets import HEADER_PATH_FLOOR, HeaderBar, display_value
 from copier_ui import TemplateUI
 
 UNSET = "not set"
@@ -44,6 +44,8 @@ class ReviewScreen(Screen[bool]):
         width: 100%;
         padding: 0 1;
         color: {AMBER};
+        text-wrap: nowrap;
+        text-overflow: ellipsis;
     }}
     .review-answer {{
         height: auto;
@@ -54,9 +56,17 @@ class ReviewScreen(Screen[bool]):
         background: {ROW_ALT_BG};
     }}
     .review-caption {{
-        width: {LABEL_WIDTH};
+        /* a share of the row capped at the old fixed width, as the form's gutter is. Flat at
+           56 this left the value column ONE column wide at MIN_WIDTH, so every answer stacked
+           a character per row - `demo` as four rows - on the screen whose whole job is to be
+           read before anything is written. */
+        width: 60%;
+        max-width: {LABEL_WIDTH};
         height: auto;
-        max-height: {LABEL_LINES};
+        /* no max-height. The survey caps a caption at three lines because thirty rows have to
+           fit one screen; this screen has one job, which is to be read before anything is
+           written, and a caption cut here removes exactly the words being checked. The row
+           grows instead - which is what the compose docstring below has always claimed. */
         padding: 0 2 0 1;
     }}
     .review-value {{
@@ -71,6 +81,9 @@ class ReviewScreen(Screen[bool]):
     BINDINGS: ClassVar[list[Binding]] = [
         Binding("enter", "confirm", "Create", priority=True),
         Binding("escape", "back", "Back", priority=True),
+        # priority: Textual's Input and TextArea bind ctrl+x to `cut` and a focused widget's
+        # binding beats the screen's. Full reason in SurveyApp.BINDINGS.
+        Binding("ctrl+x", "app.quit_now", "Quit", priority=True),
     ]
 
     def __init__(self, ui: TemplateUI, dst: Path) -> None:
@@ -81,7 +94,9 @@ class ReviewScreen(Screen[bool]):
 
     def compose(self) -> ComposeResult:
         """Header, one line per answer, the destination warning, footer."""
-        yield HeaderBar(f"review · {self.dst}")
+        # the path goes to the header whole; it crops it to the width the row actually has,
+        # keeping the tail, because the project name is the half that identifies anything
+        yield HeaderBar("review", self.dst)
         yield VerticalScroll(*self._answer_lines(), id="review-list")
         yield Static(self._destination_note(), id="review-warning")
         yield Footer()
@@ -94,10 +109,23 @@ class ReviewScreen(Screen[bool]):
         """Dismiss with False to return to the survey."""
         self.dismiss(False)
 
+    def on_resize(self) -> None:
+        """Re-fit the warning's path to the room the row has, as the other lines do."""
+        self.query_one("#review-warning", Static).update(self._destination_note())
+
     def _destination_note(self) -> Text:
         """Warn when the destination already holds files the render could overwrite."""
         if _is_not_empty(self.dst):
-            return Text(f"{self.dst} is not empty - existing files may be overwritten")
+            # the risk goes first. This line is one row, and led by the path it wrapped, so
+            # the clipped second line took the words - at 60 columns it read as an amber path
+            # and nothing else, on the only element in the app that says an existing project
+            # is about to be overwritten
+            # cropped from the left like every other path on screen: the stylesheet's
+            # ellipsis takes the tail, which is the name of the project being warned about
+            room = self.size.width - len("existing files may be overwritten - ") - 2
+            return Text(
+                f"existing files may be overwritten - {fit_path(self.dst, max(room, HEADER_PATH_FLOOR))}"
+            )
         return Text("")
 
     def _answer_lines(self) -> list[Static | Horizontal]:

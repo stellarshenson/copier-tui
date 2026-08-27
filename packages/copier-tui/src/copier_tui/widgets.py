@@ -9,7 +9,9 @@ behind a menu, so what was passed over is legible beside what was taken.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 import json
+from pathlib import Path
 from textwrap import wrap
 from typing import Any
 
@@ -24,22 +26,23 @@ from textual.widgets import Input, Static, TextArea
 
 from copier_tui import __version__
 from copier_tui.inline import BOOL_CHOICES, InlineOptions
+from copier_tui.paths import fit_path
 from copier_tui.theme import (
     AMBER,
     CYAN,
     CYAN_BRIGHT,
+    ERROR_FG,
     HELP_LINES,
     LABEL_LINES,
     LABEL_WIDTH,
     PULSE_CYCLE,
     PULSE_INTERVAL,
     PULSE_SHADES,
-    ROSE,
     ROW_ALT_BG,
     ROW_ALT_COND_BG,
-    ROW_ALT_FOCUS_BG,
     ROW_BG,
     ROW_COND_BG,
+    ROW_COND_FOCUS_BG,
     ROW_FOCUS_BG,
     TEXT,
     TEXT_MUTED,
@@ -63,8 +66,23 @@ The tail is why the caption is wrapped here rather than left to Rich. A caption 
 to wrap ran its second line back under the connector, which put prose where the tree is and
 broke the column the connectors are read down."""
 
+HEADER_FIXED = 8
+"""Columns the header spends on things that are not the title: 3 for the separator before the
+path, 1 for the `v`, 2 for `#hdr-version`'s padding and 2 for `#hdr-title`'s - every one of
+them set in `theme.py`, so this is the number to revisit if that padding changes."""
+
+HEADER_PATH_FLOOR = 12
+"""The least the path is ever cropped to. Below about 45 columns the stylesheet's own ellipsis
+takes over, which is under MIN_WIDTH, where the resize prompt is already up."""
+
 _CAPTION_WIDTH = LABEL_WIDTH - 3
-"""Columns the caption itself has: the gutter less the one and two it is padded by."""
+"""Columns the caption has when the gutter is at its cap: the gutter less its padding.
+
+Only the starting value. The gutter is a share of the row now, so a caption wrapped to this
+and then placed in a narrower box wraps a second time and is clipped by `LABEL_LINES` - the
+reader loses the second half of the question. `FieldRow` re-wraps to the width the gutter
+actually has, which is why the wrapping is done here in the first place: the tree connectors
+have to be carried down onto the lines a caption wraps onto, and Rich cannot do that."""
 
 _INPUT_TYPE = {Kind.INTEGER: "integer", Kind.FLOAT: "number"}
 
@@ -117,13 +135,37 @@ def _as_text(value: Any) -> str:
 
 
 def display_value(field: FieldState) -> str:
-    """A field's value on one line: secrets masked, an unset one left blank."""
+    """A field's value on one line, in the words it was answered with.
+
+    The review screen is the last thing read before anything is written, and it was printing
+    the values behind the answers rather than the answers: `True` where the user picked `Yes`,
+    `["x", "y"]` where they ticked two options, `[]` where they ticked none. On the reference
+    template that is eleven of twenty-three questions reading as Python. A bool is the case
+    that cannot resolve itself - its two labels live in the renderer, not in the state - so
+    they are supplied here, from the same pair the option row draws.
+    """
     if field.secret:
         return "***" if field.value else ""
-    for choice in field.choices:
-        if choice.value == field.value:
+    choices = field.choices or (BOOL_CHOICES if isinstance(field.value, bool) else ())
+    # gated on there being choices, not on the value being a list: a `type: json` answer that
+    # happens to parse to a sequence was being flattened to a bare comma list, so `["a, b"]`
+    # and `["a", "b"]` both read `a, b`. A multiselect always carries choices, so the case this
+    # is for is untouched and a structured value falls back to its own rendering
+    if choices and isinstance(field.value, (list, tuple)):
+        # "none of these" is a decision; the review screen's `not set` is what it says about a
+        # question nobody reached, in the same words and the same grey
+        if not field.value:
+            return "none selected"
+        return ", ".join(_label_of(choices, value) for value in field.value)
+    return _label_of(choices, field.value)
+
+
+def _label_of(choices: Any, value: Any) -> str:
+    """One value as its label, or as itself where the choices do not name it."""
+    for choice in choices:
+        if choice.value == value:
             return choice.label
-    return " ".join(_as_text(field.value).split())
+    return " ".join(_as_text(value).split())
 
 
 WIDGET_BY_KIND: Mapping[Kind, type[Widget]] = {
@@ -166,7 +208,6 @@ def control_for(question: Question, field: FieldState) -> Widget:
         return TextArea(_as_text(field.value), soft_wrap=True, compact=True, id=control_id)
     return Input(
         value=_as_text(field.value),
-        placeholder=question.placeholder,
         password=question.secret,
         type=_INPUT_TYPE.get(question.kind, "text"),
         select_on_focus=False,
@@ -187,15 +228,26 @@ def read_control(question: Question, control: Widget) -> Any:
 class HeaderBar(Horizontal):
     """One-row header: app name and context left, version right."""
 
-    def __init__(self, context: str = "") -> None:
-        """Build the header, optionally folding extra context into the title cell."""
+    def __init__(self, context: str = "", path: Path | None = None) -> None:
+        """Build the header, with an optional context and a path that may need shortening."""
         super().__init__(id="app-header")
         self._label_context = context
+        self._path = path
 
     def compose(self) -> ComposeResult:
         """The title cell and the version cell."""
         yield Static(self._title(), id="hdr-title")
         yield Static(f"v{__version__}", id="hdr-version")
+
+    def on_resize(self) -> None:
+        """Re-fit the title to the width the bar actually has.
+
+        A path in the header used to be cropped to a constant, which is both too aggressive on
+        a wide terminal - a project name cut with half the row empty beside it - and no help on
+        a narrow one, where the stylesheet's own ellipsis took the tail instead. The width is
+        known here and nowhere earlier, so this is where the decision belongs.
+        """
+        self.query_one("#hdr-title", Static).update(self._title())
 
     def set_context(self, context: str) -> None:
         """Rewrite the context: the survey keeps the field position here as focus moves."""
@@ -203,8 +255,27 @@ class HeaderBar(Horizontal):
         self.query_one("#hdr-title", Static).update(self._title())
 
     def _title(self) -> str:
-        """The title cell's text: the app name, and the screen's context after it."""
-        return f"copier-tui · {self._label_context}" if self._label_context else "copier-tui"
+        """The title cell's text: the app name, the screen's context, and any path after it.
+
+        A path is shortened from the left when the row cannot hold it, so what survives is the
+        end - the part that says which project this is. The stylesheet crops from the right as
+        a backstop, which on a path removes exactly the answer, so this has to get there first.
+
+        The separator is U+2E31 WORD SEPARATOR MIDDLE DOT rather than the U+00B7 middle dot it
+        looks identical to. U+00B7 has an ambiguous East Asian width, so a terminal configured
+        to render ambiguous characters wide gives it two cells while `rich.cells.cell_len`
+        counts one, and the header's right-aligned half is pushed a cell out. U+2E31 is width
+        neutral, which no terminal has the latitude to widen.
+        """
+        parts = ["copier-tui"]
+        if self._label_context:
+            parts.append(self._label_context)
+        if self._path is not None:
+            # what the row has left, once the fixed halves have taken theirs: the version cell,
+            # this bar's padding, and the words already in `parts`
+            room = self.size.width - len(" ⸱ ".join(parts)) - len(__version__) - HEADER_FIXED
+            parts.append(fit_path(self._path, max(room, HEADER_PATH_FLOOR)))
+        return " ⸱ ".join(parts)
 
 
 _PULSE_CSS = "\n    ".join(
@@ -248,18 +319,38 @@ class FieldRow(Vertical):
     FieldRow:focus-within > .field-rail {{
         display: block;
     }}
-    /* the bar is restated here because a banded conditional row matches on two classes and
-       would otherwise outrank the focus rule and keep its own ground colour on the bar */
-    FieldRow.row-alt:focus-within {{
-        background: {ROW_ALT_FOCUS_BG};
-        border-left: thick {CYAN};
+    /* the plate under the cursor is one ground on every row, so walking the form does not make
+       the lifted row flicker between the two bands. The banded rules are restated here rather
+       than left to fall through: a row matching two classes outranks a bare `:focus-within`,
+       and would keep its own band colour under the cursor.
+
+       Background only. These carry no `border-left`, because that is the breathing bar's and
+       the bar is set by `_PULSE_CSS` below, whose rules match one class and a pseudo-class.
+       A restated rule naming two classes and a pseudo-class outranks every one of them, so
+       the bar stopped where it stood on any row that was banded AND conditional - while the
+       option mark beside it, coloured in code rather than in CSS, went on breathing. Two
+       halves of one signal, visibly out of step, on precisely one row in four. */
+    /* the one exception the user reads a meaning off: a question another answer decides
+       whether to ask keeps its green lean while it is the row being read. This one IS needed -
+       `FieldRow.row-cond` matches as strongly as `FieldRow:focus-within` and comes first, so
+       without it a focused conditional row keeps its unfocused band. The plain and banded
+       cases need no such restatement: `FieldRow:focus-within` is written after both bands and
+       wins the tie on source order, which was measured rather than assumed. */
+    FieldRow.row-cond:focus-within {{
+        background: {ROW_COND_FOCUS_BG};
     }}
     {_PULSE_CSS}
     FieldRow > .field-head {{
         height: auto;
     }}
     FieldRow .field-label {{
-        width: {LABEL_WIDTH};
+        /* a share of the row, capped at the width it used to take outright. Fixed at 56 it
+           left the answer column 0 columns wide at MIN_WIDTH - the width the resize prompt
+           tells the reader to reach - so every row showed its caption and nothing beside it,
+           and no prompt said anything was wrong, because 60 is not too small. Above about 93
+           columns the cap binds and the layout is what it always was. */
+        width: 60%;
+        max-width: {LABEL_WIDTH};
         height: auto;
         max-height: {LABEL_LINES};
         padding: 0 2 0 1;
@@ -297,11 +388,19 @@ class FieldRow(Vertical):
     FieldRow > .field-help {{
         display: none;
         height: auto;
-        max-height: {HELP_LINES};
         padding: 0 2 0 {LABEL_WIDTH};
         color: {TEXT_MUTED};
     }}
-    FieldRow:focus-within > .field-help {{
+    FieldRow:focus-within > .field-help.has-help {{
+        display: block;
+        /* the cap belongs to help, not to errors. Help is ambient - it is on every focused
+           question, so a line of it costs a row of the form throughout. An error is on a
+           handful of rows, only when something is wrong, and stops the form advancing until
+           it is read; capped, a long validator sentence lost half its words with nothing on
+           screen marking the cut, ending on a clause that reads as finished. */
+        max-height: {HELP_LINES};
+    }}
+    FieldRow > .field-help.has-error {{
         display: block;
     }}
     """
@@ -319,9 +418,16 @@ class FieldRow(Vertical):
             """Name the field only - a secret value must never reach a log line."""
             return f"FieldRow.Changed(field_id={self.field_id!r})"
 
-    def __init__(self, question: Question, field: FieldState) -> None:
-        """Build the row for a question and its current state."""
+    def __init__(self, question: Question, field: FieldState, *, spoken: bool = True) -> None:
+        """Build the row for a question and its current state.
+
+        `spoken` is whether this row may print the reason its answer is refused. The flag in
+        the gutter marks it either way; the sentence waits until the reader has engaged with
+        the question, because a survey validates on mount and would otherwise open spelling
+        out in red every question nobody has been asked yet.
+        """
         super().__init__(id=f"row-{question.id}")
+        self.spoken = spoken
         self.question = question
         self._field = field
         self._label = Static(classes="field-label")
@@ -355,9 +461,65 @@ class FieldRow(Vertical):
         self._chrome(self._field)
         self._last_value = self.value
 
+    def _caption_width(self) -> int:
+        """Columns the caption has, from the gutter's real width rather than its cap.
+
+        `Widget.size` is the content box - Textual has already taken the padding off - so
+        subtracting it again, as this did, spent three columns of every caption twice and cost
+        a word on the rows that wrap.
+        """
+        measured = self._label.size.width
+        return measured if measured else _CAPTION_WIDTH
+
+    def on_resize(self) -> None:
+        """Re-wrap the caption and re-indent the help to the gutter's real width.
+
+        The gutter is a share of the row, so neither can be a constant: a caption wrapped to
+        the cap and then laid out in a narrower box wraps again and is clipped at three lines,
+        and the help line indented to the cap had zero columns left at MIN_WIDTH.
+
+        The indent was a constant equal to the old fixed gutter, so at MIN_WIDTH it left the
+        help nothing at all - zero columns - and at 72 it left eleven, which is three lines of
+        a sentence in a box capped at two. Textual takes padding in cells, so a share has to be
+        measured rather than declared.
+        """
+        self._indent()
+        self._label.update(_label_text(self.question, self._branch, self._caption_width()))
+
+    def _indent(self) -> None:
+        """Set the help's left padding to the column it belongs under.
+
+        Help aligns to the control it explains, so it is indented to the gutter's real width -
+        the OUTER width, not the content width, because the control column starts at the
+        label's outer edge and indenting to its content box put the help three columns left of
+        everything it sits under.
+
+        An error takes the left margin instead. Indented to the gutter it had 22 cells at
+        MIN_WIDTH, so one long validator sentence filled the form and pushed every other
+        question off screen; the `!` and the rose tie it to its row without the alignment.
+
+        Both callers go through here: living in `on_resize` alone, the indent only followed a
+        change of WIDTH, so an error arriving or clearing left the previous message's indent
+        behind.
+        """
+        spoken = bool(self._field.errors) and self.spoken
+        self._help.styles.padding = (0, 2, 0, 1 if spoken else self._label.outer_size.width)
+
     def on_descendant_focus(self) -> None:
-        """Start the bar breathing when the cursor arrives in this question."""
+        """Start the bar breathing, and let the row explain itself.
+
+        Arriving on a row is engaging with it, and the screen records that - it owns the flag,
+        because a row rebuilt from state would otherwise lose what the widget knew.
+
+        Not when the platform has asked for no animation. The beat is a plain interval rather
+        than a Textual animation, so nothing else stands it down, and what it does is loop for
+        as long as the row holds the focus - which on a thirty-seven question form is most of
+        the session. A reader who has turned motion off is left with the static bar the
+        stylesheet already draws, which is the same cue without the movement.
+        """
         self._beat = 0
+        if self.app.animation_level == "none":
+            return
         self._breathe()
         if self._pulse is None:
             self._pulse = self.set_interval(PULSE_INTERVAL, self._breathe)
@@ -401,13 +563,20 @@ class FieldRow(Vertical):
     def _chrome(self, field: FieldState) -> None:
         """Everything about a row that is not the control's value."""
         self._field = field
-        self._label.update(_label_text(self.question, self._branch))
+        self._label.update(_label_text(self.question, self._branch, self._caption_width()))
         self._flag.update(_flag_text(field))
-        help = _help_text(self.question, field)
+        help = _help_text(self.question, field if self.spoken else replace(field, errors=()))
         self._help.update(help)
-        # an empty Static still occupies its row, and a blank line under every question
-        # that declares no help is the wasted space the whole layout is trying to recover
-        self._help.display = bool(help.plain)
+        # a class, not `display`: an inline display overrides the stylesheet, and the rule it
+        # was overriding is the one that keeps help to the focused row. A row with help spent
+        # a second line whether or not anyone was reading it, which is the space the one-row
+        # layout exists to recover. Empty help stays classless so it can never open a line
+        self._help.set_class(bool(help.plain) and not field.errors, "has-help")
+        # an error is not help. Help is worth a row only while the cursor is on the question it
+        # explains; a problem with an answer is worth a row wherever it is, or a row the user
+        # has moved off shows a bare `!` and nothing that says what is wrong with it
+        self._help.set_class(bool(field.errors) and self.spoken, "has-error")
+        self._indent()
         self._control.disabled = not field.enabled
         # the caption greys with the control: a row this answer set rules out must not look
         # like a row that is merely unfocused, which is what a live caption over a dead
@@ -428,7 +597,7 @@ class FieldRow(Vertical):
         if glyph == self._branch:
             return
         self._branch = glyph
-        self._label.update(_label_text(self.question, self._branch))
+        self._label.update(_label_text(self.question, self._branch, self._caption_width()))
 
     def _write_value(self, field: FieldState) -> None:
         """Push the state's value into the control."""
@@ -470,7 +639,7 @@ class FieldRow(Vertical):
         self._emit()
 
 
-def _label_text(question: Question, branch: str = "") -> Text:
+def _label_text(question: Question, branch: str = "", width: int = _CAPTION_WIDTH) -> Text:
     """The question caption behind its tree connector, wrapped rather than cut.
 
     The connector keeps a colour of its own, muted, because it is structure rather than
@@ -486,7 +655,7 @@ def _label_text(question: Question, branch: str = "") -> Text:
     if not branch:
         return Text(question.label, overflow="fold")
     caption = Text(overflow="fold")
-    for index, line in enumerate(wrap(question.label, _CAPTION_WIDTH - len(branch)) or [""]):
+    for index, line in enumerate(wrap(question.label, max(width - len(branch), 8)) or [""]):
         if index:
             caption.append("\n")
         caption.append(branch if index == 0 else _BRANCH_TAIL[branch], style=TEXT_SUBTLE)
@@ -502,20 +671,45 @@ def _help_text(question: Question, field: FieldState) -> Text:
     with the same sentence twice, one line above the other, saying nothing the second time.
     """
     if field.errors:
-        return Text(field.errors[0], style=ROSE, overflow="fold")
+        return Text(field.errors[0], style=ERROR_FG, overflow="fold")
     help = "" if question.help == question.label else question.help
-    if not display_value(field) and question.placeholder:
+    # the same precedence `control_for` uses - secret, then multiline, then kind - because it
+    # is the same decision. Tested kind-first, a `type: str` question with `choices` and
+    # `multiline: true` got a TextArea and a help line naming three keys it does not have,
+    # while the hint it needs was withheld
+    if question.secret:
+        pass
+    elif question.multiline or question.kind is Kind.STRUCTURED:
+        # on these two the editor owns enter, so the screen's Review entry is taken out of the
+        # footer while the cursor is here - leaving two keys on screen and both abandon the run
+        move = "arrows leave the row to review"
+        help = f"{help}  -  {move}" if help else move
+    elif question.kind is Kind.MULTISELECT:
+        pick = "space ticks an option"
+        help = f"{help}  -  {pick}" if help else pick
+    elif question.kind is Kind.BOOL:
+        # "flips" rather than "cycles": on two options that is what the key does, and it is
+        # what `action_toggle` calls it
+        pick = "space flips"
+        help = f"{help}  -  {pick}" if help else pick
+    elif question.kind is Kind.CHOICE:
+        pick = "space cycles the answer"
+        help = f"{help}  -  {pick}" if help else pick
+    # the example is what a reader needs before answering and the key names are what they need
+    # while answering; both at once overflowed the two-line box from 60 to 83 columns and the
+    # example - the half that was there first - was the half that got cut
+    if not help and question.placeholder and field.value in (None, "", [], {}, ()):
         # a placeholder written into the value column reads as an answer nobody gave; said
         # here it is plainly guidance, and the field stays visibly empty until it is answered
         hint = f"for example: {question.placeholder}"
-        help = f"{help}  -  {hint}" if help else hint
+        help = hint
     return Text(help, style=TEXT_MUTED, overflow="fold")
 
 
 def _flag_text(field: FieldState) -> Text:
     """One glyph for the row's standing: a problem, or a field this answer set rules out."""
     if field.errors:
-        return Text("!", style=f"bold {ROSE}")
+        return Text("!", style=f"bold {ERROR_FG}")
     if not field.enabled:
         return Text("-", style=AMBER)
     return Text(" ")

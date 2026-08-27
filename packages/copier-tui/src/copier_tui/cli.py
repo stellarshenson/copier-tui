@@ -26,6 +26,7 @@ from plumbum import colors
 from copier_tui import __version__
 from copier_tui.app import run_survey
 from copier_tui.errors import EXIT_CANCELLED, EXIT_FAILURE, EXIT_UNSAFE, NotATerminalError
+from copier_tui.paths import shown_path
 from copier_ui import CopierUIError, Operation, TemplateUI
 
 
@@ -71,7 +72,13 @@ class _TuiSubcommand:
             message = "copier-tui needs a terminal; use --defaults or --force to run headless"
             print(colors.red | str(NotATerminalError(message)), file=sys.stderr)
             return EXIT_FAILURE
-        dst = Path(destination_path)
+        # absolute, taken now. `update` and `recopy` default this to `.`, and copier chdir's
+        # the whole process into its temp clones and worktrees while it runs - so a relative
+        # destination re-resolved later names whichever directory copier happened to be
+        # standing in. Measured: 45 percent of samples during an update, which put
+        # `/tmp/copier._vcs.clone.*` into the message telling the user what had been written.
+        # `.absolute()` rather than `.resolve()`, so `shown_path` keeps its own symlink rules
+        dst = Path(destination_path).absolute()
         try:
             ui = TemplateUI.from_template(
                 src,
@@ -90,7 +97,10 @@ class _TuiSubcommand:
         with ui:
             code = run_survey(ui, dst, self._copier_kwargs())
         if code == EXIT_CANCELLED:
-            print(colors.yellow | f"cancelled - nothing written to {dst}", file=sys.stderr)
+            print(
+                colors.yellow | f"cancelled - nothing written to {shown_path(dst)}",
+                file=sys.stderr,
+            )
         return code
 
 

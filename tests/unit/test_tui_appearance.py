@@ -7,34 +7,47 @@ rather than left to a screenshot because every one of them regressed silently at
 
 from __future__ import annotations
 
+import ast
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from textwrap import wrap
 from typing import Any
+import unicodedata
 
+import pytest
+from rich.cells import cell_len
 from textual.widgets import Static
 
+from copier_tui import inline
 from copier_tui.app import SurveyApp
 from copier_tui.inline import CURSOR, FREE, TAKEN, InlineOptions
 from copier_tui.screens import SurveyScreen
 from copier_tui.theme import (
+    ANSWER_FG,
+    ANSWER_FOCUS_FG,
     CURSOR_BG,
+    CURSOR_FG,
     CURSOR_PICKED_BG,
+    CURSOR_PICKED_FG,
     FIELD_ALT_BG,
     FIELD_ALT_COND_BG,
     FIELD_BG,
     FIELD_COND_BG,
+    FIELD_COND_FOCUS_BG,
     FIELD_FOCUS_BG,
     OPTION_BG,
+    OPTION_FG,
     PICKED_BG,
+    PICKED_FG,
     PULSE_CYCLE,
     PULSE_INTERVAL,
     PULSE_SHADES,
     ROW_ALT_BG,
     ROW_ALT_COND_BG,
-    ROW_ALT_FOCUS_BG,
     ROW_BG,
     ROW_COND_BG,
+    ROW_COND_FOCUS_BG,
     ROW_FOCUS_BG,
     SURFACE_BG,
 )
@@ -42,6 +55,7 @@ from copier_tui.widgets import BRANCH_LAST, BRANCH_MORE, RAIL, FieldRow
 from copier_ui import TemplateUI
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
+REFERENCE = Path("/home/lab/workspace/private/copier-data-science")
 
 BAND = "row-alt"
 """The class the survey puts on every second visible row."""
@@ -81,7 +95,7 @@ def option_grounds(options: InlineOptions) -> dict[str, str]:
     grounds: dict[str, str] = {}
     for line in range(max(1, options.size.height)):
         for segment in options.render_line(line):
-            label = segment.text.strip(" \u25cf\u25cb\u25b8")
+            label = segment.text.strip(f" {TAKEN}{FREE}{CURSOR}")
             if label and segment.style and segment.style.bgcolor:
                 grounds[label] = segment.style.bgcolor.triplet.hex
     return grounds
@@ -365,14 +379,13 @@ async def test_the_focused_row_leans_its_ground_towards_blue(tmp_path: Path) -> 
         app.screen.set_focus(app.screen.query_one("#ctl-advanced", InlineOptions))
         await pilot.pause()
         banded = {row.question.id: row.styles.background.hex6.lower() for row in rows(app)}
-        assert banded["advanced"] == ROW_ALT_FOCUS_BG
+        assert banded["advanced"] == ROW_FOCUS_BG  # one plate, whatever band the row is in
         assert banded["name"] == ROW_BG
 
         def blue(colour: str) -> int:
             return int(colour[5:7], 16)
 
         assert blue(ROW_FOCUS_BG) - blue(ROW_BG) < blue(ROW_ALT_BG) - blue(ROW_BG)
-        assert blue(ROW_ALT_FOCUS_BG) > blue(ROW_ALT_BG)
 
 
 async def test_a_conditional_row_leans_green_and_hangs_off_its_answer(tmp_path: Path) -> None:
@@ -416,20 +429,28 @@ def test_the_two_row_tints_lean_on_different_channels() -> None:
     Two tints a few parts apart on one channel are one tint the reader cannot place, so the
     axes are asserted rather than the hexes - either lean may be retuned, but not onto the
     other's channel.
+
+    The focus lean is measured from the first band alone, because there is one focus ground
+    and not one per band: the plate under the cursor is the thing the reader is watching, and
+    a plate that changed shade with the banding flickered on every press of an arrow.
     """
 
     def channels(colour: str) -> tuple[int, int, int]:
         return tuple(int(colour[i : i + 2], 16) for i in (1, 3, 5))
 
-    for band, focus, cond in (
-        (ROW_BG, ROW_FOCUS_BG, ROW_COND_BG),
-        (ROW_ALT_BG, ROW_ALT_FOCUS_BG, ROW_ALT_COND_BG),
-    ):
+    _, base_green, base_blue = channels(ROW_BG)
+    _, focus_green, focus_blue = channels(ROW_FOCUS_BG)
+    assert focus_blue > base_blue and focus_green - base_green <= 1
+
+    for band, cond in ((ROW_BG, ROW_COND_BG), (ROW_ALT_BG, ROW_ALT_COND_BG)):
         _, band_green, band_blue = channels(band)
-        _, focus_green, focus_blue = channels(focus)
         _, cond_green, cond_blue = channels(cond)
-        assert focus_blue > band_blue and focus_green - band_green <= 1
         assert cond_green > band_green and cond_blue < band_blue
+
+    # the conditional lean survives the cursor, on the same axes and by the same amounts
+    _, cond_focus_green, cond_focus_blue = channels(ROW_COND_FOCUS_BG)
+    assert cond_focus_green - focus_green == 8
+    assert focus_blue - cond_focus_blue == 6
 
 
 async def test_a_banded_conditional_row_still_yields_its_grounds_to_the_cursor(
@@ -455,8 +476,9 @@ async def test_a_banded_conditional_row_still_yields_its_grounds_to_the_cursor(
 
         app.screen.set_focus(row.query_one("#ctl-detail"))
         await pilot.pause()
-        assert row.styles.background.hex6.lower() == ROW_ALT_FOCUS_BG
-        assert row.query_one("#ctl-detail").styles.background.hex6.lower() == FIELD_FOCUS_BG
+        assert row.styles.background.hex6.lower() == ROW_COND_FOCUS_BG
+        ground = row.query_one("#ctl-detail").styles.background.hex6.lower()
+        assert ground == FIELD_COND_FOCUS_BG
 
 
 async def test_the_focused_row_paints_the_blank_line_either_side_of_itself(
@@ -595,3 +617,180 @@ async def test_the_cursor_mark_breathes_with_the_bar(tmp_path: Path) -> None:
             await pilot.pause()
             seen.add(mark_ink())
         assert seen == {shade.lower() for shade in PULSE_SHADES}
+
+
+def _relative_luminance(colour: str) -> float:
+    """WCAG relative luminance of a `#rrggbb` string."""
+    raw = colour.lstrip("#")
+    channels = [int(raw[at : at + 2], 16) / 255 for at in (0, 2, 4)]
+    linear = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+
+def contrast(one: str, other: str) -> float:
+    """The WCAG contrast ratio between two colours, brighter over darker."""
+    first, second = _relative_luminance(one), _relative_luminance(other)
+    return (max(first, second) + 0.05) / (min(first, second) + 0.05)
+
+
+def test_the_cursor_is_told_apart_from_the_option_it_sits_on() -> None:
+    """Option chips: where the cursor is and what is chosen are separate at a glance.
+
+    Both were painted in the same blue a shade apart, which measured 1.32:1 - a reader moving
+    along a row could not see the cursor at all, because the only chip that changed changed
+    into the colour the chosen chip already was. 3:1 is the floor for telling two interface
+    surfaces apart, and it is asserted rather than eyeballed because the pair that failed it
+    looked deliberate: the docstring beside them described an inversion the colours never had.
+    """
+    assert contrast(CURSOR_PICKED_BG, PICKED_BG) >= 3.0
+    assert contrast(CURSOR_BG, OPTION_BG) >= 3.0
+
+
+def test_every_ink_clears_the_floor_on_every_ground_it_lands_on() -> None:
+    """Every pair the palette actually paints, held to 4.5:1 - not only the option chips.
+
+    The typing grounds went unasserted, and one of them drifted below the floor when the
+    conditional lean was applied to it: the orange answer measured 4.19:1 on the focused
+    conditional field, which is the most important text in the app on the row it is being
+    typed into. It was found by a reviewer, not by this suite.
+    """
+    for ink, ground in (
+        (CURSOR_PICKED_FG, CURSOR_PICKED_BG),
+        (CURSOR_FG, CURSOR_BG),
+        (PICKED_FG, PICKED_BG),
+        (OPTION_FG, OPTION_BG),
+        (ANSWER_FG, FIELD_BG),
+        (ANSWER_FG, FIELD_ALT_BG),
+        (ANSWER_FG, FIELD_COND_BG),
+        (ANSWER_FG, FIELD_ALT_COND_BG),
+        (ANSWER_FOCUS_FG, FIELD_FOCUS_BG),
+        (ANSWER_FOCUS_FG, FIELD_COND_FOCUS_BG),
+    ):
+        assert contrast(ink, ground) >= 4.5, f"{ink} on {ground} is {contrast(ink, ground):.2f}:1"
+
+
+def test_no_new_glyph_the_tui_prints_has_an_ambiguous_width() -> None:
+    """Glyphs: nothing new may join the handful whose width the terminal gets to choose.
+
+    A character whose East Asian width is `A` is one cell in most terminals and two in any
+    terminal set to render ambiguous characters wide - while `rich.cells.cell_len` counts one
+    either way. Rich then lays the row out a cell short of what the terminal draws and
+    everything after the glyph sits a column off.
+
+    The source text is parsed rather than scanned, because every offender in this package is
+    written as a `\\uXXXX` escape and a scan of the characters in the file sees none of them.
+    The first version of this test did scan, reported the one literal middle dot, and was
+    taken as proof there were no others - there were six.
+
+    The survivors are listed, not fixed. Every box-drawing character in Unicode is ambiguous
+    width; there is no neutral set, so the conditional tree cannot be drawn without them. The
+    two option marks could be swapped, and are not: `●` and `○` are the shapes a reader knows,
+    and both are already width-safe beside each other. The point of the list is that it cannot
+    grow without someone deciding it should.
+    """
+    known = {
+        0x2500,  # ─ the tree's horizontal, and no box-drawing character is width neutral
+        0x2502,  # │
+        0x251C,  # ├
+        0x2514,  # └
+        0x25CB,  # ○ the option not taken
+        0x25CF,  # ● the option in force
+        0x2192,  # → the destination line's arrow
+    }
+    found: set[int] = set()
+    for source in Path(inline.__file__).parent.rglob("*.py"):
+        tree = ast.parse(source.read_text(encoding="utf-8"))
+        # a string that is a statement on its own is documentation - a docstring, or the
+        # explanation this codebase writes under a constant - and is never painted. The
+        # docstring saying why U+25B6 was rejected must not read as a use of U+25B6
+        documentation = {
+            id(node.value)
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant)
+        }
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+                continue
+            if id(node) in documentation:
+                continue
+            found.update(
+                ord(char)
+                for char in node.value
+                if ord(char) > 0x7F
+                and unicodedata.east_asian_width(char) in ("A", "W")
+                and cell_len(char) == 1
+            )
+    new = sorted(found - known)
+    assert not new, [f"U+{cp:04X} {unicodedata.name(chr(cp), '?')}" for cp in new]
+
+
+async def test_the_bar_breathes_on_every_kind_of_row(tmp_path: Path) -> None:
+    """Focus bar: no row's ground rule may outrank the beat and freeze it.
+
+    The rules that keep the plate one colour under the cursor name two classes and a
+    pseudo-class, which outranks every rule the beat is written with. Setting a border in them
+    stopped the bar dead on any row that was both banded and conditional - while the option
+    mark beside it, coloured in code rather than in CSS, went on breathing. One row in four
+    showed two halves of one signal out of step.
+    """
+    async with survey(tmp_path / "out", template="tui_tree") as (app, pilot):
+        for row in rows(app):
+            id = row.question.id
+            app.screen.set_focus(row.query_one(f"#ctl-{id}"))
+            await pilot.pause()
+            # the beat is driven by hand: its own timer keeps running through an awaited
+            # pause, so a sampled cycle skips phases and misses the ends of the ramp
+            row._pulse.stop()
+            row._beat = 0
+            seen = set()
+            for _ in range(len(PULSE_CYCLE)):
+                row._breathe()
+                await pilot.pause()
+                seen.add(str(row.styles.border_left))
+            classes = sorted(c for c in row.classes if c.startswith("row-"))
+            assert len(seen) > 1, f"the bar is frozen on {id} ({' '.join(classes) or 'plain'})"
+
+
+def test_the_breathing_bar_stays_visible_at_every_phase() -> None:
+    """The bar is a graphical indicator, so its dimmest shade still clears 3:1 on its ground.
+
+    The ramp used to reach `#12648b`: 2.50:1 on the focused ground and 2.34:1 on a conditional
+    one. Four shades of seventeen fell under the floor, and the cosine spacing dwells at the
+    ends, so the only thing saying which row the cursor is on spent about a fifth of every
+    cycle below it. The docstring claimed the opposite, which is why this is asserted.
+    """
+    for ground in (ROW_FOCUS_BG, ROW_COND_FOCUS_BG):
+        worst = min(contrast(shade, ground) for shade in PULSE_SHADES)
+        assert worst >= 3.0, f"the bar drops to {worst:.2f}:1 on {ground}"
+
+
+@pytest.mark.skipif(
+    not Path("/home/lab/workspace/private/copier-data-science").is_dir(),
+    reason="the reference template is not checked out",
+)
+@pytest.mark.parametrize("width", [60, 70, 80, 100, 120])
+async def test_no_question_loses_the_end_of_its_sentence(width: int, tmp_path: Path) -> None:
+    """A caption fits the lines it is given, at every width the app supports.
+
+    The cap was sized against a gutter fixed at 56 columns; the gutter is a share of the row
+    now, so at 80 two of the reference template's questions lost the end of their sentence, at
+    70 four did and at 60 seven - with no ellipsis and nowhere else to read them.
+
+    The height is what is measured, not the text. A caption with no tree connector is handed to
+    Textual unwrapped and folded at paint time, so it carries no newlines to count and reading
+    its text back says nothing about what fits. Two earlier attempts at this check reported all
+    clear against captions that were visibly cut.
+    """
+    dst = tmp_path / "out"
+    with TemplateUI.from_template(str(REFERENCE), dst=dst, unsafe=True) as ui:
+        app = SurveyApp(ui, dst, {"unsafe": True, "quiet": True})
+        async with app.run_test(size=(width, 40)) as pilot:
+            await pilot.pause()
+            for row in rows(app):
+                label = row.query_one(".field-label", Static)
+                if not label.size.width:
+                    continue
+                needed = len(wrap(row.question.label, label.size.width) or [""])
+                assert needed <= label.size.height, (
+                    f"{row.question.id} needs {needed} lines and has {label.size.height}"
+                )

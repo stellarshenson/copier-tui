@@ -80,6 +80,10 @@ class TemplateAdapter:
         )
         adapter = cls(worker, operation)
         try:
+            # before the template is even fetched, as copier orders it: a dirty destination is
+            # the reader's own uncommitted work, and telling them the template is missing when
+            # the real answer is "commit first" sends them to look in the wrong place
+            _check_updatable(worker, operation)
             root = worker.template.local_abspath
             if not _config_paths(root):
                 raise TemplateLoadError(f"No copier configuration file in {root}")
@@ -167,7 +171,7 @@ class TemplateAdapter:
                 question = self._copier_question(id, answers)
                 question.validate_answer(question.parse_answer(value))
             except Exception as error:  # noqa: BLE001 - user input problems are values
-                return (_redact(str(error), self.questions(), answers),)
+                return (_plain_message(_redact(str(error), self.questions(), answers)),)
         return ()
 
     def run(self, dst: Path, data: Mapping[str, Any], **copier_kwargs: Any) -> None:
@@ -305,6 +309,46 @@ def _redact(message: str, questions: tuple[Question, ...], answers: Mapping[str,
     return message
 
 
+def _check_updatable(worker: Worker, operation: Operation) -> None:
+    """Refuse an update on the two grounds that matter most, before a question is asked.
+
+    Not a git repository, and a repository with uncommitted work. copier makes five further
+    checks - a missing template ref, a template that is not git-tracked, a version it cannot
+    detect either side of, a downgrade - and those still fire at render. Two is the stopping
+    point on purpose: each one copied here is another verbatim copy of a copier string with
+    nothing keeping the two in step, and the dirty-repository case is the overwhelming one.
+
+    copier makes them itself, but not until it runs - which for this front end is
+    after the survey. A user who is told to commit their work only once they have answered
+    thirty-seven questions has been made to do the work twice, and the second refusal is the
+    one that arrives with a filled-in form to throw away. The wording is copier's own, so the
+    two tools give the same answer to the same situation.
+    """
+    if operation != "update":
+        return
+    subproject = worker.subproject
+    if subproject.vcs != "git":
+        raise TemplateLoadError("Updating is only supported in git-tracked subprojects.")
+    if subproject.is_dirty():
+        raise TemplateLoadError(
+            "Destination repository is dirty; cannot continue. "
+            "Please commit or stash your local changes and retry."
+        )
+
+
+_VALIDATION_PREFIX = re.compile(r"^Validation error for question '[^']*':\s*")
+"""copier's own preamble in front of a template author's validation message.
+
+Thirty-eight characters restating what the row already says - which field, and that something
+is wrong with it - in front of the one sentence that says what. On a one-row status line and a
+help line of two, the preamble is what fits and the answer is what is cut."""
+
+
+def _plain_message(message: str) -> str:
+    """A validation message without copier's preamble, or unchanged when it has none."""
+    return _VALIDATION_PREFIX.sub("", message, count=1)
+
+
 def _config_paths(root: Path) -> list[Path]:
     """The template's copier.yml / copier.yaml files, matching copier's own glob."""
     return [
@@ -419,6 +463,10 @@ def _choices_of(question: CopierQuestion) -> tuple[Choice, ...]:
     if not question.choices:
         return ()
     return tuple(
-        Choice(label=str(choice.title), value=choice.value)
+        # collapsed like every other display string this module hands out. A break inside a
+        # label is a break no single-line chip can render, and it defeats the option row's
+        # wrapper outright: the splitter does not treat it as a break, so the height counts
+        # one line for text that paints as two and the options after it are cut off screen
+        Choice(label=_one_line(str(choice.title)), value=choice.value)
         for choice in question._formatted_choices
     )
