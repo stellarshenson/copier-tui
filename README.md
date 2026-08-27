@@ -53,13 +53,16 @@ Flags keep copier's semantics rather than being re-implemented:
 
 | Key | What it does |
 |-----|--------------|
-| `up` / `down` | move between fields; inside a multiline editor they move its cursor and hand focus on at the first and last line |
+| `up` / `down` | move between fields, stopping at the first and the last; inside a multiline editor they move its cursor and hand focus on at its first and last line |
 | `left` / `right` | move along a question's options, taking the one they land on |
 | `space` | cycle a choice forward, or tick the option under the cursor in a multiselect |
 | `enter` | confirm the screen; inside a multiline editor it breaks the line |
 | `esc` | go back, or cancel - on the survey it arms first and quits on a second press |
 | `ctrl+p` | command palette |
 | `ctrl+c` | left to the terminal, so it still copies |
+
+The survey is driven from the keyboard alone and asks the terminal for no mouse reporting, so
+selecting and copying text works the way it does anywhere else in the terminal.
 
 ## Architecture
 

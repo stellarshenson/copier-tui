@@ -23,9 +23,13 @@ import termios
 import time
 import tty
 
+from copier_tui.errors import EXIT_CANCELLED
 from copier_tui.screens.execution import _children_without_stdin, _terminal_mode_kept
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
+
+SET_ANY_EVENT_MOUSE = b"\x1b[?1003h"
+"""What a terminal is told with to report every movement of the pointer, not just its clicks."""
 
 READS_STDIN = "import sys; d = sys.stdin.buffer.read(); print(f'read {len(d)}')"
 """A child that says how many bytes its stdin gave it: 0 when that stdin is /dev/null."""
@@ -110,6 +114,44 @@ def test_a_template_that_grabs_the_terminal_still_leaves_a_key_that_closes(tmp_p
     finally:
         _reap(child, master)
     assert (dst / "README.md").is_file()
+
+
+def test_the_render_never_asks_the_terminal_to_report_the_mouse(tmp_path: Path) -> None:
+    """Exit: nothing the pointer does can reach the keyboard the form is reading.
+
+    A bare escape byte is ambiguous until the next byte arrives, so Textual holds it back to
+    see what follows. Any-event mouse reporting means the terminal is emitting a sequence
+    every time the pointer twitches, and one of those arriving behind a second escape becomes
+    its introducer: the escape is consumed as part of the report and the two-press cancel
+    never lands. The survey is keyboard-driven, so the reports are simply never asked for.
+    """
+    dst = tmp_path / "proj"
+    child, master = _spawn("copy", str(FIXTURES / "tui_flow"), str(dst))
+    seen = bytearray()
+    try:
+        assert _wait_for(master, b"questionnaire", seen, 60), _screen(seen)
+        assert SET_ANY_EVENT_MOUSE not in bytes(seen), "mouse motion reporting was turned on"
+    finally:
+        _reap(child, master)
+
+
+def test_two_escapes_arriving_together_still_quit(tmp_path: Path) -> None:
+    """Exit: the cancel does not care how fast the two presses are.
+
+    Both bytes go out in one write, which is faster than any keyboard can deliver them and
+    the case that failed: pressed in quick succession the second escape went missing and the
+    survey sat there until a third press or an arrow key shook it loose.
+    """
+    dst = tmp_path / "proj"
+    child, master = _spawn("copy", str(FIXTURES / "tui_flow"), str(dst))
+    seen = bytearray()
+    try:
+        assert _wait_for(master, b"questionnaire", seen, 60), _screen(seen)
+        os.write(master, b"\x1b\x1b")
+        assert _wait_for_exit(child, master, seen, 20) == EXIT_CANCELLED, _screen(seen)
+    finally:
+        _reap(child, master)
+    assert not dst.exists(), "a cancelled survey writes nothing"
 
 
 def _spawn(*args: str) -> tuple[int, int]:

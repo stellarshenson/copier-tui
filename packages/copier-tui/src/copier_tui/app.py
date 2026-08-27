@@ -130,6 +130,15 @@ class SurveyApp(App[int]):
 
 
 def run_survey(ui: TemplateUI, dst: Path, copier_kwargs: dict[str, Any]) -> int:
-    """Run the app to completion and return its exit code."""
-    exit_code = SurveyApp(ui, dst, copier_kwargs).run()
+    """Run the app to completion and return its exit code.
+
+    Mouse reporting is off, and that is what makes the two-press cancel land. Textual asks
+    the terminal to report every pointer movement, and a bare escape byte is ambiguous until
+    the next byte arrives: pressed twice in quick succession, the second escape becomes the
+    introducer of whatever the terminal sends next, and a mouse report drifting in under the
+    resting pointer swallows it whole. The survey is keyboard-driven throughout, so the
+    reports were paying for nothing, and without them the terminal sends nothing that can eat
+    a keystroke. Native terminal selection comes back with them gone.
+    """
+    exit_code = SurveyApp(ui, dst, copier_kwargs).run(mouse=False)
     return EXIT_CANCELLED if exit_code is None else exit_code

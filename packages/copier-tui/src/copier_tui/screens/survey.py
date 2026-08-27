@@ -93,9 +93,12 @@ class SurveyScreen(Screen[None]):
     #survey-where {{
         width: auto;
         max-width: 60%;
+        height: 1;
         padding: 0 1;
         color: {TEXT_SUBTLE};
         text-align: right;
+        text-wrap: nowrap;
+        text-overflow: ellipsis;
     }}
     """
 
@@ -121,7 +124,9 @@ class SurveyScreen(Screen[None]):
         # the destination sits beside the legend rather than in the header, which is already
         # carrying the template name and the field position - and it is the one fact a person
         # filling in thirty answers cannot recover from anything else on the screen
-        yield Horizontal(self._hint, Static(_where_text(self.dst), id="survey-where"))
+        yield Horizontal(
+            self._hint, Static(_where_text(self.dst), id="survey-where"), id="survey-status"
+        )
         yield Footer()
 
     async def on_mount(self) -> None:
@@ -191,12 +196,27 @@ class SurveyScreen(Screen[None]):
         self.post_message(self.Confirmed())
 
     def action_focus_next(self) -> None:
-        """Move to the next field. Screen has no focus_next action of its own."""
-        self.focus_next()
+        """Move to the next field, and stay on the last one."""
+        self._step_focus(1)
 
     def action_focus_previous(self) -> None:
-        """Move to the previous field."""
-        self.focus_previous()
+        """Move to the previous field, and stay on the first one."""
+        self._step_focus(-1)
+
+    def _step_focus(self, step: int) -> None:
+        """Move one field along the focus chain, stopping at either end.
+
+        Textual's own `focus_next` and `focus_previous` roll round, so the last field handed
+        the cursor back to the first and the form read as though it had jumped somewhere
+        rather than ended. A form that stops where it stops is one an arrow can be held down
+        on, and the ends are where the eye expects to be told there is no more.
+        """
+        chain = self.focus_chain
+        if self.focused is None or self.focused not in chain:
+            return
+        target = chain.index(self.focused) + step
+        if 0 <= target < len(chain):
+            self.set_focus(chain[target])
 
     def action_cancel(self) -> None:
         """Arm on the first escape, quit on the second - a survey is too costly to lose."""

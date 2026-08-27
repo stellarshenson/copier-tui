@@ -460,3 +460,82 @@ async def test_the_survey_says_where_the_template_will_be_rendered(tmp_path: Pat
             await pilot.pause()
             shown = str(app.screen.query_one("#survey-where", Static).visual)
     assert shown.endswith("~/somewhere-under-home"), shown
+
+
+async def test_the_form_gets_every_row_the_chrome_is_not_using(tmp_path: Path) -> None:
+    """The form fills the screen: header, status line and footer take one row each.
+
+    The status line's CSS was written for an id nothing carried, so the row it styles fell
+    back to a Horizontal's own `height: 1fr` and split the screen with the form. The form was
+    laid out at half the terminal, the questions were cut off partway down, and the rows the
+    status line was holding stayed blank all the way to the footer.
+    """
+    dst = tmp_path / "out"
+    async with survey(dst, size=(100, 40)) as (app, _):
+        form = app.screen.query_one("#survey-form", VerticalScroll)
+        status = app.screen.query_one("#survey-status")
+        assert status.size.height == 1, status.size
+        # the region is the rows the form owns; its size is one less, for the top padding
+        assert form.region.height == 40 - 3, form.region
+
+
+async def test_a_form_that_fits_neither_scrolls_nor_shows_a_bar(tmp_path: Path) -> None:
+    """Content shorter than the screen leaves nothing to scroll and nothing to scroll with.
+
+    The size is deliberately modest: a terminal that holds every question with rows to spare,
+    and small enough that a form given only half the screen would have shown a scrollbar over
+    content the user could see the end of.
+    """
+    dst = tmp_path / "out"
+    async with survey(dst, template="tui_kinds", size=(100, 26)) as (app, _):
+        form = app.screen.query_one("#survey-form", VerticalScroll)
+        assert form.virtual_size.height <= form.container_size.height, form.virtual_size
+        assert form.max_scroll_y == 0
+        assert not form.show_vertical_scrollbar
+
+
+async def test_a_form_too_tall_for_the_screen_still_scrolls(tmp_path: Path) -> None:
+    """The other half of the claim: a form that genuinely overflows keeps its scrollbar.
+
+    Narrow rather than short, so the captions wrap and the content outgrows a screen that is
+    still above the minimum usable size and carries no resize prompt.
+    """
+    dst = tmp_path / "out"
+    async with survey(dst, template="tui_kinds", size=(60, 20)) as (app, _):
+        form = app.screen.query_one("#survey-form", VerticalScroll)
+        assert form.virtual_size.height > form.container_size.height, form.virtual_size
+        assert form.max_scroll_y > 0
+        assert form.show_vertical_scrollbar
+
+
+async def test_a_long_destination_is_cropped_rather_than_wrapped(tmp_path: Path) -> None:
+    """The destination stays on its one row however long the path is.
+
+    Textual's visual pipeline drops a Rich `Text`'s own `no_wrap` and `overflow`, so a path
+    longer than the row folded onto two further lines, carrying the status line - and the
+    arrow that introduces it - away from the legend it belongs beside.
+    """
+    dst = tmp_path / Path(*[f"a-long-directory-name-{index}" for index in range(8)])
+    async with survey(dst, size=(100, 40)) as (app, _):
+        where = app.screen.query_one("#survey-where", Static)
+        assert where.size.height == 1, where.size
+        assert app.screen.query_one("#survey-status").size.height == 1
+
+
+async def test_the_cursor_stops_at_the_last_field(tmp_path: Path) -> None:
+    """Down on the last field stays there rather than rolling round to the first."""
+    dst = tmp_path / "out"
+    async with survey(dst, template="tui_kinds") as (app, pilot):
+        for _ in range(len(row_ids(app)) + 3):
+            await pilot.press("down")
+        assert app.screen.focused is app.screen.focus_chain[-1]
+
+
+async def test_the_cursor_stops_at_the_first_field(tmp_path: Path) -> None:
+    """And up on the first field stays there rather than rolling round to the last."""
+    dst = tmp_path / "out"
+    async with survey(dst, template="tui_kinds") as (app, pilot):
+        await pilot.press("down", "down")
+        for _ in range(6):
+            await pilot.press("up")
+        assert app.screen.focused is app.screen.focus_chain[0]
