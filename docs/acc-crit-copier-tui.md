@@ -2,133 +2,137 @@
 
 Two packages: `copier-ui` normalises a copier template's questions into a UI-neutral schema with state, visibility and validation; `copier-tui` renders that schema in the terminal and calls copier once the user confirms. Scope here covers both; `copier-webui` and `copier-api` are out of scope.
 
+## Authors
+
+- `@kj` Konrad Jelen
+
 ## copier-ui `CORE`
 
 UI-neutral core. Three layers - copier adapter (parses `copier.yml`), UI model (normalised questions), state engine (answers, dependencies, validation). Owns semantics only, never presentation.
 
 - [x] `ACC-CORE-1` **Purity** - `copier_ui` imports nothing that assumes a display (textual, rich, prompt_toolkit, curses) and nothing that requires an event loop; enforced by an automated test over the package's import graph
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_purity.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_purity.py
 - [x] `ACC-CORE-2` **Sync API** - every public call is synchronous and returns; no coroutines, no background threads
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_purity.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_purity.py
 - [x] `ACC-CORE-3` **Load local** - `TemplateUI.from_template(path)` accepts a local template directory containing `copier.yml` or `copier.yaml`
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_schema.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_schema.py
 - [x] `ACC-CORE-4` **Load remote** - `from_template` accepts a git URL with optional `vcs_ref`, resolved through copier's own fetch
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_schema.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_schema.py
 - [x] `ACC-CORE-5` **Seed from answers file** - existing `.copier-answers.yml` in the destination seeds the answer state for the update flow; template-internal keys (`_commit`, `_src_path`) are not exposed as questions
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_state.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_state.py
 - [x] `ACC-CORE-6` **Trust gate** - a template declaring `_jinja_extensions` or `_tasks` is refused at load with a `TemplateLoadError` unless `unsafe=True` or copier's own settings trust it; the check runs before any extension is imported, so an untrusted template executes no code
-  - log: 2026-08-22 criterion added (v0.6.4)
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.6.4)
 - [x] `ACC-CORE-7` **Question kinds** - each copier `type` maps to exactly one kind: `str` -> string, `bool` -> bool, `int` -> integer, `float` -> float, `path` -> path, `yaml`/`json` -> structured; a question with `choices` becomes choice, with `multiselect: true` becomes multiselect, with `secret: true` becomes secret
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_schema.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_schema.py
 - [x] `ACC-CORE-8` **Question fields** - normalised `Question` carries id, kind, label, help, default, choices, secret, multiselect, dependencies, visibility expression, validator
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_schema.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_schema.py
 - [x] `ACC-CORE-9` **Choice normalisation** - `choices` given as a bare list, a label-to-value dict, or a list of `[label, value]` pairs all normalise to ordered `(label, value)` pairs; `copier.yml` order is preserved
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 open - copier 9.17.2 refuses the list-of-single-key-dicts form; copier_ui reports it as a field error, per tests/unit/test_ui_schema.py
-  - log: 2026-08-24 reworded: the third form named a syntax copier does not have - `copier.run_copy` on `- Small: s` raises `Could not convert {'Small': 's'} to string` with no copier_ui in the call. Criterion now names copier's own three forms, all three tested
-  - log: 2026-08-24 closed: built - tests/unit/test_ui_schema.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj open - copier 9.17.2 refuses the list-of-single-key-dicts form; copier_ui reports it as a field error, per tests/unit/test_ui_schema.py
+  - log: 2026-08-24T00:00:00Z @kj reworded: the third form named a syntax copier does not have - `copier.run_copy` on `- Small: s` raises `Could not convert {'Small': 's'} to string` with no copier_ui in the call. Criterion now names copier's own three forms, all three tested
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_ui_schema.py
 - [x] `ACC-CORE-10` **Edge: choices copier cannot read** - a `choices` shape copier refuses leaves the field disabled with copier's own message as its error, never a syntax copier_ui invented
-  - log: 2026-08-24 criterion added, closed: built - tests/unit/test_ui_schema.py
+  - log: 2026-08-24T00:00:00Z @kj criterion added, closed: built - tests/unit/test_ui_schema.py
 - [x] `ACC-CORE-11` **Declaration order** - `schema()` returns questions in `copier.yml` declaration order
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_schema.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_schema.py
 - [x] `ACC-CORE-12` **Dependency graph** - each question exposes the set of question ids referenced by its `when`, `default` and `choices` expressions
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_schema.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_schema.py
 - [x] `ACC-CORE-13` **Visibility** - `state().fields[id].visible` is the evaluated `when` expression against current answers; questions without `when` are always visible
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_state.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_state.py
 - [x] `ACC-CORE-14` **Recompute on set** - `ui.set(id, value)` re-evaluates visibility, computed defaults and choices for every dependent question in one pass
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_state.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_state.py
 - [x] `ACC-CORE-15` **Computed defaults** - a Jinja `default` is re-rendered whenever a dependency changes, unless the user has explicitly set that field
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_state.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_state.py
 - [x] `ACC-CORE-16` **Explicit vs default** - state distinguishes a value the user set from an unedited default; frontends read this, they do not infer it
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_state.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_state.py
 - [x] `ACC-CORE-17` **Validation returns** - `ui.validate()` returns per-field error messages and never raises for user-input problems
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_validation.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_validation.py
 - [x] `ACC-CORE-18` **Validator support** - copier's `validator` expression runs per field; a non-empty rendered result is the error message
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_validation.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_validation.py
 - [x] `ACC-CORE-19` **Type coercion** - a value that cannot be coerced to the question kind is a validation error, not an exception
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_validation.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_validation.py
 - [x] `ACC-CORE-20` **Hidden excluded** - hidden questions are excluded from validation and from the answers handed to copier
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_state.py and test_ui_validation.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_state.py and test_ui_validation.py
 - [x] `ACC-CORE-21` **Secrets excluded from dump** - `schema()` and any serialised state carry secret question metadata but never secret values
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_state.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_state.py
 - [x] `ACC-CORE-22` **Secrets redacted from messages** - a secret answer's value is replaced by `***` in every validation and evaluation message `copier_ui` returns
-  - log: 2026-08-22 criterion added (v0.6.4)
-  - log: 2026-08-22 closed: built - copier_ui/adapter.py _redact
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.6.4)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - copier_ui/adapter.py _redact
 - [x] `ACC-CORE-23` **Serialisable answers** - answers round-trip to and from a plain dict of JSON-compatible values
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_state.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_state.py
 - [x] `ACC-CORE-24` **Render** - `ui.render(dst)` calls `copier.run_copy` with `data=answers`, so no question is prompted interactively
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_render.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_render.py
 - [x] `ACC-CORE-25` **Determinism** - identical template and identical answers produce byte-identical `schema()` output and identical field state
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_state.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_state.py
 - [x] `ACC-CORE-26` **Edge: unknown type** - a `type` copier does not define surfaces as a load error naming the question id, not a crash
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_edges.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_edges.py
 - [x] `ACC-CORE-27` **Edge: circular dependency** - a dependency cycle among `when` / `default` expressions is detected at load and reported with the cycle members
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_edges.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_edges.py
 - [x] `ACC-CORE-28` **Edge: forward reference** - a `when` referencing a question declared later evaluates against that question's current default rather than failing
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_edges.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_edges.py
 - [x] `ACC-CORE-29` **Edge: empty template** - a `copier.yml` with no questions yields an empty schema and a valid state that renders
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_edges.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_edges.py
 - [x] `ACC-CORE-30` **Edge: missing copier.yml** - a path without a copier config raises a named load error before any state is built
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_edges.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_edges.py
 - [x] `ACC-CORE-31` **Edge: expression error** - a `when` or `default` that fails to render marks the field in error and leaves the rest of the state usable
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_edges.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_edges.py
 - [x] `ACC-CORE-32` **Edge: set unknown id** - `ui.set` on an id not in the schema raises a `KeyError`-style error naming the id
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_edges.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_edges.py
 - [x] `ACC-CORE-33` **Edge: set hidden field** - setting a currently hidden field is accepted and retained, so the value returns if the field becomes visible again
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_edges.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_edges.py
 - [x] `ACC-CORE-34` **Edge: render with invalid state** - `render` refuses when `validate()` reports errors, and names the offending fields
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_render.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_render.py
 - [x] `ACC-CORE-35` **Caption parity** - `Question.label` is copier's own rendered prompt message - the template's help, falling back to `var_name (type)` - so no UI shows less than copier's prompt does, and no raw Jinja reaches a caption
-  - log: 2026-08-22 added
-  - log: 2026-08-22 closed: implemented after ux adversarial review (v0.6.9)
+  - log: 2026-08-22T00:00:00Z @kj added
+  - log: 2026-08-22T00:00:00Z @kj closed: implemented after ux adversarial review (v0.6.9)
 - [x] `ACC-CORE-36` **Grouping fallback** - copier.yml has no group of its own, so a template naming none - the common case - yields exactly one untitled group covering every question, and a frontend has one code path for grouped and ungrouped templates alike
-  - log: 2026-08-23 added
-  - log: 2026-08-23 closed: built - tests/unit/test_ui_groups.py (v0.6.9)
+  - log: 2026-08-23T00:00:00Z @kj added
+  - log: 2026-08-23T00:00:00Z @kj closed: built - tests/unit/test_ui_groups.py (v0.6.9)
 - [x] `ACC-CORE-37` **Grouping opt-in** - a template may name groups with a `_ui_groups` list of `{title, fields}` blocks; copier carries unknown underscore-prefixed keys through its config untouched, so the key is inert to copier and needs no copier change
-  - log: 2026-08-23 added
-  - log: 2026-08-23 closed: built - tests/unit/test_ui_groups.py (v0.6.9)
+  - log: 2026-08-23T00:00:00Z @kj added
+  - log: 2026-08-23T00:00:00Z @kj closed: built - tests/unit/test_ui_groups.py (v0.6.9)
 - [x] `ACC-CORE-38` **Grouping partition** - groups partition the schema in declaration order and never reorder it; walking every group yields every question exactly once, in the order `copier.yml` asked them
-  - log: 2026-08-23 added
-  - log: 2026-08-23 closed: built - tests/unit/test_ui_groups.py (v0.6.9)
+  - log: 2026-08-23T00:00:00Z @kj added
+  - log: 2026-08-23T00:00:00Z @kj closed: built - tests/unit/test_ui_groups.py (v0.6.9)
 - [x] `ACC-CORE-39` **Conditional nesting** - `Question.condition_ids` names the questions a `when` reads, so a frontend can nest a conditional question under the answer that governs it without parsing Jinja; a templated default or choice is a plain dependency and does not nest
-  - log: 2026-08-23 added
-  - log: 2026-08-23 closed: built - tests/unit/test_ui_groups.py (v0.6.9)
+  - log: 2026-08-23T00:00:00Z @kj added
+  - log: 2026-08-23T00:00:00Z @kj closed: built - tests/unit/test_ui_groups.py (v0.6.9)
 - [x] `ACC-CORE-40` **Edge: malformed _ui_groups** - a `_ui_groups` key of the wrong shape, or a block missing its title or fields, loads as though the key were absent - a heading is decoration and must never refuse a template
-  - log: 2026-08-23 added
-  - log: 2026-08-23 closed: built - tests/unit/test_ui_groups.py (v0.6.9)
+  - log: 2026-08-23T00:00:00Z @kj added
+  - log: 2026-08-23T00:00:00Z @kj closed: built - tests/unit/test_ui_groups.py (v0.6.9)
 - [x] `ACC-CORE-41` **Edge: group names an unknown field** - a group member that is not a question of this template is dropped from the group and never reaches the schema; the first group to claim a field keeps it
-  - log: 2026-08-23 added
-  - log: 2026-08-23 closed: built - tests/unit/test_ui_groups.py (v0.6.9)
+  - log: 2026-08-23T00:00:00Z @kj added
+  - log: 2026-08-23T00:00:00Z @kj closed: built - tests/unit/test_ui_groups.py (v0.6.9)
 
 ### API
 
@@ -147,336 +151,344 @@ UI-neutral core. Three layers - copier adapter (parses `copier.yml`), UI model (
 Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately boring: maps kinds to widgets, holds no semantics of its own. Follows the workspace `text-user-interface` conventions for palette, header bar, 2D navigation, key bindings and the execution screen.
 
 - [x] `ACC-TUI-42` **CLI drop-in** - `copier-tui` accepts exactly copier's own CLI syntax: same subcommands (`copy`, `update`, `recopy`), same arguments, same flags, same short forms; replacing `copier` with `copier-tui` in any command line changes the UI and nothing else
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_cli.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_cli.py
 - [x] `ACC-TUI-43` **Flag pass-through** - `copy` honours all sixteen of copier's switches with copier's semantics, not re-implemented: `-d/--data`, `--data-file`, `-r/--vcs-ref`, `-a/--answers-file`, `-x/--exclude`, `-s/--skip`, `-w/--overwrite`, `-n/--pretend`, `-l/--defaults`, `-f/--force`, `-g/--prereleases`, `-T/--skip-tasks`, `-C/--no-cleanup`, `--ask`, `--trust`, `-q/--quiet`; `recopy` adds `-A/--skip-answered` and has no `-C/--no-cleanup`; `update` adds `-A/--skip-answered`, `-c/--context-lines` and `-o/--conflict`, and has no `-w/--overwrite`, `-C/--no-cleanup` or separate `-f/--force`
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_cli.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_cli.py
 - [x] `ACC-TUI-44` **Pre-supplied answers** - a value given with `--data` is seeded into state and its question is not asked, matching copier's behaviour
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_cli.py and test_ui_state.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_cli.py and test_ui_state.py
 - [x] `ACC-TUI-45` **Non-interactive flags stay non-interactive** - `--defaults` and `-f/--force` skip the survey entirely and run headless, no TUI launched
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 `--quiet` removed from this criterion; copier's `-q` only suppresses status output (v0.6.4)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_cli.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj `--quiet` removed from this criterion; copier's `-q` only suppresses status output (v0.6.4)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_cli.py
 - [x] `ACC-TUI-46` **Quiet keeps the TUI** - `--quiet` is copier's status-output switch, not a non-interactive one: the survey still opens, and the flag reaches copier so the render is silent
-  - log: 2026-08-22 criterion added (v0.6.4)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_cli.py (v0.6.5)
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.6.4)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_cli.py (v0.6.5)
 - [x] `ACC-TUI-47` **Trust refusal before the survey** - a template needing trust is refused before any screen opens unless `--trust` was given or copier's settings trust it, with copier's own message and copier's own exit code 4
-  - log: 2026-08-22 criterion added (v0.6.4)
-  - log: 2026-08-22 closed: built - tests/unit/test_ui_edges.py and test_tui_cli.py (v0.6.5)
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.6.4)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_edges.py and test_tui_cli.py (v0.6.5)
 - [x] `ACC-TUI-48` **Update and recopy** - `update` and `recopy` open the survey seeded from the destination's `.copier-answers.yml`, then hand back to copier for the merge
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_cli.py and test_tui_flow.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_cli.py and test_tui_flow.py
 - [x] `ACC-TUI-49` **Help parity** - `copier-tui --help` and each subcommand's help list the same options as copier's, with copier's wording
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_cli.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_cli.py
 - [x] `ACC-TUI-50` **Edge: unknown flag** - a flag copier does not define is rejected with copier's own error text and exit code
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_cli.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_cli.py
 - [x] `ACC-TUI-51` **No semantics** - `copier_tui` never parses `copier.yml`, evaluates a `when`, or computes a default; all of it comes from `copier_ui` state
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_contract.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_contract.py
 - [x] `ACC-TUI-52` **Widget mapping** - string/path -> wrapping text field, bool/choice/multiselect -> every option printed on the question's own row, secret -> password input, integer/float -> numeric input, structured -> multiline editor
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_widgets.py
-  - log: 2026-08-24 reworded: choices are printed in place rather than behind a menu, and a free-text answer wraps rather than scrolling out of a one-line box (v0.6.9)
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_widgets.py
+  - log: 2026-08-24T00:00:00Z @kj reworded: choices are printed in place rather than behind a menu, and a free-text answer wraps rather than scrolling out of a one-line box (v0.6.9)
 - [x] `ACC-TUI-53` **TUI conventions** - the header bar, the palette and the execution screen follow the `text-user-interface` skill
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - copier_tui/theme.py, widgets.HeaderBar, screens/execution.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - copier_tui/theme.py, widgets.HeaderBar, screens/execution.py
 - [x] `ACC-TUI-54` **Field display** - a field's row carries its caption and its answer, and a question answered by picking carries every option it was picked from on that same row; the focused row lifts onto a plate and prints under itself what is specific to it - its validation message, or the example its `placeholder` gives
   - related: DEF-SRVY-1 - the clipped survey body contradicts this layout claim
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py
-  - log: 2026-08-22 reworded for the one-row-per-field layout; help and messages moved to the reserved hint line (v0.6.4)
-  - log: 2026-08-22 label is now the question's caption, not its identifier (v0.6.9)
-  - log: 2026-08-24 reworded for the options-in-place layout; help moved from the shared line onto the focused row, which is where the question it explains is (v0.6.9)
-  - log: 2026-08-27 the plate is now one ground on every row rather than one per band, so walking the form with the arrows no longer makes the lifted row flicker between two shades; the single exception is a conditional question, which keeps its green lean while focused, since that is the moment the fact matters most
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_survey.py
+  - log: 2026-08-22T00:00:00Z @kj reworded for the one-row-per-field layout; help and messages moved to the reserved hint line (v0.6.4)
+  - log: 2026-08-22T00:00:00Z @kj label is now the question's caption, not its identifier (v0.6.9)
+  - log: 2026-08-24T00:00:00Z @kj reworded for the options-in-place layout; help moved from the shared line onto the focused row, which is where the question it explains is (v0.6.9)
+  - log: 2026-08-27T00:00:00Z @kj the plate is now one ground on every row rather than one per band, so walking the form with the arrows no longer makes the lifted row flicker between two shades; the single exception is a conditional question, which keeps its green lean while focused, since that is the moment the fact matters most
 - [x] `ACC-TUI-55` **One row per question** - a question is one row: a label gutter that is a share of the row capped at 56 columns, the control, one status glyph; only a multiline editor and a multiselect grow, and both are capped, so a template of two dozen questions is one screen and not several
   - related: DEF-SRVY-1 - the clipped survey body contradicts this layout claim
-  - log: 2026-08-22 criterion added (v0.6.5)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py (v0.6.5)
-  - log: 2026-08-27 regression fixed: the status row took a Horizontal's default 1fr and halved the screen, so a form that fit one screen was cut and scrolled; see DEF-SRVY-1
-  - log: 2026-08-27 edited text
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.6.5)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_survey.py (v0.6.5)
+  - log: 2026-08-27T00:00:00Z @kj regression fixed: the status row took a Horizontal's default 1fr and halved the screen, so a form that fit one screen was cut and scrolled; see DEF-SRVY-1
+  - log: 2026-08-27T00:00:00Z @kj edited text
 - [x] `ACC-TUI-56` **Line under the form** - the line below the form is reserved, not filled - it stays blank, and carries the cancel arming warning while that is up and a count of the answers still needing attention after a refused enter; the keys are named in the footer, and a field's own help, its example and the reason its answer was refused all print under the row they concern, which is where the question is
-  - log: 2026-08-22 criterion added (v0.6.5)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py (v0.6.5)
-  - log: 2026-08-22 help outranks the open-the-list hint, which was hiding it on every choice field (v0.6.9)
-  - log: 2026-08-24 replaced the per-field hint line: help and errors belong on the row of the question they concern, and the freed line says how to drive the form (v0.6.9)
-  - log: 2026-08-27 edited text
-  - log: 2026-08-27 reversed: the user called the constant legend clutter, and a line of unchanging text sat between the reader and the questions; tests/unit/test_tui_survey.py
-  - log: 2026-08-27 edited title
-  - log: 2026-08-27 corrected: the claim that the line carries a validation message overstates it - a message set there is cleared by the focus move that puts the cursor on the offending field, so in practice the line carries the cancel arming warning and nothing else. The field's own error prints under its row, which is where per-field text was deliberately moved
-  - log: 2026-08-27 edited text
-  - log: 2026-08-27 corrected: the body says the line carries a validation message and the log below says a message set there is cleared by the focus move - neither is now true. A refusal puts the reason on the offending row and a count on the shared line, and the count is held through the focus move that follows
-  - log: 2026-08-27 edited text
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.6.5)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_survey.py (v0.6.5)
+  - log: 2026-08-22T00:00:00Z @kj help outranks the open-the-list hint, which was hiding it on every choice field (v0.6.9)
+  - log: 2026-08-24T00:00:00Z @kj replaced the per-field hint line: help and errors belong on the row of the question they concern, and the freed line says how to drive the form (v0.6.9)
+  - log: 2026-08-27T00:00:00Z @kj edited text
+  - log: 2026-08-27T00:00:00Z @kj reversed: the user called the constant legend clutter, and a line of unchanging text sat between the reader and the questions; tests/unit/test_tui_survey.py
+  - log: 2026-08-27T00:00:00Z @kj edited title
+  - log: 2026-08-27T00:00:00Z @kj corrected: the claim that the line carries a validation message overstates it - a message set there is cleared by the focus move that puts the cursor on the offending field, so in practice the line carries the cancel arming warning and nothing else. The field's own error prints under its row, which is where per-field text was deliberately moved
+  - log: 2026-08-27T00:00:00Z @kj edited text
+  - log: 2026-08-27T00:00:00Z @kj corrected: the body says the line carries a validation message and the log below says a message set there is cleared by the focus move - neither is now true. A refusal puts the reason on the offending row and a count on the shared line, and the count is held through the focus move that follows
+  - log: 2026-08-27T00:00:00Z @kj edited text
 - [x] `ACC-TUI-57` **Two-press cancel** - the first `escape` arms the cancel and says so in the hint line, a second quits, and any other key disarms it, so one stray key cannot discard a survey
   - related: DEF-KEYS-4 - two escapes in quick succession do not quit
-  - log: 2026-08-22 criterion added (v0.6.5)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py (v0.6.5)
-  - log: 2026-08-27 strengthened: mouse motion reporting is off, so no terminal report can be mistaken for the second escape's introducer; see DEF-KEYS-4
-  - log: 2026-08-27 corrected: the strengthening logged above credits mouse reporting being off, and that reading was wrong - a terminal's report carries its own ESC byte, so it never had a keystroke to take; the real fault was this end disarming itself on a focus report, fixed by disarming only on a focus that actually moved; see DEF-KEYS-4
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.6.5)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_survey.py (v0.6.5)
+  - log: 2026-08-27T00:00:00Z @kj strengthened: mouse motion reporting is off, so no terminal report can be mistaken for the second escape's introducer; see DEF-KEYS-4
+  - log: 2026-08-27T00:00:00Z @kj corrected: the strengthening logged above credits mouse reporting being off, and that reading was wrong - a terminal's report carries its own ESC byte, so it never had a keystroke to take; the real fault was this end disarming itself on a focus report, fixed by disarming only on a focus that actually moved; see DEF-KEYS-4
 - [x] `ACC-TUI-58` **Arrow handoff** - `up` and `down` step between fields except inside a control with a cursor of its own, which keeps them until its first or last line and then hands the focus on
-  - log: 2026-08-22 criterion added (v0.6.5)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py (v0.6.5)
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.6.5)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_survey.py (v0.6.5)
 - [x] `ACC-TUI-59` **Navigation stops at the ends** - `down` on the last field stays on the last field and `up` on the first stays on the first; the survey never rolls round from the bottom to the top or back, so a held arrow key comes to rest at an end rather than cycling
-  - log: 2026-08-27 criterion added (v1.0.13)
-  - log: 2026-08-27 open: `action_focus_next` and `action_focus_previous` call Textual's `focus_next` and `focus_previous`, which cycle round the focus chain
-  - log: 2026-08-27 closed: built - _step_focus clamps to the focus chain instead of Textual's rolling focus_next; tests/unit/test_tui_survey.py
+  - log: 2026-08-27T00:00:00Z @kj criterion added (v1.0.13)
+  - log: 2026-08-27T00:00:00Z @kj open: `action_focus_next` and `action_focus_previous` call Textual's `focus_next` and `focus_previous`, which cycle round the focus chain
+  - log: 2026-08-27T00:00:00Z @kj closed: built - _step_focus clamps to the focus chain instead of Textual's rolling focus_next; tests/unit/test_tui_survey.py
 - [x] `ACC-TUI-60` **Defaults prefilled** - every field opens on its computed default; the user confirms rather than retypes
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_widgets.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_widgets.py
 - [x] `ACC-TUI-61` **Back and forward** - the user moves to the previous and next question freely, in any order, without losing entered answers
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_survey.py
 - [x] `ACC-TUI-62` **Confirm key** - `enter` advances the survey to the review from every field, including a switch and a closed choice list; only an open menu and a multiline editor keep it, being the two controls with nothing else that does enter's job, and `space` opens a closed menu
-  - log: 2026-08-22 criterion added (v0.6.4)
-  - log: 2026-08-22 reworded: enter is claimed back from the switch and the closed select, which space already serves (v0.6.5)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py (v0.6.5)
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.6.4)
+  - log: 2026-08-22T00:00:00Z @kj reworded: enter is claimed back from the switch and the closed select, which space already serves (v0.6.5)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_survey.py (v0.6.5)
 - [x] `ACC-TUI-63` **Back from review** - the review screen lists every answer, and returning from it to the survey keeps the survey's scroll position and focused field
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 replaces the Jump criterion; the overview screen is dropped (v0.6.4)
-  - log: 2026-08-22 closed: built - review is stacked over the survey, never replacing it - tests/unit/test_tui_flow.py (v0.6.5)
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj replaces the Jump criterion; the overview screen is dropped (v0.6.4)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - review is stacked over the survey, never replacing it - tests/unit/test_tui_flow.py (v0.6.5)
 - [x] `ACC-TUI-64` **Recompute after coming back** - an answer changed after a return from the review still recalculates every dependent field, so the round trip is an edit and not a read-only view
-  - log: 2026-08-22 criterion added (v0.6.5)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_flow.py (v0.6.5)
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.6.5)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_flow.py (v0.6.5)
 - [x] `ACC-TUI-65` **Question set per screen** - the survey shows askable questions, visible and not already answered by `--data`; the review shows every visible question, so a `--data` preset appears on the review and nowhere else
-  - log: 2026-08-22 criterion added (v0.6.4)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py and test_tui_flow.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.6.4)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_survey.py and test_tui_flow.py
 - [x] `ACC-TUI-66` **Hidden skipped** - fields whose state is not visible are neither displayed nor reachable by navigation
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_survey.py
 - [x] `ACC-TUI-67` **Live revisibility** - changing an answer that reveals or hides dependent fields updates the visible set immediately, without restarting the survey
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_survey.py
 - [x] `ACC-TUI-68` **Stale answer after recompute** - when a recompute leaves an answer outside its question's new choices or type, state keeps the value and the review shows it, the row is marked and carries copier's own message under itself, and the option row lights no option rather than lighting a neighbour the user never picked
-  - log: 2026-08-22 criterion added (v0.6.4)
-  - log: 2026-08-22 reworded: a choice control cannot render a value that is not one of its options (v0.6.5)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py (v0.6.5)
-  - log: 2026-08-24 reworded: an option row can light none of its options, where a dropdown had to fall back to its prompt (v0.6.9)
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.6.4)
+  - log: 2026-08-22T00:00:00Z @kj reworded: a choice control cannot render a value that is not one of its options (v0.6.5)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_survey.py (v0.6.5)
+  - log: 2026-08-24T00:00:00Z @kj reworded: an option row can light none of its options, where a dropdown had to fall back to its prompt (v0.6.9)
 - [x] `ACC-TUI-69` **Inline errors** - an invalid field is marked on its own row and prints its message directly under itself while it has focus
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - copier_tui/screens/survey.py _show_hint and widgets.py _flag_text
-  - log: 2026-08-22 reworded for the one-row-per-field layout; help and messages moved to the reserved hint line (v0.6.4)
-  - log: 2026-08-24 reworded: the message is on the field's own row rather than a shared line (v0.6.9)
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - copier_tui/screens/survey.py _show_hint and widgets.py _flag_text
+  - log: 2026-08-22T00:00:00Z @kj reworded for the one-row-per-field layout; help and messages moved to the reserved hint line (v0.6.4)
+  - log: 2026-08-24T00:00:00Z @kj reworded: the message is on the field's own row rather than a shared line (v0.6.9)
 - [x] `ACC-TUI-70` **Errors block finish only** - an invalid field blocks instantiation, never navigation away from that field
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_survey.py
 - [x] `ACC-TUI-71` **Secrets masked** - secret fields are masked on screen and absent from any log line or crash dump
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_widgets.py and test_tui_flow.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_widgets.py and test_tui_flow.py
 - [x] `ACC-TUI-72` **Review screen** - a final screen lists every answer for confirmation before anything is written to disk
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_flow.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_flow.py
 - [x] `ACC-TUI-73` **Nothing written early** - no file is created in the destination until the user confirms on the review screen
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_flow.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_flow.py
 - [x] `ACC-TUI-74` **Execution screen** - instantiation runs on its own screen with progress and a final success or failure verdict
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_flow.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_flow.py
 - [x] `ACC-TUI-75` **The render names what it writes** - files appear on the execution screen as they are written, since copier reports nothing back and a bar that only pulses says the run is alive but not that it is doing anything
-  - log: 2026-08-26 added
-  - log: 2026-08-27 closed: built - tests/unit/test_tui_flow.py
+  - log: 2026-08-26T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: built - tests/unit/test_tui_flow.py
 - [x] `ACC-TUI-76` **Destination in sight** - the survey's status line names where the template will be rendered, resolved to an absolute path and written home-relative, so a relative destination such as `update`'s default `.` still names the project; it is the one fact a person filling in thirty answers cannot recover from anything else on the screen
   - related: DEF-SRVY-3 - the destination is not visible on screen
-  - log: 2026-08-26 added
-  - log: 2026-08-27 closed: built - tests/unit/test_tui_survey.py
-  - log: 2026-08-27 strengthened: the destination is cropped to its one row rather than wrapped, and the test now reads the row's height rather than only its text; see DEF-SRVY-3
-  - log: 2026-08-27 edited text
-  - log: 2026-08-27 the crop changed direction and owner: the header and the status line shorten a path from the LEFT, keeping the tail, because the stylesheet's ellipsis takes characters off the right - which on a path removes the part that names the project. The header does it against the width the row actually has; a constant was too aggressive at 120 columns and no help at 70
+  - log: 2026-08-26T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: built - tests/unit/test_tui_survey.py
+  - log: 2026-08-27T00:00:00Z @kj strengthened: the destination is cropped to its one row rather than wrapped, and the test now reads the row's height rather than only its text; see DEF-SRVY-3
+  - log: 2026-08-27T00:00:00Z @kj edited text
+  - log: 2026-08-27T00:00:00Z @kj the crop changed direction and owner: the header and the status line shorten a path from the LEFT, keeping the tail, because the stylesheet's ellipsis takes characters off the right - which on a path removes the part that names the project. The header does it against the width the row actually has; a constant was too aggressive at 120 columns and no help at 70
 - [x] `ACC-TUI-77` **Exit code** - the process exits 0 on a completed render, non-zero on a failed render or a user cancel
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_flow.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_flow.py
 - [x] `ACC-TUI-78` **Cancel anywhere** - quitting before confirmation leaves the destination untouched and says so
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_flow.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_flow.py
 - [x] `ACC-TUI-79` **Any template** - an unmodified third-party copier template runs through the TUI with no template-side changes
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_flow.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_flow.py
 - [x] `ACC-TUI-80` **Edge: no questions** - a template with no questions goes straight to the review screen
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_flow.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_flow.py
 - [x] `ACC-TUI-81` **Edge: destination not empty** - a non-empty destination warns before confirmation and lets the user abort
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_flow.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_flow.py
 - [x] `ACC-TUI-82` **Edge: template fetch fails** - a bad path, URL or ref reports the failure and exits before the survey opens
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_cli.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_cli.py
 - [x] `ACC-TUI-83` **Edge: copier run fails** - a failure during render shows copier's error on the execution screen and leaves partial output in place rather than deleting it
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_flow.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_flow.py
 - [x] `ACC-TUI-84` **Edge: load error mid-schema** - a question `copier_ui` could not load is displayed as a disabled field carrying its error, and blocks instantiation
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_survey.py
 - [x] `ACC-TUI-85` **Edge: terminal too small** - below the minimum usable size the app shows a resize prompt instead of a broken layout
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_survey.py
-  - log: 2026-08-27 the prompt is amber rather than rose: rose is this app's failure colour and a heavy rose border read as a crash dialog, where a terminal narrower than the form is an advisory the reader fixes by dragging an edge. It stays non-modal - it does not block the screen underneath, which is deliberate: the form still works, it is just cramped
-  - log: 2026-08-27 corrected: the log above describes the prompt as an overlay that does not block the screen; it is a row of the layout now, mounted before the footer, because every overlay placement covered something that mattered - the form gives up a row instead
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_survey.py
+  - log: 2026-08-27T00:00:00Z @kj the prompt is amber rather than rose: rose is this app's failure colour and a heavy rose border read as a crash dialog, where a terminal narrower than the form is an advisory the reader fixes by dragging an edge. It stays non-modal - it does not block the screen underneath, which is deliberate: the form still works, it is just cramped
+  - log: 2026-08-27T00:00:00Z @kj corrected: the log above describes the prompt as an overlay that does not block the screen; it is a row of the layout now, mounted before the footer, because every overlay placement covered something that mattered - the form gives up a row instead
 - [x] `ACC-TUI-86` **Edge: not a tty** - launched without a terminal, the app exits with a clear message rather than a traceback
-  - log: 2026-08-22 criterion added (v0.1.0)
-  - log: 2026-08-22 closed: built - tests/unit/test_tui_cli.py
+  - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
+  - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_tui_cli.py
 - [x] `ACC-TUI-87` **Question captions** - every row is captioned by its question, never by a bare `copier.yml` identifier, on the survey and on the review screen alike
-  - log: 2026-08-22 added
-  - log: 2026-08-22 closed: implemented after ux adversarial review (v0.6.9)
+  - log: 2026-08-22T00:00:00Z @kj added
+  - log: 2026-08-22T00:00:00Z @kj closed: implemented after ux adversarial review (v0.6.9)
 - [x] `ACC-TUI-88` **No sentence printed twice** - copier's caption is the rendered `help`, so the two are the same string for every question declaring one; the row prints it once as the caption and leaves its help line empty rather than repeating it
-  - log: 2026-08-22 added
-  - log: 2026-08-22 closed: implemented after ux adversarial review (v0.6.9)
-  - log: 2026-08-24 replaced: with help on the row there is no line to contend for, and the real risk became printing copier's one description twice (v0.6.9)
+  - log: 2026-08-22T00:00:00Z @kj added
+  - log: 2026-08-22T00:00:00Z @kj closed: implemented after ux adversarial review (v0.6.9)
+  - log: 2026-08-24T00:00:00Z @kj replaced: with help on the row there is no line to contend for, and the real risk became printing copier's one description twice (v0.6.9)
 - [x] `ACC-TUI-89` **Nothing covers the form** - no control opens a panel over the questions around it; a choice is made by moving along options already on its row, so what is on screen is never hidden by what is being answered
-  - log: 2026-08-22 added
-  - log: 2026-08-22 closed: implemented after ux adversarial review (v0.6.9)
-  - log: 2026-08-24 replaced: the bordered overlay fixed a symptom - the cure is having no overlay at all, since the covered rows are what the user compares against (v0.6.9)
+  - log: 2026-08-22T00:00:00Z @kj added
+  - log: 2026-08-22T00:00:00Z @kj closed: implemented after ux adversarial review (v0.6.9)
+  - log: 2026-08-24T00:00:00Z @kj replaced: the bordered overlay fixed a symptom - the cure is having no overlay at all, since the covered rows are what the user compares against (v0.6.9)
 - [x] `ACC-TUI-90` **Blank pick is not an answer** - picking a choice control's own prompt row leaves the stored answer untouched and snaps the control back to it, so screen and state never disagree
-  - log: 2026-08-22 added
-  - log: 2026-08-22 closed: implemented after ux adversarial review (v0.6.9)
+  - log: 2026-08-22T00:00:00Z @kj added
+  - log: 2026-08-22T00:00:00Z @kj closed: implemented after ux adversarial review (v0.6.9)
 - [x] `ACC-TUI-91` **Captions arrive whole** - a caption too long for its gutter wraps to a second line and is never cut with an ellipsis, on the survey and on the review alike; copier has no description separate from the caption, so a cut caption deletes the only description a question has
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_survey.py, test_tui_widgets.py, test_tui_flow.py (v0.6.9)
-  - log: 2026-08-27 strengthened on the review screen: its captions had the same two-line cap as the survey's, so a long caption was cut there too - on the one screen whose whole job is that the words are read before anything is written. The cap is gone from the review; the survey keeps it, because thirty rows have to fit one screen
-  - log: 2026-08-27 the cap is three lines, not two. Two was sized against a fixed gutter; once the gutter became a share of the row it cut seven of the reference template's captions at 60 columns, four at 70 and two at 80
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_survey.py, test_tui_widgets.py, test_tui_flow.py (v0.6.9)
+  - log: 2026-08-27T00:00:00Z @kj strengthened on the review screen: its captions had the same two-line cap as the survey's, so a long caption was cut there too - on the one screen whose whole job is that the words are read before anything is written. The cap is gone from the review; the survey keeps it, because thirty rows have to fit one screen
+  - log: 2026-08-27T00:00:00Z @kj the cap is three lines, not two. Two was sized against a fixed gutter; once the gutter became a share of the row it cut seven of the reference template's captions at 60 columns, four at 70 and two at 80
 - [x] `ACC-TUI-92` **Alternatives stay visible** - a question answered by picking shows every option it was picked from, the one in force lit and the rest legible beside it, so what was passed over never has to be recalled
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_survey.py, test_tui_widgets.py, test_tui_flow.py (v0.6.9)
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_survey.py, test_tui_widgets.py, test_tui_flow.py (v0.6.9)
 - [x] `ACC-TUI-93` **Choosing without opening** - left and right move along a question's options and take the one they land on; space cycles a choice forward and ticks an option in a multiselect; no key opens a panel, so enter stays the confirm key on every field
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_survey.py, test_tui_widgets.py, test_tui_flow.py (v0.6.9)
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_survey.py, test_tui_widgets.py, test_tui_flow.py (v0.6.9)
 - [x] `ACC-TUI-94` **Long answers wrap** - a free-text answer wraps within its column rather than scrolling out of a one-line box, up to three lines, so a sentence-long answer can be read back before it is committed
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_survey.py, test_tui_widgets.py, test_tui_flow.py (v0.6.9)
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_survey.py, test_tui_widgets.py, test_tui_flow.py (v0.6.9)
 - [x] `ACC-TUI-95` **Defaults are not de-emphasised** - an untouched default is rendered no dimmer than an answer the user gave and carries no warning glyph - it is the answer most in need of checking, and de-emphasis is concealment rather than styling
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_survey.py, test_tui_widgets.py, test_tui_flow.py (v0.6.9)
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_survey.py, test_tui_widgets.py, test_tui_flow.py (v0.6.9)
 - [x] `ACC-TUI-96` **Placeholders are not answers** - a `placeholder` is offered on the focused row as an example, never written into the value column, where it would read as an answer nobody gave
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_survey.py, test_tui_widgets.py, test_tui_flow.py (v0.6.9)
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_survey.py, test_tui_widgets.py, test_tui_flow.py (v0.6.9)
 - [x] `ACC-TUI-97` **Row banding** - the form alternates two grounds down its rows, restriped by position whenever a conditional question appears or disappears
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
-  - log: 2026-08-27 the step between the two bands was halved from 16-21 per channel to 8-10, at the user's request, because the wider step read as two different surfaces rather than one form counted in twos
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-27T00:00:00Z @kj the step between the two bands was halved from 16-21 per channel to 8-10, at the user's request, because the wider step read as two different surfaces rather than one form counted in twos
 - [x] `ACC-TUI-98` **Typing grounds** - anything the user types into carries a lifted ground that also takes the band; an option row carries none, so only what accepts letters looks like it does
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py
 - [x] `ACC-TUI-99` **Option chips** - the option in force sits on a filled chip and the ones passed over do not; taken and dismissed differ by ground, not by which blue is brighter
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py
 - [x] `ACC-TUI-100` **Captions carry no state** - a caption is coloured by focus alone, never by whether its answer is still the default
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py
 - [x] `ACC-TUI-101` **Edge: row the answers rule out** - a disabled question greys its caption with its control, so a dead row never reads as one merely unfocused
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py
 - [x] `ACC-TUI-102` **Render keeps the keyboard** - everything the copier run starts gets a stdin of /dev/null, so a template task cannot eat the keystrokes and leave 'press any key to close' dead; the app's own descriptors are never swapped, and 1 and 2 stay open since Textual paints through 1
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
-  - log: 2026-08-27 amended: the children get /dev/null, not this process - pointing descriptor 0 there spun Textual's input thread on end-of-file and left the app deaf; test moved to tests/unit/test_tui_terminal.py
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-27T00:00:00Z @kj amended: the children get /dev/null, not this process - pointing descriptor 0 there spun Textual's input thread on end-of-file and left the app deaf; test moved to tests/unit/test_tui_terminal.py
 - [x] `ACC-TUI-103` **Render keeps the terminal mode** - the line discipline is put back the way the driver set it once the render is over, so a task that cooks the terminal cannot leave the form deaf to a keystroke that carries no newline
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: built - tests/unit/test_tui_terminal.py, which drives the whole app through a pty against a template whose tasks go for the terminal
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: built - tests/unit/test_tui_terminal.py, which drives the whole app through a pty against a template whose tasks go for the terminal
 - [x] `ACC-TUI-104` **Every option is a chip** - every option carries a ground, so a bare label never reads as prose and the question's caption never reads as one of its own answers
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py
 - [x] `ACC-TUI-105` **Three option states** - chosen, under the cursor and passed over each have their own ground; only chosen changes hue, and all three clear the 4.5:1 contrast floor
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py
 - [x] `ACC-TUI-106` **Focus opens on a question** - the first field holds the focus as soon as the form opens, the row mounts being awaited before it is focused
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py
 - [x] `ACC-TUI-107` **Every stop is actionable** - the cursor only ever stops on a control; the scrolling form is not itself a tab stop
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py
 - [x] `ACC-TUI-108` **Focused row is spaced** - the focused question keeps a blank line above and below it, both carrying its own ground, so the row being answered reads as one plate rather than a strip with the form showing through
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
-  - log: 2026-08-26 the blank lines became padding, so they take the row's ground instead of the form's (v1.0.7)
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-26T00:00:00Z @kj the blank lines became padding, so they take the row's ground instead of the form's (v1.0.7)
 - [x] `ACC-TUI-109` **Grounds live in app CSS** - the form's typing grounds are declared in the app stylesheet, since Textual ranks app CSS above a widget's default sheet whatever the specificity
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py
 - [x] `ACC-TUI-110` **Option shape** - the answer is a filled circle and every alternative an empty one, so chosen is said in the glyph as well as the ground
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py
 - [x] `ACC-TUI-111` **Cursor on the answer** - the cursor mark shows even when the cursor sits on the chosen option, since where you are and what is chosen are two facts that must both read
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
-  - log: 2026-08-27 the mark glyph is U+25BA BLACK RIGHT-POINTING POINTER, not U+25B8; the small triangle was hard to see at a normal terminal font size, and U+25B6 is emoji-presented in enough terminals to take two columns and shift everything after it
-  - log: 2026-08-27 verified: U+25BA has East_Asian_Width N (neutral), so no terminal may render it double-width; U+25B6 has East_Asian_Width A (ambiguous) and widens to two cells in any terminal configured for CJK ambiguous-wide, while rich.cells.cell_len counts it as 1 either way - that mismatch would shift every column after the mark. The old U+25B8 was also neutral and safe, and was replaced only because it was too small to see
-  - log: 2026-08-27 the glyph guard that backs this criterion originally scanned source characters and so could not see any constant written as an escape, which is all of them; it now parses the source and skips documentation strings. Six ambiguous-width glyphs it had missed are listed and accepted - the four box-drawing connectors, for which no width-neutral set exists, and the two option marks
-  - log: 2026-08-27 the mark is now U+25FC BLACK MEDIUM SQUARE, at the user's choice from seven width-neutral candidates rendered side by side in a real terminal. A square rather than a circle because the chip's own mark is a circle, and rather than U+25A0 - the obvious black square - because that one is ambiguous-width; U+25FC is neutral
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-27T00:00:00Z @kj the mark glyph is U+25BA BLACK RIGHT-POINTING POINTER, not U+25B8; the small triangle was hard to see at a normal terminal font size, and U+25B6 is emoji-presented in enough terminals to take two columns and shift everything after it
+  - log: 2026-08-27T00:00:00Z @kj verified: U+25BA has East_Asian_Width N (neutral), so no terminal may render it double-width; U+25B6 has East_Asian_Width A (ambiguous) and widens to two cells in any terminal configured for CJK ambiguous-wide, while rich.cells.cell_len counts it as 1 either way - that mismatch would shift every column after the mark. The old U+25B8 was also neutral and safe, and was replaced only because it was too small to see
+  - log: 2026-08-27T00:00:00Z @kj the glyph guard that backs this criterion originally scanned source characters and so could not see any constant written as an escape, which is all of them; it now parses the source and skips documentation strings. Six ambiguous-width glyphs it had missed are listed and accepted - the four box-drawing connectors, for which no width-neutral set exists, and the two option marks
+  - log: 2026-08-27T00:00:00Z @kj the mark is now U+25FC BLACK MEDIUM SQUARE, at the user's choice from seven width-neutral candidates rendered side by side in a real terminal. A square rather than a circle because the chip's own mark is a circle, and rather than U+25A0 - the obvious black square - because that one is ambiguous-width; U+25FC is neutral
 - [x] `ACC-TUI-112` **Option layout** - options share a line while they fit the row's real width and stack one per line once they do not, so no alternative runs off the edge
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
-  - log: 2026-08-27 the stacking half moved to tests/unit/test_tui_widgets.py, which mounts the row at a width too narrow to hold it; the old check called the rule on an unmounted row, which has no width to be too narrow
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-27T00:00:00Z @kj the stacking half moved to tests/unit/test_tui_widgets.py, which mounts the row at a width too narrow to hold it; the old check called the rule on an unmounted row, which has no width to be too narrow
 - [x] `ACC-TUI-113` **Options never shrink into place** - the choice between one line and a stack is made only once the row knows its width, and a row with no width yet takes one line; a row laid out tall and repainted short leaves the lines it vacated on the screen, and they stay there until the cursor arrives and something redraws that patch
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: built - tests/unit/test_tui_widgets.py asserts no paint stacks at a width that holds the options
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: built - tests/unit/test_tui_widgets.py asserts no paint stacks at a width that holds the options
 - [x] `ACC-TUI-114` **Answer takes light ink** - the chosen chip is deep enough to carry light text at 6.39:1; dark ink on a bright chip read as struck out rather than chosen
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py
 - [x] `ACC-TUI-115` **Cursor carries three cues** - the cursor shows as a bright caret on the row ground, a brighter chip and bold text together; an underline alone was close to invisible
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py
 - [x] `ACC-TUI-116` **Header names the template** - the header carries the template's own short name and calls the screen a questionnaire, since which template is being filled in is the one fact none of its questions carries
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py
 - [x] `ACC-TUI-117` **ctrl+c belongs to the terminal** - ctrl+c never leaves the survey; it is what a terminal copies with, and Textual hands it to a focused input as copy of its own
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py
 - [x] `ACC-TUI-118` **Answers carry their own ink** - an answer is written in a grey brighter than the captions and the answer being edited in orange, so values are told apart from the captions around them at a glance
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
-  - log: 2026-08-24 ink repointed: settled answers neutral grey, edited answer orange
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-24T00:00:00Z @kj ink repointed: settled answers neutral grey, edited answer orange
 - [x] `ACC-TUI-119` **Focus bar breathes** - the bar beside the focused question rides a cosine-eased ramp over about two seconds in steps too small to see, and stops when focus leaves, driven by classes since Textual cannot clear an inline style
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
-  - log: 2026-08-24 ramp widened to 32 cosine-eased phases, no step over 10 of 255
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-24T00:00:00Z @kj ramp widened to 32 cosine-eased phases, no step over 10 of 255
 - [x] `ACC-TUI-120` **Focused row ground** - the row under the cursor lifts onto one ground, the same ground on either band, so walking the form with the arrows does not make the lifted row flicker between two shades; the band the row belongs to still reads from the rows around it
-  - log: 2026-08-24 added
-  - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
-  - log: 2026-08-27 edited text
-  - log: 2026-08-27 reversed: the focus tint used to be applied per band, so the plate under the cursor changed shade as the cursor moved; the user asked for a lifted area that looks the same wherever it stands - "the bg of the selected item must not change ... the 'zoomed' area looks always the same"; tests/unit/test_tui_appearance.py
+  - log: 2026-08-24T00:00:00Z @kj added
+  - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-27T00:00:00Z @kj edited text
+  - log: 2026-08-27T00:00:00Z @kj reversed: the focus tint used to be applied per band, so the plate under the cursor changed shade as the cursor moved; the user asked for a lifted area that looks the same wherever it stands - "the bg of the selected item must not change ... the 'zoomed' area looks always the same"; tests/unit/test_tui_appearance.py
 - [x] `ACC-TUI-121` **Conditional rows** - a question another answer decides whether to ask leans its ground green, on either band and on its typing ground too, since a control spans the row; the green lean SURVIVES focus - the focused conditional row lifts onto its own green plate rather than the plain one, because being conditional is the fact that matters most at the moment the cursor arrives
-  - log: 2026-08-26 added
-  - log: 2026-08-26 closed: built - tests/unit/test_tui_appearance.py (v1.0.7)
-  - log: 2026-08-26 the green lean extended to the typing ground (v1.0.7)
-  - log: 2026-08-27 edited text
-  - log: 2026-08-27 reversed: the blue focus lean used to win over the green one, so a conditional row lost the only cue that said so exactly when it was being answered; the user asked for the opposite - "except for conditional items when it gains greenish tint"; the lean is +8 green / -6 blue against the plain focus plate; tests/unit/test_tui_appearance.py
+  - log: 2026-08-26T00:00:00Z @kj added
+  - log: 2026-08-26T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py (v1.0.7)
+  - log: 2026-08-26T00:00:00Z @kj the green lean extended to the typing ground (v1.0.7)
+  - log: 2026-08-27T00:00:00Z @kj edited text
+  - log: 2026-08-27T00:00:00Z @kj reversed: the blue focus lean used to win over the green one, so a conditional row lost the only cue that said so exactly when it was being answered; the user asked for the opposite - "except for conditional items when it gains greenish tint"; the lean is +8 green / -6 blue against the plain focus plate; tests/unit/test_tui_appearance.py
 - [x] `ACC-TUI-122` **Conditional rows hang off their answer** - a conditional question prints a tree connector before its caption, so it reads as a child of the answer that decides it; consecutive children of one answer share the run and only the last closes it
-  - log: 2026-08-26 added
-  - log: 2026-08-26 closed: built - tests/unit/test_tui_appearance.py, fixture tests/fixtures/tui_tree (v1.0.7)
+  - log: 2026-08-26T00:00:00Z @kj added
+  - log: 2026-08-26T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py, fixture tests/fixtures/tui_tree (v1.0.7)
 - [x] `ACC-TUI-123` **Edge: child whose answer was supplied** - a conditional question whose governing answer came in with --data draws no connector, since the row it would hang from is never asked for
-  - log: 2026-08-26 added
-  - log: 2026-08-26 closed: built - tests/unit/test_tui_appearance.py (v1.0.7)
+  - log: 2026-08-26T00:00:00Z @kj added
+  - log: 2026-08-26T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py (v1.0.7)
 - [x] `ACC-TUI-124` **Wrapped child captions clear the connector** - a conditional caption too long for its gutter wraps with a hanging indent, the lines after the first carrying the run down on a child with siblings below it and blank on the last, so prose never lands in the connector column
-  - log: 2026-08-26 added
-  - log: 2026-08-26 closed: built - tests/unit/test_tui_appearance.py (v1.0.9)
+  - log: 2026-08-26T00:00:00Z @kj added
+  - log: 2026-08-26T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py (v1.0.9)
 - [x] `ACC-TUI-125` **Run crosses the cursor's gap** - the blank line the focused row keeps either side of itself carries the run down when a sibling sits across it, so landing the cursor inside a run of children never breaks the connector column
-  - log: 2026-08-26 added
-  - log: 2026-08-26 closed: built - tests/unit/test_tui_appearance.py; the spacing became two widgets of the row's own, since padding cannot carry a glyph (v1.0.10)
+  - log: 2026-08-26T00:00:00Z @kj added
+  - log: 2026-08-26T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py; the spacing became two widgets of the row's own, since padding cannot carry a glyph (v1.0.10)
 - [x] `ACC-TUI-126` **Cursor mark breathes with the bar** - the mark on an option row takes each shade from the row's own beat, so mark and focus bar are never out of phase
-  - log: 2026-08-26 added
-  - log: 2026-08-26 closed: built - tests/unit/test_tui_appearance.py (v1.0.10)
+  - log: 2026-08-26T00:00:00Z @kj added
+  - log: 2026-08-26T00:00:00Z @kj closed: built - tests/unit/test_tui_appearance.py (v1.0.10)
 - [x] `ACC-TUI-127` **Quit key** - `ctrl+x` quits from every screen, and Textual's own `ctrl+q` is routed to the same place; ctrl+x is named by each screen rather than by the app, so the key list does not reorder as the cursor moves, and it carries priority because Textual's own text controls claim ctrl+x for `cut`; a finished render leaves with its own verdict as the exit code, a render still running is abandoned and the process leaves with the FAILURE code, saying on the way out whether anything was left on disk - copier removes a destination it created and leaves one it did not, and a cancel is the promise that nothing was written
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: built - tests/unit/test_tui_survey.py and tests/unit/test_tui_terminal.py
-  - log: 2026-08-27 corrected: the claim that a finished render leaves with its own verdict was false as written - ctrl+x on that screen hung the app, and so did enter and escape. Fixed; see DEF-EXEC-8 and DEF-KEYS-11. An abandoned render now leaves as a failure, not a cancel, and says on the way out that the destination was partly written
-  - log: 2026-08-27 edited text
-  - log: 2026-08-27 edited text
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: built - tests/unit/test_tui_survey.py and tests/unit/test_tui_terminal.py
+  - log: 2026-08-27T00:00:00Z @kj corrected: the claim that a finished render leaves with its own verdict was false as written - ctrl+x on that screen hung the app, and so did enter and escape. Fixed; see DEF-EXEC-8 and DEF-KEYS-11. An abandoned render now leaves as a failure, not a cancel, and says on the way out that the destination was partly written
+  - log: 2026-08-27T00:00:00Z @kj edited text
+  - log: 2026-08-27T00:00:00Z @kj edited text
 - [x] `ACC-TUI-128` **A render can always be left** - a template task that never returns does not trap the app; ctrl+x ends the run's children so the render unwinds and the process exits; an ordinary keystroke never aborts a running render
-  - log: 2026-08-27 added
-  - log: 2026-08-27 edited text
-  - log: 2026-08-27 closed: built - tests/unit/test_tui_terminal.py
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj edited text
+  - log: 2026-08-27T00:00:00Z @kj closed: built - tests/unit/test_tui_terminal.py
 - [x] `ACC-TUI-129` **No command palette** - the app disables Textual's command palette; it offers a survey nothing a named key does not already do, and it opens a panel over the questions, which this form never does
-  - log: 2026-08-27 added
-  - log: 2026-08-27 edited text
-  - log: 2026-08-27 closed: built - `ENABLE_COMMAND_PALETTE = False` in packages/copier-tui/src/copier_tui/app.py
-  - log: 2026-08-27 corrected: the palette also carried the only key panel in the app, which was the one place the `space` key was named for a multiselect; removing it took that with it. Replaced by the row's own help - see ACC-TUI-131
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj edited text
+  - log: 2026-08-27T00:00:00Z @kj closed: built - `ENABLE_COMMAND_PALETTE = False` in packages/copier-tui/src/copier_tui/app.py
+  - log: 2026-08-27T00:00:00Z @kj corrected: the palette also carried the only key panel in the app, which was the one place the `space` key was named for a multiselect; removing it took that with it. Replaced by the row's own help - see ACC-TUI-131
 - [x] `ACC-TUI-130` **Update refuses a dirty destination at launch** - `update` checks the destination the way copier does and refuses before a single question is drawn: not a git repository, or a repository with uncommitted work, ends the run with copier's own wording and copier's own exit code; the check runs before the template is fetched, so a reader with uncommitted work is told to commit it rather than sent looking for a template that was never the problem
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: built - the check lives in copier_ui.adapter, since it is a copier semantic and copier_tui holds none; tests/unit/test_ui_edges.py, and verified through a real pty that the interactive path prints the refusal and never reaches a question
-  - log: 2026-08-27 closed: built - see the log above
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: built - the check lives in copier_ui.adapter, since it is a copier semantic and copier_tui holds none; tests/unit/test_ui_edges.py, and verified through a real pty that the interactive path prints the refusal and never reaches a question
+  - log: 2026-08-27T00:00:00Z @kj closed: built - see the log above
 - [x] `ACC-TUI-131` **Every question is answerable by a key the interface names** - a multiselect names `space` under itself while it has the focus, because nothing else on the screen does: the arrows walk its options without ticking any, the footer names only the keys that work everywhere, and the key legend and the command palette's key panel - the two places that used to name it - are both gone; the hint costs no row, because a row's help opens a line only while the cursor is on it
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: built - tests/unit/test_tui_survey.py asserts a multiselect says it, a single choice does not, and the key still works where it is not named
-  - log: 2026-08-27 closed: built - see the log above
-  - log: 2026-08-27 extended to the two kinds where the editor owns enter: a json or multiline row loses the screen's Review entry from the footer while the cursor is on it, leaving two keys on screen that both abandon the run. The row now names the way forward, on the same line and the same rule - a fact about this row, not about the screen
-  - log: 2026-08-27 corrected: the log above says a single choice names no key, which the code and its test now contradict - every picking row names the keys that answer it, because the key a reader guesses on a stacked list is the form's own and space quietly commits an answer
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: built - tests/unit/test_tui_survey.py asserts a multiselect says it, a single choice does not, and the key still works where it is not named
+  - log: 2026-08-27T00:00:00Z @kj closed: built - see the log above
+  - log: 2026-08-27T00:00:00Z @kj extended to the two kinds where the editor owns enter: a json or multiline row loses the screen's Review entry from the footer while the cursor is on it, leaving two keys on screen that both abandon the run. The row now names the way forward, on the same line and the same rule - a fact about this row, not about the screen
+  - log: 2026-08-27T00:00:00Z @kj corrected: the log above says a single choice names no key, which the code and its test now contradict - every picking row names the keys that answer it, because the key a reader guesses on a stacked list is the form's own and space quietly commits an answer
+- [ ] `ACC-TUI-132` **the header names the destination project on every screen** - the header reads `copier-tui ⸱ <project> ⸱ <context>` on the survey, review and execution screens, the project being the destination directory's resolved name; a name too wide for the row is cropped from the left behind `...` so its end survives; `packages/copier-tui/src/copier_tui/widgets.py`
+  - test: open each screen at 60 and 120 columns with a long project name; read #hdr-title
+  - test-tags: unit
+  - log: 2026-08-27T14:02:46Z @kj added
+- [ ] `ACC-TUI-133` **the finished run shows a banner with what it did** - when the render ends, a content-sized box over the file log says done or failed; on success it counts files added, changed, deleted and conflicted - a conflict being a `.rej` beside a file or an inline `<<<<<<<` marker - and lists the conflicted paths; on failure it carries copier's reason; any key closes it and the screen; `packages/copier-tui/src/copier_tui/screens/execution.py`, `packages/copier-tui/src/copier_tui/changes.py`
+  - test: render over a directory holding a stale file, a file to delete and a conflict marker; read #exec-banner
+  - test-tags: unit
+  - log: 2026-08-27T14:02:54Z @kj added

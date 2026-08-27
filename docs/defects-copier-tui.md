@@ -2,247 +2,261 @@
 
 Observed wrong behaviour in `copier-ui` and `copier-tui`, one item per symptom, with the trail of what has been tried against it. Acceptance criteria live in [acc-crit-copier-tui.md](acc-crit-copier-tui.md).
 
+## Authors
+
+- `@kj` Konrad Jelen
+
 ## Survey screen `SRVY`
+
+the questionnaire form: rows, captions, controls, the status line and the destination line
 
 - [x] `DEF-SRVY-1` **survey body cut vertically short while the status bar spans the full width** - HIGH; the question list occupies only the upper part of the terminal and the body is clipped, while the bottom status bar still spans the full screen width; seen on `copier-tui update --trust` at 164x55 against 1.0.13; cause under investigation - suspect the `_Form` VerticalScroll reporting a virtual height larger than its content; `packages/copier-tui/src/copier_tui/screens/survey.py`
   - related: ACC-TUI-55, ACC-TUI-54 - the layout criteria this violates
-  - log: 2026-08-27 added
-  - log: 2026-08-27 reported: "the screen is garbled, some part of the screen has items, but the screen is cut vertically short, while still having fullscreen bottom statusbar" (v1.0.13)
-  - log: 2026-08-27 reported: "it is worse than it was before" - a regression against an earlier release, first suspect is the 1.0.13 `InlineOptions._fits` change to first-paint heights in `inline.py`
-  - log: 2026-08-27 closed: fixed: the status row now carries the id its own CSS rule was written for, so it takes one row instead of a Horizontal's default 1fr; the form gets every row the chrome is not using - 51 of 55 at the reported 164x55, against 26 before; tests/unit/test_tui_survey.py
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj reported: "the screen is garbled, some part of the screen has items, but the screen is cut vertically short, while still having fullscreen bottom statusbar" (v1.0.13)
+  - log: 2026-08-27T00:00:00Z @kj reported: "it is worse than it was before" - a regression against an earlier release, first suspect is the 1.0.13 `InlineOptions._fits` change to first-paint heights in `inline.py`
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: the status row now carries the id its own CSS rule was written for, so it takes one row instead of a Horizontal's default 1fr; the form gets every row the chrome is not using - 51 of 55 at the reported 164x55, against 26 before; tests/unit/test_tui_survey.py
 - [x] `DEF-SRVY-2` **scrollbar drawn and the form scrolls with content filling only the upper half** - MEDIUM; a scrollbar is painted and the survey scrolls although the settings occupy only the upper half of the terminal; content that fits must neither scroll nor show a bar; cause under investigation - likely the same oversized virtual height as DEF-SRVY-1; `packages/copier-tui/src/copier_tui/screens/survey.py`
   - related: DEF-SRVY-1 - same suspected oversized virtual height, likely one fix
   - related: ACC-TUI-55 - content that fits one screen must not scroll
-  - log: 2026-08-27 added
-  - log: 2026-08-27 reported: "we display scrollbar and make settings take only upper half of the screen, and still scroll" (v1.0.13)
-  - log: 2026-08-27 closed: fixed: with the form at full height its content fits and no scrollbar is drawn - max_scroll_y 0 where it was 9; a form that genuinely overflows still scrolls, tested at 60x20; tests/unit/test_tui_survey.py
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj reported: "we display scrollbar and make settings take only upper half of the screen, and still scroll" (v1.0.13)
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: with the form at full height its content fits and no scrollbar is drawn - max_scroll_y 0 where it was 9; a form that genuinely overflows still scrolls, tested at 60x20; tests/unit/test_tui_survey.py
 - [x] `DEF-SRVY-3` **destination path is not visible anywhere on screen** - MEDIUM; the path the template will be rendered into is not shown in the running TUI, although `test_the_survey_says_where_the_template_will_be_rendered` passes against `#survey-where`; cause under investigation - the test reads widget state rather than painted output, and the widget may be clipped by DEF-SRVY-1; `packages/copier-tui/src/copier_tui/screens/survey.py`
   - related: DEF-SRVY-1 - the clipped body may be why the widget never reaches the screen
   - related: ACC-TUI-76 - the criterion this violates
-  - log: 2026-08-27 added
-  - log: 2026-08-27 reported: "path where the template will be rendered isn't shown anywhere" (v1.0.13)
-  - log: 2026-08-27 noted: `test_the_survey_says_where_the_template_will_be_rendered` was added in 1.0.13 and passes, so the criterion is verified against state the user cannot see - the test must read the painted screen
-  - log: 2026-08-27 closed: fixed: the destination is one row, cropped with an ellipsis, through text-wrap and text-overflow in CSS - Textual's visual pipeline drops a Rich Text's own no_wrap and overflow, which is why it wrapped onto three rows; the test now reads the row's height; tests/unit/test_tui_survey.py
-  - log: 2026-08-27 reopened: user reported it again against 1.0.14 - `copier-tui update` defaults its destination to the current directory and the survey printed the bare `.` it was handed
-  - log: 2026-08-27 cause - the display printed `str(dst)` verbatim, so a relative destination named the directory the reader was already standing in
-  - log: 2026-08-27 closed: new `packages/copier-tui/src/copier_tui/paths.py` holds one function `shown_path`, which resolves the destination and writes it home-relative as `~/...`; every screen that names a destination now goes through it - the survey status line, the review header, the review not-empty warning, the execution verdict and the cancelled message on stderr; tests/unit/test_tui_paths.py
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj reported: "path where the template will be rendered isn't shown anywhere" (v1.0.13)
+  - log: 2026-08-27T00:00:00Z @kj noted: `test_the_survey_says_where_the_template_will_be_rendered` was added in 1.0.13 and passes, so the criterion is verified against state the user cannot see - the test must read the painted screen
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: the destination is one row, cropped with an ellipsis, through text-wrap and text-overflow in CSS - Textual's visual pipeline drops a Rich Text's own no_wrap and overflow, which is why it wrapped onto three rows; the test now reads the row's height; tests/unit/test_tui_survey.py
+  - log: 2026-08-27T00:00:00Z @kj reopened: user reported it again against 1.0.14 - `copier-tui update` defaults its destination to the current directory and the survey printed the bare `.` it was handed
+  - log: 2026-08-27T00:00:00Z @kj cause - the display printed `str(dst)` verbatim, so a relative destination named the directory the reader was already standing in
+  - log: 2026-08-27T00:00:00Z @kj closed: new `packages/copier-tui/src/copier_tui/paths.py` holds one function `shown_path`, which resolves the destination and writes it home-relative as `~/...`; every screen that names a destination now goes through it - the survey status line, the review header, the review not-empty warning, the execution verdict and the cancelled message on stderr; tests/unit/test_tui_paths.py
 - [x] `DEF-SRVY-33` **the cancel warning is cut off with no ellipsis at every ordinary width** - MEDIUM; the app's only destructive keystroke was announced half-said - at 60 columns `press escape again to`, at 80 `press escape again to discard` - so the reader was never told the second press quits, nor that it discards every answer; cause: the hint was the third of the three one-row status lines and the only one that never got the crop rule; fix: it crops rather than wraps; `packages/copier-tui/src/copier_tui/screens/survey.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed
 - [x] `DEF-SRVY-37` **the cancel warning still did not fit its row** - MEDIUM; adding the crop rule made the cut honest and recovered nothing: the warning shares a row with the destination, which claims up to 60 percent of it, so at 60 columns it read `press escape again to` and at 80 lost `answer and quit`; fix: the warning takes the whole row while it is up - the destination is in the header and on the review screen, and this sentence has nowhere else to be; `packages/copier-tui/src/copier_tui/screens/survey.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: the hint box is 58 columns at MIN_WIDTH for a 49-character sentence; tested at 60, 80 and 100
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: the hint box is 58 columns at MIN_WIDTH for a 49-character sentence; tested at 60, 80 and 100
 - [x] `DEF-SRVY-41` **two keys that answer a question were named nowhere** - MEDIUM; a stacked multiselect named the key that ticks an option and none that moves between them, so options past the first were reachable only by guessing; and `space` cycles a single choice, which a reader who has just learned it on a multiselect will try on the row below, with no warning that it changes the answer; fix: the row's help names every key that answers the question - `left right move - space ticks` and `left right choose - space cycles`; `packages/copier-tui/src/copier_tui/widgets.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed; the placeholder example also came back, having been suppressed by the empty multiselect's new `none selected` reading as an answer
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed; the placeholder example also came back, having been suppressed by the empty multiselect's new `none selected` reading as an answer
 - [x] `DEF-SRVY-42` **a refused enter explained itself only when the cursor was already on the bad field** - HIGH; pressing enter with an invalid answer anywhere but the focused row moved the cursor across the form and said nothing at all - the one line reserved for saying why was blank; cause: the message is written and then `_focus_field` moves the cursor, and the focus event that follows ran `_clear_hint`, which had no reason to keep it; fix: the message is held the way the cancel arming is, and cleared when the reader acts; `packages/copier-tui/src/copier_tui/screens/survey.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 the regression test written for this a round earlier pressed enter on the already-focused field, where set_focus returns early and no focus event fires - its own docstring named the reason it could not catch the general case
-  - log: 2026-08-27 closed: fixed: the message shows with the cursor on the bad field and on two others; parametrised over all three
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj the regression test written for this a round earlier pressed enter on the already-focused field, where set_focus returns early and no focus event fires - its own docstring named the reason it could not catch the general case
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: the message shows with the cursor on the bad field and on two others; parametrised over all three
 - [x] `DEF-SRVY-45` **a validation message was capped at the help budget and cut without an ellipsis** - MEDIUM; a real validator's sentence was cut at two lines with no mark, so the reader was blocked from continuing and could not read the rule - at 60 columns `must be a valid Python identifier:` and nothing after it; cause: errors share the help line, and the help cap exists to stop ambient guidance costing a row on every focused question, which is not what an error does; fix: errors have their own budget; `packages/copier-tui/src/copier_tui/theme.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: ERROR_LINES holds about 170 characters at the narrowest gutter and costs nothing until something is wrong
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: ERROR_LINES holds about 170 characters at the narrowest gutter and costs nothing until something is wrong
 - [x] `DEF-SRVY-48` **the held refusal froze the cancel warning and lost the message it held** - HIGH; after a refused enter, an escape overwrote the message with the arming warning and the flag holding the message then vetoed its own removal - so the line kept saying a second escape would discard every answer for as long as the survey was open, in the error colour, when the next escape only re-armed; and the reason enter was refused was gone; cause: a boolean was held where the message should have been; fix: the message itself is held, so the lapse restores it; `packages/copier-tui/src/copier_tui/screens/survey.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: after refusal, escape, and the window lapsing, the line reads the refusal again and the safety is off - the round-6 defect inverted, and now neither way round
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: after refusal, escape, and the window lapsing, the line reads the refusal again and the safety is off - the round-6 defect inverted, and now neither way round
 - [x] `DEF-SRVY-50` **a long validation message was cut with nothing marking the cut** - MEDIUM; an eight-line budget still lost 48 percent of a 287-character validator message at 60 columns, ending on a clause that reads as finished - the reader blocked and unable to learn the rule; cause: errors shared the help line's cap, and help is ambient where an error is not; fix: the cap belongs to help alone, and an error takes the lines it needs on the handful of rows that have one; `packages/copier-tui/src/copier_tui/widgets.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed; the shared status line now carries a count rather than a second copy of the sentence, which was the same words on screen twice with the cropped copy being the shared one
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed; the shared status line now carries a count rather than a second copy of the sentence, which was the same words on screen twice with the cropped copy being the shared one
 - [ ] `DEF-SRVY-52` **an answer supplied with --data that fails validation deadlocks the survey** - MEDIUM; `--data` answers become presets, which are validated but never given a row, so a preset that fails validation refuses every enter with no row on screen to fix - the run can only be abandoned; found during review and NOT caused by the current work; `packages/copier-tui/src/copier_tui/screens/survey.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 left open deliberately: it predates this batch, the fix is a design question - refuse at launch the way a dirty repository is refused, or give a failing preset a row - and it is not this change's to answer
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj left open deliberately: it predates this batch, the fix is a design question - refuse at launch the way a dirty repository is refused, or give a failing preset a row - and it is not this change's to answer
 - [x] `DEF-SRVY-54` **arriving on a failing row was recorded as engagement but nothing spoke until a later keystroke** - MEDIUM; focus added the row to the touched set with no re-render, so its error sentence unfolded on the next unrelated keystroke and moved the form under a cursor that was elsewhere; fix: a focus no longer promotes - a row speaks once it is edited or once enter is refused; `packages/copier-tui/src/copier_tui/screens/survey.py`
   - repro: 3-validator template at 80x24: down onto a failing row, up, type one character elsewhere
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed in round 10 of the adversarial review, fingerprint e9b10437650a; unit suite 357 green
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed in round 10 of the adversarial review, fingerprint e9b10437650a; unit suite 357 green
 - [x] `DEF-SRVY-55` **the survey header lost the position counter from 60 to 66 columns** - MEDIUM; the title crops from the right and `name questionnaire - 1 of 23` was 57 cells against 49, so the counter was the ellipsised tail; fix: the position goes first, `1 of 23 ⸱ name questionnaire`, and the crop takes the word the reader can infer; `packages/copier-tui/src/copier_tui/screens/survey.py`
   - repro: copier-data-science survey at 64x20, read #hdr-title
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed in round 10 of the adversarial review, fingerprint e9b10437650a; unit suite 357 green
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed in round 10 of the adversarial review, fingerprint e9b10437650a; unit suite 357 green
 - [x] `DEF-SRVY-58` **the survey never opened when the home directory could not be determined** - MEDIUM; `Path.home()` raises with no HOME and no passwd entry - a container running as an arbitrary uid - and `shown_path` runs in the survey's compose; fix: the error is caught and the absolute path is shown unshortened; `packages/copier-tui/src/copier_tui/paths.py`
   - repro: HOME unset and pwd.getpwuid raising, open the survey
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed in round 10 of the adversarial review, fingerprint e9b10437650a; unit suite 357 green
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed in round 10 of the adversarial review, fingerprint e9b10437650a; unit suite 357 green
 - [ ] `DEF-SRVY-59` **update on a clean repository with no answers file is told Template not found** - LOW; the updatable check passes and the missing template reference then surfaces as copier's `Template not found`, where copier itself says it cannot obtain old template references and points at the answers file; deferred: a third copied string, which the check's docstring declined; `packages/copier-ui/src/copier_ui/adapter.py`
   - repro: copier-tui update in a fresh committed repo with no .copier-answers.yml
-  - log: 2026-08-27 added
-  - log: 2026-08-27 deferred by adjudication - a third copier string, declined by the check's own docstring
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj deferred by adjudication - a third copier string, declined by the check's own docstring
 
 ## Key handling `KEYS`
+
+key bindings and how a keystroke reaches or misses its handler
 
 - [x] `DEF-KEYS-4` **double-escape only quits when the two presses are far enough apart** - MEDIUM; two escapes in quick succession show the red arming message and then nothing happens for about three seconds, while escape-pause-escape quits normally; cause: the survey disarmed its own pending cancel on any `DescendantFocus`, and a terminal reporting its window losing then regaining focus makes Textual put the cursor back on the field that already had it, which arrives as a DescendantFocus like any other - so the first press was thrown away and the second only re-armed; fix: `on_descendant_focus` disarms only when focus moved to a widget other than the one last seen; `packages/copier-tui/src/copier_tui/screens/survey.py`
   - related: ACC-TUI-57 - the criterion this violates
   - related: DEF-EXEC-5 - ctrl+x, one unambiguous byte, is the quit key that mitigates this
-  - log: 2026-08-27 added
-  - log: 2026-08-27 reported: "esc-esc doesn't work (it hangs the tool until i pres esc again or move arrow up and down), it doesn't exit the tool" (v1.0.13)
-  - log: 2026-08-27 reported: "esc esc does work, just not when pressed in short succession; we must capture double-esc regardless of how quickly"
-  - log: 2026-08-27 closed: fixed: mouse motion reporting is off - App.run(mouse=False); Textual asked the terminal to report every pointer movement, and a report arriving behind the second escape became its introducer and consumed it; tests/unit/test_tui_terminal.py
-  - log: 2026-08-27 reopened: user reported against 1.0.14, in a plain terminal and not only in a browser terminal - two escapes in quick succession show the red arming message and then nothing happens for about three seconds
-  - log: 2026-08-27 attempted - turning off any-event mouse reporting (`App.run(mouse=False)`, shipped in 1.0.14) removed the commonest source of the interleaved sequence that eats the second escape; it did NOT fix the report, so a second absorber remains, most likely the focus-in and focus-out reports Textual also enables
-  - log: 2026-08-27 not reproducible in a pty harness at any gap from 0 to 120ms; the failure needs the terminal to emit a sequence in the window between the two presses
-  - log: 2026-08-27 mitigated by DEF-EXEC-5 ctrl+x, which is one unambiguous byte and cannot be absorbed
-  - log: 2026-08-27 edited text
-  - log: 2026-08-27 cause found: nothing in the terminal was ever eating a keystroke - a terminal's own report carries its own ESC byte, so `1b1b` followed by `1b5b49` delivers BOTH escapes; the stream `1b1b5b49` that appeared to reproduce the hang omits the report's introducer and is physically impossible, which invalidates the two logs above that read 'not reproducible' and 'a second absorber remains'
-  - log: 2026-08-27 attempted: an on_app_focus recovery that replayed a swallowed escape - REMOVED before shipping; its own regression test passed WITHOUT the fix, which is what exposed the invalid premise
-  - log: 2026-08-27 noted: App.run(mouse=False) shipped in 1.0.14 against the disproved theory; it stays for an unrelated reason - the survey is keyboard-driven and asking for no pointer reports leaves the terminal its own select-and-copy
-  - log: 2026-08-27 closed: fixed: only a focus that actually moved disarms the cancel; verified over six pty byte streams including two negatives - esc / focus-out+focus-in / esc now exits 2 where it hung, a bare focus round trip does not quit, and an arrow between two escapes still correctly disarms; tests/unit/test_tui_terminal.py
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj reported: "esc-esc doesn't work (it hangs the tool until i pres esc again or move arrow up and down), it doesn't exit the tool" (v1.0.13)
+  - log: 2026-08-27T00:00:00Z @kj reported: "esc esc does work, just not when pressed in short succession; we must capture double-esc regardless of how quickly"
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: mouse motion reporting is off - App.run(mouse=False); Textual asked the terminal to report every pointer movement, and a report arriving behind the second escape became its introducer and consumed it; tests/unit/test_tui_terminal.py
+  - log: 2026-08-27T00:00:00Z @kj reopened: user reported against 1.0.14, in a plain terminal and not only in a browser terminal - two escapes in quick succession show the red arming message and then nothing happens for about three seconds
+  - log: 2026-08-27T00:00:00Z @kj attempted - turning off any-event mouse reporting (`App.run(mouse=False)`, shipped in 1.0.14) removed the commonest source of the interleaved sequence that eats the second escape; it did NOT fix the report, so a second absorber remains, most likely the focus-in and focus-out reports Textual also enables
+  - log: 2026-08-27T00:00:00Z @kj not reproducible in a pty harness at any gap from 0 to 120ms; the failure needs the terminal to emit a sequence in the window between the two presses
+  - log: 2026-08-27T00:00:00Z @kj mitigated by DEF-EXEC-5 ctrl+x, which is one unambiguous byte and cannot be absorbed
+  - log: 2026-08-27T00:00:00Z @kj edited text
+  - log: 2026-08-27T00:00:00Z @kj cause found: nothing in the terminal was ever eating a keystroke - a terminal's own report carries its own ESC byte, so `1b1b` followed by `1b5b49` delivers BOTH escapes; the stream `1b1b5b49` that appeared to reproduce the hang omits the report's introducer and is physically impossible, which invalidates the two logs above that read 'not reproducible' and 'a second absorber remains'
+  - log: 2026-08-27T00:00:00Z @kj attempted: an on_app_focus recovery that replayed a swallowed escape - REMOVED before shipping; its own regression test passed WITHOUT the fix, which is what exposed the invalid premise
+  - log: 2026-08-27T00:00:00Z @kj noted: App.run(mouse=False) shipped in 1.0.14 against the disproved theory; it stays for an unrelated reason - the survey is keyboard-driven and asking for no pointer reports leaves the terminal its own select-and-copy
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: only a focus that actually moved disarms the cancel; verified over six pty byte streams including two negatives - esc / focus-out+focus-in / esc now exits 2 where it hung, a bare focus round trip does not quit, and an arrow between two escapes still correctly disarms; tests/unit/test_tui_terminal.py
 - [x] `DEF-KEYS-11` **ctrl+q trapped a running render, and took ctrl+x down with it** - HIGH; Textual binds ctrl+q on every screen at priority; pressed during a render it hung the app, and hung it past rescue - a ctrl+x sent afterwards did nothing either; cause: its `action_quit` waits on the worker pool, where the render is a thread blocked in `subprocess.run` that is never joined, and the shutdown it had already begun swallowed the key that would have ended the children; fix: `App.action_quit` is overridden to route to the same place ctrl+x goes; `packages/copier-tui/src/copier_tui/app.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: measured on a 600-second task - ctrl+q went from never exiting in 40s to exiting in 0.29s with the same code as ctrl+x; the action is overridden rather than the key rebound, because a second binding on the same action removes the screens' own footer entry
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: measured on a 600-second task - ctrl+q went from never exiting in 40s to exiting in 0.29s with the same code as ctrl+x; the action is overridden rather than the key rebound, because a second binding on the same action removes the screens' own footer entry
 - [x] `DEF-KEYS-12` **ctrl+x is Textual's cut on every text field** - HIGH; moving the quit binding from the app onto the screens silently turned it into the editor's cut on five rows in six: Textual's own `Input` and `TextArea` bind ctrl+x to `cut`, and a focused widget's binding beats the screen's; the App binding had worked only because it carried `priority=True`; fix: the screen bindings carry priority too, and their action is namespaced `app.quit_now` because a screen binding's action is looked up on the screen, where it does not exist; `packages/copier-tui/src/copier_tui/screens/survey.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 caught before release, while measuring the footer's key order for an unrelated finding - not shipped. Nothing tested it: the only quit test pressed the key on the first field and never walked the form
-  - log: 2026-08-27 closed: fixed: a test now walks every kind of control and asserts ctrl+x resolves to the quit action on each; tests/unit/test_tui_survey.py
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj caught before release, while measuring the footer's key order for an unrelated finding - not shipped. Nothing tested it: the only quit test pressed the key on the first field and never walked the form
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: a test now walks every kind of control and asserts ctrl+x resolves to the quit action on each; tests/unit/test_tui_survey.py
 - [x] `DEF-KEYS-13` **an armed cancel outlives the keypress that should have cleared it** - MEDIUM; two ways to discard a survey with one unintended escape: at the last field `down` moves nothing, raises no focus event and left the cancel armed, and a trip to the review screen and back raised no focus event either, so the cancel came back armed; cause: disarming was a side effect of the focus moving, which held only while the ends wrapped round; fix: the arrow disarms whether or not it had anywhere to go, and the survey disarms on resume; `packages/copier-tui/src/copier_tui/screens/survey.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 the end-of-form half was introduced by the non-wrapping navigation in this batch; the review round trip is older. The shipped regression test pressed down from the FIRST field, where it does move, and passed straight over both
-  - log: 2026-08-27 closed: fixed: both halves have a test that fails without the fix; tests/unit/test_tui_terminal.py and tests/unit/test_tui_survey.py
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj the end-of-form half was introduced by the non-wrapping navigation in this batch; the review round trip is older. The shipped regression test pressed down from the FIRST field, where it does move, and passed straight over both
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: both halves have a test that fails without the fix; tests/unit/test_tui_terminal.py and tests/unit/test_tui_survey.py
 - [x] `DEF-KEYS-21` **a stale arming timer cuts the next arming's window short** - MEDIUM; escape, a key, escape, then escape two and a half seconds later did not quit, although the warning advertises three; cause: each arming started a fresh timer and kept no handle, so a timer from an earlier arming fired inside a later one and disarmed it; fix: the pending timer is held and stopped before a new one starts; `packages/copier-tui/src/copier_tui/screens/survey.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: it failed safe, which is why it survived - the cancel went off rather than firing early
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: it failed safe, which is why it survived - the cancel went off rather than firing early
 - [x] `DEF-KEYS-23` **escape, a refused enter, escape discards the whole survey** - HIGH; on a field the validator refuses: escape arms the cancel and says so, enter is blocked and its validation message REPLACES the arming warning while the cancel stays armed, and the next escape - the gesture for dismissing a message - exits with every answer lost; cause: enter was the only action key that did not disarm, and the branch it lands in re-focuses a field that already had the cursor, so `set_focus` returns early and no focus event fires either; fix: the refused branch disarms before it writes its message; `packages/copier-tui/src/copier_tui/screens/survey.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: found by an adversarial review; three keypresses, no warning left on screen, thirty-seven answers gone; tests/unit/test_tui_survey.py
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: found by an adversarial review; three keypresses, no warning left on screen, thirty-seven answers gone; tests/unit/test_tui_survey.py
 - [x] `DEF-KEYS-32` **a stacked option list cannot be walked with the arrows that read it** - MEDIUM; when options stack they are drawn one per line and read as a column, but only left and right moved between them, so one press of `down` left the question altogether; fix: a stacked list claims up and down and hands them back at its ends, which is the mechanism the screen's own edge rule was written for and had never been wired to; `packages/copier-tui/src/copier_tui/screens/survey.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: on one line the options still read as a row and the arrows still belong to the form; both halves tested
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: on one line the options still read as a row and the arrows still belong to the form; both halves tested
 - [x] `DEF-KEYS-34` **walking the form with down silently rewrote every stacked answer it passed** - HIGH; holding `down` to reach the bottom of the reference survey changed twelve of twenty-three answers at 60 columns, ten at 80 and eight at 100 - `3.13` to `other`, `MIT` to `No license file` - with nothing on screen saying so and no way to arrow back to what had been there; cause: a stacked option list had been given the up and down keys so a column could be walked with the arrows that read a column, and moving is choosing on a single-choice question, so every list the cursor passed committed its next option; fix: up and down belong to the form again, and the keys that do answer a picking question are named on the row's own help line; `packages/copier-tui/src/copier_tui/inline.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 introduced by this batch's own fix for a discoverability complaint - that a stacked list could only be walked with left and right. The cure was a data-loss path and the complaint was a nuisance; the complaint is answered by naming the keys instead
-  - log: 2026-08-27 closed: fixed: zero answers change at 60, 80, 100 and 120 columns; the test fails at all four with the binding restored
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj introduced by this batch's own fix for a discoverability complaint - that a stacked list could only be walked with left and right. The cure was a data-loss path and the complaint was a nuisance; the complaint is answered by naming the keys instead
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: zero answers change at 60, 80, 100 and 120 columns; the test fails at all four with the binding restored
 
 ## Execution screen `EXEC`
 
+the render run: progress, the file log, the verdict, abandoning and closing
+
 - [x] `DEF-EXEC-5` **a render that never finishes cannot be left** - HIGH; a template task that never returns leaves the execution screen with a pulsing bar, no verdict and no key that does anything - the only way out is another terminal; cause: the render is a Textual thread worker and a thread blocked in `subprocess.run` cannot be cancelled, so `App.exit` waited on it through its own shutdown; fix: ctrl+x calls `ExecutionScreen.abandon`, which kills every child the render started, unblocking copier so the worker returns by the ordinary path; `packages/copier-tui/src/copier_tui/screens/execution.py`
   - related: DEF-KEYS-4 - ctrl+x is the unambiguous quit key this defect added, which also mitigates the swallowed second escape
-  - log: 2026-08-27 added
-  - log: 2026-08-27 reported: user confirmed "unable to exit final screen of copier-tui anywhere, even on pure good terminal, not jupyterlab"
-  - log: 2026-08-27 reproduced with new fixture `tests/fixtures/tui_slow`, whose task sleeps 600 seconds - before the fix neither a plain key nor ctrl+x exited within 25 seconds; after it ctrl+x exits in under half a second with code 2, and a plain key is still correctly ignored so it cannot abort a render that is merely slow
-  - log: 2026-08-27 closed: `_children_without_stdin` now records every child it starts and `abandon` kills them; tests/unit/test_tui_terminal.py
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj reported: user confirmed "unable to exit final screen of copier-tui anywhere, even on pure good terminal, not jupyterlab"
+  - log: 2026-08-27T00:00:00Z @kj reproduced with new fixture `tests/fixtures/tui_slow`, whose task sleeps 600 seconds - before the fix neither a plain key nor ctrl+x exited within 25 seconds; after it ctrl+x exits in under half a second with code 2, and a plain key is still correctly ignored so it cannot abort a render that is merely slow
+  - log: 2026-08-27T00:00:00Z @kj closed: `_children_without_stdin` now records every child it starts and `abandon` kills them; tests/unit/test_tui_terminal.py
 - [x] `DEF-EXEC-8` **enter and escape hang the finished render screen** - HIGH; at `press any key to close`, the two keys the screen's own footer named - and the two a person actually presses at that prompt - hung the app permanently, while any other key closed it in under a second; cause: both were bound to the `close` action, and `Screen.dismiss` waits for the screen to come off the stack while an action runs inside the dispatch that has to return first; every other key arrived through `on_key`, which is not a dispatch; fix: the two bindings are removed and `on_key` closes on any key, as the prompt already promised; `packages/copier-tui/src/copier_tui/screens/execution.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 reported: found by an adversarial review, present at 16c6e4b and in every release - not introduced by the current work. It is the likeliest cause of the original report "unable to exit final screen of copier-tui anywhere, even on pure good terminal"
-  - log: 2026-08-27 cause of the miss: the one end-to-end close test sends a bare `x`, which goes through on_key and works; enter was never exercised
-  - log: 2026-08-27 closed: fixed: verified through a real pty - enter, escape, a letter, ctrl+x and ctrl+q now all exit 0 in under 0.4s, where enter and escape previously never returned; tests/unit/test_tui_terminal.py parametrises all four
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj reported: found by an adversarial review, present at 16c6e4b and in every release - not introduced by the current work. It is the likeliest cause of the original report "unable to exit final screen of copier-tui anywhere, even on pure good terminal"
+  - log: 2026-08-27T00:00:00Z @kj cause of the miss: the one end-to-end close test sends a bare `x`, which goes through on_key and works; enter was never exercised
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: verified through a real pty - enter, escape, a letter, ctrl+x and ctrl+q now all exit 0 in under 0.4s, where enter and escape previously never returned; tests/unit/test_tui_terminal.py parametrises all four
 - [x] `DEF-EXEC-9` **ctrl+x in the first moments of a render wedges the process** - HIGH; abandoning a render within about half a second of it starting left the app running forever with no screen and no prompt; cause: `abandon` swept whatever children existed at that instant, and that early the list holds only copier's own finished git calls - the task that will block has not been started yet, so nothing was killed and the app then waited on a worker thread that went on to block in `subprocess.run`; fix: abandoning sets a flag that outlives the keystroke, and any child started afterwards is ended as it is created; `packages/copier-tui/src/copier_tui/screens/execution.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: 4 of 4 runs with no settling time now exit 1 in under 0.3s where 4 of 4 previously never exited; tests/unit/test_tui_terminal.py
-  - log: 2026-08-27 follow-up: the message printed on the way out claimed the destination was partly written, which is false whenever copier created the destination itself - it removes one it made and leaves one it did not. The screen now records whether the destination existed before the render and the message says which of the two happened
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: 4 of 4 runs with no settling time now exit 1 in under 0.3s where 4 of 4 previously never exited; tests/unit/test_tui_terminal.py
+  - log: 2026-08-27T00:00:00Z @kj follow-up: the message printed on the way out claimed the destination was partly written, which is false whenever copier created the destination itself - it removes one it made and leaves one it did not. The screen now records whether the destination existed before the render and the message says which of the two happened
 - [x] `DEF-EXEC-10` **an abandoned render hands the shell back in raw mode** - HIGH; after ctrl+x on a running render the user's shell had no echo, no line editing and no ctrl+C; cause: the render captures Textual's raw mode and restores it unconditionally when it unwinds, and on an abandoned run Textual's driver has already put the terminal back to cooked by then, so the restore wrote raw over it; fix: the restore is skipped once the run has been abandoned, since the driver owns the terminal from that point; `packages/copier-tui/src/copier_tui/screens/execution.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: 6 of 6 abandoned runs now leave ECHO, ICANON and ISIG all set; tests/unit/test_tui_terminal.py reads the pty's own flags
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: 6 of 6 abandoned runs now leave ECHO, ICANON and ISIG all set; tests/unit/test_tui_terminal.py reads the pty's own flags
 - [x] `DEF-EXEC-17` **a failed render paints a full mint completion bar** - MEDIUM; under the rose line saying the render failed, the progress bar filled to 100 percent in mint - the largest and most saturated thing on the screen saying the opposite of the message beside it; cause: `_finish` set `total=1, progress=1` whatever the verdict; fix: a failure leaves the bar where it stopped and repaints it rose; `packages/copier-tui/src/copier_tui/screens/execution.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: the completion fill and its mint are reached only when the render succeeded
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: the completion fill and its mint are reached only when the render succeeded
 - [x] `DEF-EXEC-18` **the list of written files cannot be read** - MEDIUM; the render's log of what it wrote is taller than its box on any real template - 55 lines in 22 rows for the reference one - and sat pinned at the bottom with a scrollbar drawn beside it, but every key dismissed the screen, so the entries above the fold were unreachable; fix: the scroll keys read the log and everything else still closes, handled in `on_key` rather than as bindings because a binding runs inside the action dispatch that hung this screen before; `packages/copier-tui/src/copier_tui/screens/execution.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: verified through a real pty - the screen survives 30 scroll keys, an entry from the top of the list becomes reachable, and a plain key still closes with exit 0; tests/unit/test_tui_terminal.py
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: verified through a real pty - the screen survives 30 scroll keys, an entry from the top of the list becomes reachable, and a plain key still closes with exit 0; tests/unit/test_tui_terminal.py
 - [x] `DEF-EXEC-19` **the destination is re-resolved against a directory copier moved the process into** - HIGH; on `update` and `recopy`, whose destination defaults to `.`, the message printed after abandoning a render named one of copier's own temp clones instead of the user's project - a directory that no longer exists by the time it is read; cause: the CLI kept the literal `Path(".")` and every display resolved it at the moment of use, while copier chdirs the whole process into its clones and worktrees on the render thread - measured at 45 percent of samples during one update; fix: the destination is made absolute once, in the CLI, before the survey opens; `packages/copier-tui/src/copier_tui/cli.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: one line, and it corrects the abandon message, the list of files the render reports writing, and the success verdict at the same time
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: one line, and it corrects the abandon message, the list of files the render reports writing, and the success verdict at the same time
 - [x] `DEF-EXEC-20` **the abandon message denies leftovers to the user who asked for them** - MEDIUM; with copier's `-C/--no-cleanup` in force the message said nothing was left, while the partial render was on disk exactly as that flag requests; cause: the screen decided from whether the destination pre-existed and never looked at the flag; fix: the flag is consulted alongside; `packages/copier-tui/src/copier_tui/screens/execution.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: cleanup_on_error is read from the copier arguments the screen already holds
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: cleanup_on_error is read from the copier arguments the screen already holds
 - [x] `DEF-EXEC-24` **the scroll keys on a finished render scroll nothing** - MEDIUM; six keys went from wrongly closing the screen to doing nothing at all, while a scrollbar beside the file list said it could be read; cause: the fix forwarded the key to the log with `post_message`, and Textual resolves a widget's ordinary bindings only in `App._on_key` after the event has bubbled unhandled - which this screen stops first; nothing on the screen holds focus either; fix: the log's own actions are called directly; `packages/copier-tui/src/copier_tui/screens/execution.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 the test shipped with the first fix asserted only that a scroll key did not close the screen, and ran against a fixture writing two files - a log with nothing to scroll. It passed on a broken fix and its name said otherwise
-  - log: 2026-08-27 closed: fixed: the test now runs against the reference template, asserts the offset moved and that home reaches the top, and fails without the fix
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj the test shipped with the first fix asserted only that a scroll key did not close the screen, and ran against a fixture writing two files - a log with nothing to scroll. It passed on a broken fix and its name said otherwise
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: the test now runs against the reference template, asserts the offset moved and that home reaches the top, and fails without the fix
 - [x] `DEF-EXEC-25` **the abandon key crashes the app on any system without /proc** - HIGH; on macOS and the BSDs `_descendants` raised FileNotFoundError from inside the quit action, so ctrl+x crashed the app mid-render, the child was never killed and the worker stayed blocked - the exact wedge the key exists to prevent; cause: the `/proc` walk sat outside the try that guards the per-entry read; fix: the walk gives up quietly and the recorded child is still ended, which is degraded rather than stuck; `packages/copier-tui/src/copier_tui/screens/execution.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: tests/unit/test_tui_terminal.py simulates the absent /proc
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: tests/unit/test_tui_terminal.py simulates the absent /proc
 - [x] `DEF-EXEC-56` **a failed render's reason was cropped to one row and lost** - MEDIUM; `failed - message` sat on the one-row ellipsised status line, so any real copier error - a Jinja error with a template path, a clone failure - ran off the edge at every supported width; fix: the status row says `failed - reason below` and the full message is the last line of the file log, which wraps nothing and scrolls; `packages/copier-tui/src/copier_tui/screens/execution.py`
   - repro: task exiting 3 at 60x20
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed in round 10 of the adversarial review, fingerprint e9b10437650a; unit suite 357 green
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed in round 10 of the adversarial review, fingerprint e9b10437650a; unit suite 357 green
 - [x] `DEF-EXEC-57` **the file watcher walked every object under .git before skipping it** - LOW; `rglob` descended into `.git` and the cap counted only survivors, so on `update` of a real repository the cap did nothing and each 200 ms tick spent its time in a tree it would never list; fix: `os.walk` pruning `.git` before it is entered; `packages/copier-tui/src/copier_tui/screens/execution.py`
   - repro: update on a repo with 30k loose objects, time _written
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed in round 10 of the adversarial review, fingerprint e9b10437650a; unit suite 357 green
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed in round 10 of the adversarial review, fingerprint e9b10437650a; unit suite 357 green
 
 ## Appearance `APPR`
 
+palette, contrast, glyphs, pulse and the width of what is painted
+
 - [x] `DEF-APPR-6` **the cursor's chip is almost the colour of the chosen chip** - MEDIUM; on a question answered by picking, the option under the cursor and the option in force are painted almost the same, so a reader moving along a row cannot tell where the cursor is; cause: `CURSOR_PICKED_BG` #1477b4 measures 1.33:1 against `PICKED_BG` #0b6591 and `CURSOR_BG` #5a6674 measures 1.86:1 against `OPTION_BG` #363e49, both under the 3:1 floor for telling two interface surfaces apart; `inline.py` already documents the cure - "under the cursor the ground inverts: bright with dark ink" - and then sets white ink on a mid-dark ground, so the inversion was described and never built; `packages/copier-tui/src/copier_tui/theme.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: the cursor's chip now inverts - bright ground, dark ink - which is what the code's own comment already claimed; separation went from 1.32:1 to 3.36:1 on the answer and 1.85:1 to 4.28:1 on an alternative, both over the 3:1 floor, with ink at 8.71:1 and 6.56:1; tests/unit/test_tui_appearance.py asserts both floors
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: the cursor's chip now inverts - bright ground, dark ink - which is what the code's own comment already claimed; separation went from 1.32:1 to 3.36:1 on the answer and 1.85:1 to 4.28:1 on an alternative, both over the 3:1 floor, with ink at 8.71:1 and 6.56:1; tests/unit/test_tui_appearance.py asserts both floors
 - [x] `DEF-APPR-7` **the header separator is an ambiguous-width character** - LOW; the middle dot between the tool name and the template name is U+00B7, whose East_Asian_Width is A (ambiguous), so a terminal set to render ambiguous characters wide gives it two cells while `rich.cells.cell_len` counts one, and the header's right-aligned half is pushed a cell out; it is the only remaining non-ASCII glyph in the package that is not width-neutral; `packages/copier-tui/src/copier_tui/widgets.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: the separator is U+2E31 WORD SEPARATOR MIDDLE DOT, which is width neutral and looks the same; both header sites carry it, and a test now fails on any ambiguous-width glyph written literally in the package
-  - log: 2026-08-27 noted: the audit that found this one under-reported - it scanned source characters, so it missed every glyph written as a `\uXXXX` escape. A runtime sweep of module constants found six more ambiguous-width glyphs: the option marks U+25CF and U+25CB, and the conditional tree U+2500 U+2502 U+251C U+2514. The tree cannot be fixed - every box-drawing character in Unicode is ambiguous-width, there is no neutral set - so it is an accept, not an oversight
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: the separator is U+2E31 WORD SEPARATOR MIDDLE DOT, which is width neutral and looks the same; both header sites carry it, and a test now fails on any ambiguous-width glyph written literally in the package
+  - log: 2026-08-27T00:00:00Z @kj noted: the audit that found this one under-reported - it scanned source characters, so it missed every glyph written as a `\uXXXX` escape. A runtime sweep of module constants found six more ambiguous-width glyphs: the option marks U+25CF and U+25CB, and the conditional tree U+2500 U+2502 U+251C U+2514. The tree cannot be fixed - every box-drawing character in Unicode is ambiguous-width, there is no neutral set - so it is an accept, not an oversight
 - [x] `DEF-APPR-14` **the focus bar stops breathing on a banded conditional row** - MEDIUM; one row in four showed a frozen bar beside an option mark that went on breathing - two halves of one signal visibly out of step; cause: the rule keeping the plate one colour under the cursor names two classes and a pseudo-class, which outranks every rule the beat is written with, and it also set the border; fix: the plate rules carry background only, and the beat keeps the bar; `packages/copier-tui/src/copier_tui/widgets.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: measured over a full 32-phase cycle, the banded conditional row went from 1 distinct bar colour to 17, matching every other row; tests/unit/test_tui_appearance.py
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: measured over a full 32-phase cycle, the banded conditional row went from 1 distinct bar colour to 17, matching every other row; tests/unit/test_tui_appearance.py
 - [x] `DEF-APPR-22` **an invalid row shows only an exclamation mark once the cursor leaves it** - MEDIUM; gating the help line on focus - which recovered a row per question - also gated validation errors, so a row the user had moved off showed a bare `!` and nothing saying what was wrong; cause: one class governed both, and help and errors do not deserve the same rule; fix: an error opens its line on any row, help still only on the focused one; `packages/copier-tui/src/copier_tui/widgets.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: introduced by this batch's own row-saving change and caught by an adversarial review before release
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: introduced by this batch's own row-saving change and caught by an adversarial review before release
 - [x] `DEF-APPR-26` **at the width the app asks for, no answer is visible** - HIGH; the caption gutter was a fixed 56 columns in a terminal the app declares usable at 60, so the answer column was 0 columns wide and every row showed a question and nothing beside it - with no resize prompt, because 60 is not too small; fix: the gutter is a share of the row capped at its old width, and the caption wrap and the help indent measure it rather than assuming it; `packages/copier-tui/src/copier_tui/widgets.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: 19 answer columns at MIN_WIDTH where there were 0, and byte-identical above about 93 columns; tests/unit/test_tui_survey.py
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: 19 answer columns at MIN_WIDTH where there were 0, and byte-identical above about 93 columns; tests/unit/test_tui_survey.py
 - [x] `DEF-APPR-28` **an option list decides its height before it has a width, and is then clipped** - HIGH; on the reference template at 100 columns five of twenty-three questions showed an incomplete list of their options, and `Python version` showed exactly one - `3.12`, unticked - while the chosen `3.13` was off-row, so the row read as a question whose only answer was unselected; the defect shipped in the screenshot the README puts on its front page; cause: the widget's height came from whatever it had last painted, and the first paint happens before it has a width, so every row claimed one line; repainting on resize changes the content and not the allocated height; fix: `get_content_height` answers from the width Textual supplies during layout; `packages/copier-tui/src/copier_tui/inline.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: no clipped option row at 80, 100 or 120 columns; the one-cell-per-chip margin added the round before had made it worse by pushing a row that fitted exactly onto the stacked path
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: no clipped option row at 80, 100 or 120 columns; the one-cell-per-chip margin added the round before had made it worse by pushing a row that fitted exactly onto the stacked path
 - [x] `DEF-APPR-29` **the terminal-too-small prompt draws a border and no words** - HIGH; at every size below the minimum the prompt rendered as two amber lines with its message nowhere on screen, over the footer it covered; cause: docking it to one row left the heavy border in place, and a border is inside the declared height under Textual's box sizing, so the content box was zero rows; fix: the colour is carried by the strip itself and there is no border; `packages/copier-tui/src/copier_tui/theme.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 introduced by the previous round's own fix for the prompt covering six rows of the form, and missed because the four tests on it assert only that the widget is in the DOM - never that it says anything
-  - log: 2026-08-27 closed: fixed: content box is one row at 40x10, 50x20 and 59x30, and no longer overlaps the footer
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj introduced by the previous round's own fix for the prompt covering six rows of the form, and missed because the four tests on it assert only that the widget is in the DOM - never that it says anything
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: content box is one row at 40x10, 50x20 and 59x30, and no longer overlaps the footer
 - [x] `DEF-APPR-31` **questions lose the end of their sentence at supported widths** - MEDIUM; seven of the reference template's twenty-three captions were cut mid-phrase at 60 columns, four at 70 and two at 80, with no ellipsis and nowhere else to read them; cause: the two-line cap was sized against a gutter fixed at 56 columns, and the gutter became a share of the row; fix: three lines, which covers every question at every supported width and costs a row only where it is needed; `packages/copier-tui/src/copier_tui/theme.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: a test measures the folded height rather than reading the text back - two earlier attempts at that check reported all clear against captions that were visibly cut, because a caption with no tree connector carries no newlines to count
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: a test measures the folded height rather than reading the text back - two earlier attempts at that check reported all clear against captions that were visibly cut, because a caption with no tree connector carries no newlines to count
 - [x] `DEF-APPR-35` **a stacked option list still clipped whenever a chip wrapped** - HIGH; a chip wider than its column folds, and the height reserved for the stack counted one line per chip - so the tail of the list was cut, and on a narrow terminal the option in force could be the one off screen, which is the outcome the stacking exists to prevent; fix: the reserved height counts folded lines; `packages/copier-tui/src/copier_tui/inline.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 the previous round's own fix for the first-paint clipping introduced this second one, and its closing log records only 80, 100 and 120 columns as checked - none of them narrow enough to fold a chip
-  - log: 2026-08-27 closed: fixed: no clipped option row at 46, 52, 60 or 70 columns
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj the previous round's own fix for the first-paint clipping introduced this second one, and its closing log records only 80, 100 and 120 columns as checked - none of them narrow enough to fold a chip
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: no clipped option row at 46, 52, 60 or 70 columns
 - [x] `DEF-APPR-36` **the resize prompt painted over the footer** - MEDIUM; docked flush to the bottom on the overlay layer, the advisory covered the row the keys are named on - so the key legend vanished exactly when the interface was degraded, and on the execution screen it hid `^x Quit`, the only way out of a template task that never returns; fix: it sits one row above the footer and costs a form row instead; `packages/copier-tui/src/copier_tui/theme.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: prompt and footer occupy different rows at 59x30, 50x20 and 90x16
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: prompt and footer occupy different rows at 59x30, 50x20 and 90x16
 - [x] `DEF-APPR-39` **the resize advisory painted over whichever row it was moved to** - HIGH; three placements in three rounds, each covering something that mattered: centred it hid six rows of the form, docked flush to the bottom it hid the footer where the keys are named, and lifted one row it hid the status line - which on the survey carries the sentence saying a second escape discards every answer, and on the review the sentence saying an existing project is about to be overwritten; cause: every attempt kept it on a layer over the screen, and both bottom rows of every screen are load-bearing, so there was never a free row to overlay; fix: it is mounted before the footer as a row of the layout, so the form gives up a row instead; `packages/copier-tui/src/copier_tui/app.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 each of the three placements was this project's own fix for the previous one, and the defect log recorded twice that it cost a form row while it went on painting over a used one
-  - log: 2026-08-27 closed: fixed: at 100x17, 80x17, 59x24 and 30x8 the prompt, the status row and the footer are three different rows, and the armed cancel warning is on screen whole; tests/unit/test_tui_survey.py
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj each of the three placements was this project's own fix for the previous one, and the defect log recorded twice that it cost a form row while it went on painting over a used one
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: at 100x17, 80x17, 59x24 and 30x8 the prompt, the status row and the footer are three different rows, and the armed cancel warning is on screen whole; tests/unit/test_tui_survey.py
 - [x] `DEF-APPR-40` **the fold count dropped the ambiguous-width margin its sibling carries** - MEDIUM; the reserved height for a stacked list counted a chip's cells with no allowance for `●` and `○`, whose East Asian width is ambiguous - the same allowance the fit test beside it documents as mandatory - so a terminal set to render ambiguous characters wide could clip the list again at six widths including MIN_WIDTH; fix: both charge the same cell; `packages/copier-tui/src/copier_tui/inline.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed
 - [x] `DEF-APPR-43` **the option list reserved a height it did not paint, in both directions** - MEDIUM; the reserved height divided a chip's width by the column's while the paint let Rich word-wrap the same text, so the two disagreed: a blank row under the list at 60 to 66 columns, and below 60 an option drawn as a bare shape glyph with its label cut off; a wrapped chip also resumed at column zero with no glyph, which reads as a further unticked option on a control whose premise is that a reader counts the filled shapes; fix: the chips are wrapped here rather than by Rich, so the reservation and the paint are the same list of lines, and a continuation hangs under its own mark carrying the chip's ground; `packages/copier-tui/src/copier_tui/inline.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 modelling the wrap instead of measuring it was the same drift twice before - DEF-APPR-28 and DEF-APPR-35 - and both closed on a check that did not span the widths where it fails
-  - log: 2026-08-27 closed: fixed: reserved height equals painted height at every width from 30 to 120, where seven widths disagreed before
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj modelling the wrap instead of measuring it was the same drift twice before - DEF-APPR-28 and DEF-APPR-35 - and both closed on a check that did not span the widths where it fails
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: reserved height equals painted height at every width from 30 to 120, where seven widths disagreed before
 - [x] `DEF-APPR-44` **the row's help named keys the control does not have** - MEDIUM; the help line branched on the question's kind while the control is chosen by secret, then multiline, then kind - so a `type: str` question with choices and `multiline: true` got an editor and a help line naming three keys it does not have, while the hint it needs was withheld; fix: the help follows the same precedence that builds the control; `packages/copier-tui/src/copier_tui/widgets.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed; the key names and the placeholder example are also alternatives now rather than a queue - together they overflowed the two-line box from 60 to 83 columns and the example was the half that was cut
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed; the key names and the placeholder example are also alternatives now rather than a queue - together they overflowed the two-line box from 60 to 83 columns and the example was the half that was cut
 - [x] `DEF-APPR-46` **the resize advisory was the loudest thing on the screen and the least urgent** - LOW; a full-width amber fill, permanent, directly beneath two warnings that are ink only - so the app's own language said a fill outranks ink and the only filled element was the one about window size; it also wrapped, so below 40 columns it clipped away the size it exists to name; fix: ink like its neighbours, cropped rather than wrapped, and shortened so the numbers survive a narrow terminal; `packages/copier-tui/src/copier_tui/theme.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: one row, no fill, and the numbers are on screen at 30, 40 and 59 columns
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: one row, no fill, and the numbers are on screen at 30, 40 and 59 columns
 - [x] `DEF-APPR-47` **the option list wrapped by characters where the terminal draws cells** - HIGH; a label containing an emoji or CJK text overflowed its column, Rich re-wrapped it inside a box sized from the character count, and whole later options were clipped away with nothing reporting it - measured, an option absent at 24 of the 71 widths from 50 to 120, one of them MIN_WIDTH; cause: the wrapping rewrite used `textwrap.wrap` and `str.ljust`, both character-counting, twelve lines below the cell-counting fit test, in the module that documents cell width on every glyph it prints; fix: the split and the pad are cell-aware; `packages/copier-tui/src/copier_tui/inline.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 this is the defect the rewrite existed to make impossible, reintroduced by the rewrite - and it shipped because the invariant the rewrite enforces had no test, only a measurement
-  - log: 2026-08-27 closed: fixed: rich's own cell-aware divide_line and set_cell_size; tests/unit/test_tui_widgets.py parametrises ascii, emoji and CJK labels over ten widths and asserts reserved equals painted, no line over the column, and one shape drawn per option - it fails on eight cases without the fix
-  - log: 2026-08-27 correction: the earlier claim that the invariant test fails on eight cases without the fix was wrong - a wrap-only revert failed 0; after hardening it fails 1 (emoji at 20) for the wrap and 3 for the pad
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj this is the defect the rewrite existed to make impossible, reintroduced by the rewrite - and it shipped because the invariant the rewrite enforces had no test, only a measurement
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: rich's own cell-aware divide_line and set_cell_size; tests/unit/test_tui_widgets.py parametrises ascii, emoji and CJK labels over ten widths and asserts reserved equals painted, no line over the column, and one shape drawn per option - it fails on eight cases without the fix
+  - log: 2026-08-27T00:00:00Z @kj correction: the earlier claim that the invariant test fails on eight cases without the fix was wrong - a wrap-only revert failed 0; after hardening it fails 1 (emoji at 20) for the wrap and 3 for the pad
 - [x] `DEF-APPR-49` **the form opened spelling out in red every question nobody had been asked** - HIGH; a survey validates on mount, so every required-but-unanswered question carried an error before a keystroke - measured at 25 of 31 rows rose validator text at first paint, and typing one character then moved the four rows below it five lines each; cause: errors were printed on every row that had one, and errors were then given an eight-line budget, two fixes each right for its own finding and neither aware of the other; fix: the flag marks a row from the start and the sentence waits until the reader has engaged - touched it, or pressed enter and been refused; `packages/copier-tui/src/copier_tui/widgets.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: 0 error sentences at first paint, and an answer invalidated by a change to a DIFFERENT answer still speaks, because that is news the reader caused
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: 0 error sentences at first paint, and an answer invalidated by a change to a DIFFERENT answer still speaks, because that is news the reader caused
 - [x] `DEF-APPR-51` **error text did not clear the contrast floor on the alternate row band** - LOW; rose body text measured 4.38:1 on `ROW_ALT_BG` and 4.06:1 on the conditional band, under the floor this palette is asserted against - and the assertion covers ten ink-on-ground pairs, none of them rose on a row, because until errors began printing on unfocused rows they never landed there; fix: an error takes a lighter rose that clears 4.99:1 on all six row grounds, while the theme's error token and the render's failure verdict keep the original; `packages/copier-tui/src/copier_tui/theme.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed
 
 ## Review screen `RVW`
 
+the answers review before the write, and its header and warning line
+
 - [x] `DEF-RVW-15` **the header drops the destination at 80 columns** - HIGH; on the review screen the whole destination vanished from the header, leaving a dangling separator, at any width where the title did not fit; cause: `#hdr-title` had no wrap or overflow rule, so an over-long title wrapped to two rows inside a bar that is one row high and only the first row survived - and that row ends at the last space it fitted, which is before the path; fix: the title is cropped, never wrapped, and the review's path is shortened from the LEFT so the project name is what survives; `packages/copier-tui/src/copier_tui/theme.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 this is DEF-SRVY-3 reopening on the one screen where the destination matters most - the last screen before anything is written
-  - log: 2026-08-27 closed: fixed: the header holds one row at 120, 100, 80, 70 and 60 columns and names the destination at every one; new paths.fit_path drops leading components rather than trailing ones, because the tail is the half of a path that says which project it is; tests/unit/test_tui_survey.py
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj this is DEF-SRVY-3 reopening on the one screen where the destination matters most - the last screen before anything is written
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: the header holds one row at 120, 100, 80, 70 and 60 columns and names the destination at every one; new paths.fit_path drops leading components rather than trailing ones, because the tail is the half of a path that says which project it is; tests/unit/test_tui_survey.py
 - [x] `DEF-RVW-16` **the review prints values where the user gave answers** - HIGH; the last screen before a write read `True`, `False` and `[]` where the user had picked Yes, No and ticked options - eleven of the reference template's twenty-three questions; cause: `display_value` resolved a label only through `field.choices`, which is empty for a bool because its two labels live in the renderer, and it printed a list through `json.dumps`; fix: a bool resolves through the same pair the option row draws, a ticked list joins its labels, and an empty one reads as unset; `packages/copier-tui/src/copier_tui/widgets.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: the review now prints Yes, No, and the ticked labels joined; tests/unit/test_tui_survey.py
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: the review now prints Yes, No, and the ticked labels joined; tests/unit/test_tui_survey.py
 - [x] `DEF-RVW-27` **the overwrite warning and the render verdict lose their text at 60 columns** - MEDIUM; both are one-row lines over wrapping Statics, so the second line was clipped with no ellipsis: the review's warning read as an amber path and nothing else - the only element in the app that says an existing project is about to be overwritten - and the render verdict read exactly `written to` with the destination gone; fix: both crop rather than wrap, the verdict fits its path to the room the row has, and the warning leads with the risk so a crop cannot take it; `packages/copier-tui/src/copier_tui/screens/review.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: tests/unit/test_tui_survey.py asserts the warning is one row and starts with the risk
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: tests/unit/test_tui_survey.py asserts the warning is one row and starts with the risk
 - [x] `DEF-RVW-30` **the review screen shows no answers at the width the app asks for** - HIGH; at MIN_WIDTH the value column was one column wide, so every answer stacked a character per row - `demo` as four rows - and a 26-row screen held three questions and no legible answer; cause: `.review-caption` kept the flat 56-column gutter after the survey's was made a share of the row; fix: the same share-with-cap; `packages/copier-tui/src/copier_tui/screens/review.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed: 23 value columns at MIN_WIDTH where there was 1, unchanged above 100; this is DEF-APPR-26 having been fixed on one screen and left standing on the other
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed: 23 value columns at MIN_WIDTH where there was 1, unchanged above 100; this is DEF-APPR-26 having been fixed on one screen and left standing on the other
 - [x] `DEF-RVW-38` **a multiselect nobody ticked read as a question nobody reached** - LOW; an empty multiselect printed `not set` in the muted grey, which is what the review says about a question that was never answered - so a deliberate "none of these" and a skipped question were the same words in the same colour on the last screen before a write; fix: it reads `none selected`; `packages/copier-tui/src/copier_tui/widgets.py`
-  - log: 2026-08-27 added
-  - log: 2026-08-27 closed: fixed
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj closed: fixed
 - [x] `DEF-RVW-53` **the review header cuts the head off a long project name at 60 columns** - LOW; at MIN_WIDTH the header leaves the path 27 cells, so a directory name over 23 characters is tail-cropped - `.../hurn-prediction-project` - on the screen whose job is to be checked before a write; deferred: the remedy rewrites `HeaderBar._title`, the site that seeded regressions in rounds 3-9, and the `.../` marker already says a cut was made; live at 60-63 columns only; `packages/copier-tui/src/copier_tui/widgets.py`
   - repro: review screen at 60x20 with dst named churn-prediction-project
-  - log: 2026-08-27 added
-  - log: 2026-08-27 deferred by adjudication - remedy touches HeaderBar._title, a regression seed in rounds 3-9
-  - log: 2026-08-27 closed: superseded: the review header no longer carries the path; the project name is in the header on every screen and is cropped from the left behind a ... marker when it does not fit
+  - log: 2026-08-27T00:00:00Z @kj added
+  - log: 2026-08-27T00:00:00Z @kj deferred by adjudication - remedy touches HeaderBar._title, a regression seed in rounds 3-9
+  - log: 2026-08-27T00:00:00Z @kj closed: superseded: the review header no longer carries the path; the project name is in the header on every screen and is cropped from the left behind a ... marker when it does not fit
