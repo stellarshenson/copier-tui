@@ -546,8 +546,8 @@ class FieldRow(Vertical):
         for index in range(len(PULSE_SHADES)):
             self.set_class(index == shade, f"pulse-{index}")
         if isinstance(self._control, InlineOptions):
-            # one state per half-cycle: the mark changes ink twice per breath of the bar
-            self._control.set_mark_shade(MARK_SHADES[phase * 2 // len(PULSE_CYCLE)])
+            # eight states per cycle: four blinks per breath of the bar
+            self._control.set_mark_shade(MARK_SHADES[(phase * 8 // len(PULSE_CYCLE)) % 2])
 
     @property
     def field(self) -> FieldState:
