@@ -590,7 +590,7 @@ async def test_the_run_crosses_the_blank_line_the_cursor_opens(tmp_path: Path) -
         assert rails("owner") == ["", ""]  # a row in no run at all opens two blank lines
 
 
-async def test_the_cursor_mark_breathes_with_the_bar(tmp_path: Path) -> None:
+async def test_the_cursor_mark_blinks_on_the_bars_clock(tmp_path: Path) -> None:
     """Focus bar: the mark on the option row takes its colour from the row's own beat.
 
     Two things breathing on separate timers drift apart and read as two signals rather than

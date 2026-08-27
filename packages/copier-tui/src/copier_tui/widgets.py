@@ -539,13 +539,15 @@ class FieldRow(Vertical):
             self._control.set_mark_shade(MARK_SHADES[0])
 
     def _breathe(self) -> None:
-        """Move the bar one step round the cycle, and the cursor mark with it."""
-        shade = PULSE_CYCLE[self._beat % len(PULSE_CYCLE)]
+        """Move the bar one step round the cycle, and blink the cursor mark on the same clock."""
+        phase = self._beat % len(PULSE_CYCLE)
+        shade = PULSE_CYCLE[phase]
         self._beat += 1
         for index in range(len(PULSE_SHADES)):
             self.set_class(index == shade, f"pulse-{index}")
         if isinstance(self._control, InlineOptions):
-            self._control.set_mark_shade(MARK_SHADES[shade])
+            # one state per half-cycle: the mark changes ink twice per breath of the bar
+            self._control.set_mark_shade(MARK_SHADES[phase * 2 // len(PULSE_CYCLE)])
 
     @property
     def field(self) -> FieldState:

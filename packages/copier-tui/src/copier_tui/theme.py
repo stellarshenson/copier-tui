@@ -45,29 +45,12 @@ PULSE_SHADES = (
     "#1e79a2",
     "#1e78a1",
 )
-MARK_SHADES = (
-    "#ffffff",
-    "#f3fbfe",
-    "#e8f7fd",
-    "#dcf2fc",
-    "#d1eefb",
-    "#c5eafa",
-    "#bae6f9",
-    "#aee2f8",
-    "#a2def8",
-    "#97d9f7",
-    "#8bd5f6",
-    "#80d1f5",
-    "#74cdf4",
-    "#69c9f3",
-    "#5dc4f2",
-    "#52c0f1",
-    "#46bcf0",
-)
-"""The cursor mark's breath: white down to bright cyan, one shade per bar phase.
+MARK_SHADES = ("#ffffff", ORANGE)
+"""The cursor mark's blink: white for one half of the bar's cycle, the accent orange for the other.
 
-The bar breathes in blues on a dark ground; the mark sits on a chip and wanted its own
-range, so it goes from white to the bar's brightest and is never the same ink as the bar."""
+The bar breathes in blues on a dark ground; a mark breathing in cyan washed out against it,
+and a ramp into orange still read as a fade. Two plain states, on the bar's own clock, read
+as a cursor."""
 
 PULSE_CYCLE = (
     0,

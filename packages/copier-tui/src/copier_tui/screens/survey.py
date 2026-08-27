@@ -89,8 +89,8 @@ class SurveyScreen(Screen[None]):
         width: 100%;
     }}
     #survey-hint {{
-        /* as wide as what it says and no wider, so an empty hint leaves the whole row
-           to the destination beside it */
+        /* as wide as what it says and no wider, on the right, so an empty hint leaves
+           the whole row to the destination on its left */
         width: auto;
         padding: 0 1;
         color: {TEXT_MUTED};
@@ -101,13 +101,12 @@ class SurveyScreen(Screen[None]):
         text-overflow: ellipsis;
     }}
     #survey-where {{
-        /* the rest of the row after the hint, not a fixed share: the hint is empty most of
-           the time, and a fixed 60% left a path cropped beside a blank */
+        /* leads the row, and takes what the hint leaves rather than a fixed share: the hint
+           is empty most of the time, and a fixed 60% left a path cropped beside a blank */
         width: 1fr;
         height: 1;
         padding: 0 1;
         color: {TEXT_SUBTLE};
-        text-align: right;
         text-wrap: nowrap;
         text-overflow: ellipsis;
     }}
@@ -166,8 +165,8 @@ class SurveyScreen(Screen[None]):
         # already carrying the template name and the field position - and it is the one fact a
         # person filling in thirty answers cannot recover from anything else on the screen
         yield Horizontal(
-            self._hint,
             _Destination(_where_text(self.dst, 0), id="survey-where"),
+            self._hint,
             id="survey-status",
         )
         yield Footer()
