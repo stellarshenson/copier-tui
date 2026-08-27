@@ -50,9 +50,6 @@ The ground alone could not carry this. When the cursor sits on the answer - whic
 starts, every time - a ground says "chosen" and has nothing left to say "and you are here", so
 the two facts collapsed into one and the row stopped showing which option was about to move."""
 
-INLINE_BUDGET = 42
-"""Columns assumed for the option row before it has been laid out and can measure itself."""
-
 
 class InlineOptions(Static):
     """Every option of one question on one line, the chosen one lit."""
@@ -213,10 +210,22 @@ class InlineOptions(Static):
         return [mark, (label, style)]
 
     def _fits(self, chips: list[list[tuple[str, str]]]) -> bool:
-        """Whether every chip fits on one line at the width the row actually has."""
-        width = self.size.width or INLINE_BUDGET
+        """Whether every chip fits on one line at the width the row actually has.
+
+        Before the first layout there is no width to measure against, and the answer here is
+        one line rather than a guess. A guess that came out stacked cost four blank lines
+        under a five-option question: the row was laid out at the height the stack needed,
+        the real width arrived, the row repainted itself on one line - and the lines it had
+        vacated stayed on the screen, because only the widget's own region was repainted.
+        They cleared when the cursor reached the row and something redrew that patch, which
+        is a form that visibly settles while it is being read. Starting on one line cannot
+        do that: a row that turns out to need the stack grows into it, and growing pushes
+        the rows below down, where they repaint at their new place.
+        """
+        if not self.size.width:
+            return True
         room = sum(cell_len(span) for spans in chips for span, _ in spans)
-        return room + len(chips) - 1 <= width
+        return room + len(chips) - 1 <= self.size.width
 
     def on_resize(self) -> None:
         """Re-decide between one line and a stack now that the real width is known."""

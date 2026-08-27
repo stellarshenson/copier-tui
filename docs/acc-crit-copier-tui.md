@@ -378,6 +378,10 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
 - [x] **Option layout** - options share a line while they fit the row's real width and stack one per line once they do not, so no alternative runs off the edge
   - log: 2026-08-24 added
   - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py
+  - log: 2026-08-27 the stacking half moved to tests/unit/test_tui_widgets.py, which mounts the row at a width too narrow to hold it; the old check called the rule on an unmounted row, which has no width to be too narrow
+- [x] **Options never shrink into place** - the choice between one line and a stack is made only once the row knows its width, and a row with no width yet takes one line; a row laid out tall and repainted short leaves the lines it vacated on the screen, and they stay there until the cursor arrives and something redraws that patch
+  - log: 2026-08-27 added
+  - log: 2026-08-27 closed: built - tests/unit/test_tui_widgets.py asserts no paint stacks at a width that holds the options
 - [x] **Answer takes light ink** - the chosen chip is deep enough to carry light text at 6.39:1; dark ink on a bright chip read as struck out rather than chosen
   - log: 2026-08-24 added
   - log: 2026-08-24 closed: built - tests/unit/test_tui_appearance.py

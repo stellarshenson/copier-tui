@@ -39,7 +39,7 @@ from copier_tui.theme import (
     SURFACE_BG,
 )
 from copier_tui.widgets import BRANCH_LAST, BRANCH_MORE, RAIL, FieldRow
-from copier_ui import Choice, TemplateUI
+from copier_ui import TemplateUI
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 
@@ -268,28 +268,17 @@ async def test_the_cursor_shows_even_when_it_sits_on_the_answer(tmp_path: Path) 
         assert painted.count(CURSOR) == 1
 
 
-async def test_short_options_share_a_line_and_long_ones_stack(tmp_path: Path) -> None:
-    """Option layout: side by side while they fit, one per line once they do not.
+async def test_short_options_share_a_line(tmp_path: Path) -> None:
+    """Option layout: side by side while they fit.
 
     A yes and a no read fastest side by side and stacking them spends rows the form has not
-    got. Long labels side by side run past the edge, and the option that falls off is an
-    alternative the reader never learns exists.
+    got. The other half of the rule - labels too long for the width go one per line - is
+    asserted in test_tui_widgets.py, which can give the row a width to be too narrow.
     """
     async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
         await pilot.pause()
         short = app.screen.query_one("#ctl-enabled", InlineOptions)
         assert "\n" not in option_text(short).rstrip("\n")
-
-        long_labels = InlineOptions(
-            (
-                Choice(label="an unusually long option label", value="a"),
-                Choice(label="another unusually long option label", value="b"),
-            ),
-            "a",
-        )
-        assert not long_labels._fits(
-            [long_labels._chip(index, choice) for index, choice in enumerate(long_labels.choices)]
-        )
 
 
 async def test_the_header_names_the_template_it_is_asking_about(tmp_path: Path) -> None:

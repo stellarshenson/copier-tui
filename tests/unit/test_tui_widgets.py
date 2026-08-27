@@ -7,10 +7,12 @@ survey over the one-question-per-kind template.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
 import pytest
+from textual.app import App, ComposeResult
 from textual.widgets import Input, TextArea
 
 from copier_tui.app import SurveyApp
@@ -22,7 +24,7 @@ from copier_tui.widgets import (
     display_value,
     read_control,
 )
-from copier_ui import Kind, TemplateUI
+from copier_ui import Choice, Kind, TemplateUI
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 
@@ -214,3 +216,59 @@ def test_state_dump_omits_secret_values(kinds_ui: TemplateUI) -> None:
     """A serialised state - the kind of thing a crash dump carries - holds no secret."""
     assert "s3cret" not in repr(kinds_ui.state().to_dict())
     assert "s3cret" not in repr(kinds_ui.state().fields["token"])
+
+
+STORAGE = [Choice(label=name, value=name) for name in ("none", "local", "s3", "azure", "gcs")]
+"""Five options of a real template's making - they fit one line on a wide form and not on a
+narrow one, which is the decision the row has to get right."""
+
+
+class _OneRow(App[None]):
+    """The smallest app that can give a control a real width."""
+
+    def compose(self) -> ComposeResult:
+        """Nothing but the options under test."""
+        yield InlineOptions(STORAGE, "none", id="opts")
+
+
+@asynccontextmanager
+async def one_row(width: int) -> AsyncIterator[InlineOptions]:
+    """The options mounted at a given terminal width, laid out and settled."""
+    app = _OneRow()
+    async with app.run_test(size=(width, 10)) as pilot:
+        await pilot.pause()
+        yield app.query_one("#opts", InlineOptions)
+
+
+def lines(options: InlineOptions) -> int:
+    """How many lines the options currently occupy."""
+    return len(str(options.visual).splitlines())
+
+
+async def test_options_are_never_painted_stacked_at_a_width_that_holds_them() -> None:
+    """Every paint of a row wide enough for its options is one line, the first one included.
+
+    Asserted over the paints rather than the result: the finished row reads the same either
+    way, and what left the blank lines behind was a paint nobody was left looking at.
+    """
+    painted: list[int] = []
+    original = InlineOptions._paint
+
+    def record(self: InlineOptions) -> None:
+        original(self)
+        painted.append(lines(self))
+
+    InlineOptions._paint = record
+    try:
+        async with one_row(120) as options:
+            assert lines(options) == 1
+    finally:
+        InlineOptions._paint = original
+    assert painted and max(painted) == 1, painted
+
+
+async def test_options_stack_when_the_width_cannot_hold_them() -> None:
+    """Narrow enough, they go one per line - an option that runs off the edge is an
+    alternative the reader never learns about."""
+    async with one_row(40) as options:
+        assert lines(options) == len(STORAGE)
