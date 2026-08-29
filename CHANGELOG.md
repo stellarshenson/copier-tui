@@ -2,6 +2,13 @@
 
 `copier-ui` and `copier-tui` share one version and are published to PyPI in lockstep, so every entry below covers both packages.
 
+## v1.0.23 (2026-08-29) - Word-aware wrapping in the answer boxes
+
+- A long answer now breaks at natural boundaries rather than being folded one character at a time: a space or a comma first, the token's own `-`, `.` or `/` only where the line offers neither, and the character fold only where it offers none of them
+- `_` is never a break candidate, since it joins words into one identifier rather than separating two, and `-` and `.` are candidates only in the fallback tier - a comma-separated host list keeps `stellars-tech.eu` whole and ends each line on its comma
+- Break positions are measured in cells, so a tab, a wide character and a combining mark each count where they are drawn
+- Every defect record now names the kind of test that keeps it fixed, and `pm-tools check docs/` reports no warnings
+
 ## v1.0.22 (2026-08-29) - Changelog
 
 - Added this file, reconstructed from the version-bump commits back to v0.6.1; releases from here carry an entry of their own

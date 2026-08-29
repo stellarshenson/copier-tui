@@ -50,7 +50,11 @@ from copier_tui.theme import (
     TEXT_SUBTLE,
     VALUE_LINES,
 )
+from copier_tui.wrapping import install as install_wrapping
 from copier_ui import FieldState, Kind, Question
+
+install_wrapping()
+"""Every control that wraps is built here, so Textual's wrapper is replaced before any is."""
 
 BRANCH_MORE = "\u251c\u2500 "
 BRANCH_LAST = "\u2514\u2500 "
