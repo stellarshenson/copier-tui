@@ -293,8 +293,9 @@ HEADER_CSS = f"""
     width: 1fr;
     height: 1;
     padding: 0 1;
-    color: {CYAN_BRIGHT};
-    text-style: bold;
+    /* the base ink only: the project and the field position carry the bright accent as
+       segment styles, so a cell-wide colour here would flatten the two apart from the rest */
+    color: {TEXT};
     /* the bar is one row, so a title that wraps loses every line but the first - and the
        first ends at the last space it fitted, which took the whole destination off the
        review screen at 80 columns and left a dangling separator. Crop, never wrap. */

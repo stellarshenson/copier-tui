@@ -19,7 +19,7 @@ import pytest
 from rich.cells import cell_len
 from textual.widgets import Static
 
-from copier_tui import inline
+from copier_tui import __version__, inline
 from copier_tui.app import SurveyApp
 from copier_tui.inline import CURSOR, FREE, TAKEN, InlineOptions
 from copier_tui.screens import SurveyScreen
@@ -30,6 +30,7 @@ from copier_tui.theme import (
     CURSOR_FG,
     CURSOR_PICKED_BG,
     CURSOR_PICKED_FG,
+    CYAN_BRIGHT,
     FIELD_ALT_BG,
     FIELD_ALT_COND_BG,
     FIELD_BG,
@@ -569,7 +570,8 @@ async def test_the_run_crosses_the_blank_line_the_cursor_opens(tmp_path: Path) -
 
     The blank line the cursor opens either side of itself landed in the middle of a run of
     children and cut the column the connectors are read down. It carries the run now, and
-    only where the run actually crosses it - never above a first child or below a last.
+    only where the run actually crosses it - the row above being a sibling or the question
+    the child hangs from, and never below a last child.
     """
     async with survey(tmp_path / "out", template="tui_tree") as (app, pilot):
 
@@ -579,7 +581,8 @@ async def test_the_run_crosses_the_blank_line_the_cursor_opens(tmp_path: Path) -
 
         app.screen.set_focus(app.screen.query_one("#ctl-bucket"))
         await pilot.pause()
-        assert rails("bucket") == ["", RAIL]  # nothing above a first child, the run below it
+        # the run comes down from the parent directly above, so the first child is not a gap
+        assert rails("bucket") == [RAIL, RAIL]
 
         app.screen.set_focus(app.screen.query_one("#ctl-region"))
         await pilot.pause()
@@ -794,3 +797,48 @@ async def test_no_question_loses_the_end_of_its_sentence(width: int, tmp_path: P
                 assert needed <= label.size.height, (
                     f"{row.question.id} needs {needed} lines and has {label.size.height}"
                 )
+
+
+async def test_the_header_leads_with_the_project_and_ends_with_the_tool(tmp_path: Path) -> None:
+    """Header: the two facts nothing else on the screen carries lead and close the title.
+
+    The tool's own name and version say the same thing on every screen of every run, so they
+    were moved out of the title into the right-hand cell. What is left is read in the order a
+    person needs it: which project, which template, which field - the project and the field
+    counter written in the accent, the context between them not.
+    """
+    dst = tmp_path / "orders-api"
+    dst.mkdir()
+    with TemplateUI.from_template(str(FIXTURES / "tui_flow"), dst=dst) as ui:
+        app = SurveyApp(ui, dst, {})
+        async with app.run_test(size=(100, 24)) as pilot:
+            await pilot.pause()
+            title = app.screen.query_one("#hdr-title", Static)
+            shown = str(title.visual)
+            assert shown.startswith("orders-api ⸱ "), shown
+            assert shown.endswith(" ⸱ 1 of 3"), shown
+            assert "copier-tui" not in shown, "the tool name belongs in the right-hand cell"
+            assert str(app.screen.query_one("#hdr-version", Static).visual) == (
+                f"copier-tui v{__version__}"
+            )
+
+            ink = {}
+            for segment in title.render_line(0):
+                if segment.text.strip() and segment.style and segment.style.color:
+                    ink[segment.text] = segment.style.color.triplet.hex.lower()
+            assert ink["orders-api"] == CYAN_BRIGHT.lower()
+            assert ink["1 of 3"] == CYAN_BRIGHT.lower()
+            assert ink["tui_flow questionnaire"] != CYAN_BRIGHT.lower()
+
+
+async def test_a_bool_row_names_no_key_it_does_not_need(tmp_path: Path) -> None:
+    """Help: two options are read off the row itself, so naming the key that flips them is noise.
+
+    A multiselect still names `space` - ticking is not visible in its options - and a choice
+    still says the key cycles them. A switch says neither, having nothing the row does not show.
+    """
+    async with survey(tmp_path / "out") as (app, pilot):
+        row = {r.question.id: r for r in rows(app)}["advanced"]
+        app.screen.set_focus(row.query_one(InlineOptions))
+        await pilot.pause()
+        assert "space" not in str(row.query_one(".field-help", Static).visual)

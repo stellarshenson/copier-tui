@@ -1,11 +1,10 @@
 # copier-tui
 
 [![build](https://github.com/stellarshenson/copier-tui/actions/workflows/build.yml/badge.svg)](https://github.com/stellarshenson/copier-tui/actions/workflows/build.yml)
-[![PyPI copier-tui](https://img.shields.io/pypi/v/copier-tui.svg?label=copier-tui)](https://pypi.org/project/copier-tui/)
-[![PyPI copier-ui](https://img.shields.io/pypi/v/copier-ui.svg?label=copier-ui)](https://pypi.org/project/copier-ui/)
+[![PyPI copier-tui](https://img.shields.io/pypi/v/copier-tui.svg?label=copier-tui&labelColor=1f4f66)](https://pypi.org/project/copier-tui/)
+[![PyPI copier-ui](https://img.shields.io/pypi/v/copier-ui.svg?label=copier-ui&labelColor=2b4457)](https://pypi.org/project/copier-ui/)
 [![Total PyPI downloads](https://static.pepy.tech/badge/copier-tui)](https://pepy.tech/project/copier-tui)
 [![Python](https://img.shields.io/pypi/pyversions/copier-tui.svg)](https://pypi.org/project/copier-tui/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Brought To You By KOLOMOLO](https://img.shields.io/badge/Brought%20To%20You%20By-KOLOMOLO-00ffff?style=flat)](https://kolomolo.com)
 
 A drop-in wrapper for [copier](https://copier.readthedocs.io) with a terminal UI. Same command line, same templates, one screen instead of one question at a time. `copier-ui` is the UI-neutral half - it turns a template's questions into a schema with state and validation, and renders nothing.
@@ -49,13 +48,21 @@ Flags keep copier's semantics rather than being re-implemented:
 - `--ask` turns asking back on under `--defaults`
 - a template with Jinja extensions or tasks is refused before any screen opens unless `--trust` is given, with copier's own message and exit code
 
+The review screen lists every answer, and is the last step before anything is written:
+
+![the review screen](docs/assets/review.svg)
+
+The render names each file as copier writes it, and closes on a banner counting what it did:
+
+![the execution screen](docs/assets/execution.svg)
+
 ## Keys
 
 | Key | What it does |
 |-----|--------------|
 | `up` / `down` | move between fields, stopping at the first and the last; inside a multiline editor they move its cursor and hand focus on at its first and last line |
 | `left` / `right` | move along a question's options, taking the one they land on |
-| `space` | cycle a choice forward, or tick the option under the cursor in a multiselect |
+| `space` | cycle a choice forward, or tick the option under the cursor in a multiselect; a switch is left to the arrows |
 | `enter` | confirm the screen; inside a multiline editor it breaks the line |
 | `esc` | go back, or cancel - on the survey it arms first and quits on a second press |
 | `ctrl+x` | quit from any screen; on a render still running it ends the run's tasks and leaves |

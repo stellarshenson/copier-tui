@@ -433,17 +433,16 @@ class SurveyScreen(Screen[None]):
         self._hint.update(self._blocked or Text(""))
 
     def _show_position(self) -> None:
-        """The header names the template and says which field of how many.
+        """Say which field of how many; the header keeps the template name beside it.
 
         Which template is being filled in is the one thing a questionnaire cannot be read off
-        its own questions, and it is what a person needs when several are open at once.
+        its own questions, and it is what a person needs when several are open at once. The
+        counter is the other, and the header writes both in the accent for that reason.
         """
         rows = list(self.query(FieldRow))
         row = self._focused_owner((FieldRow,))
         place = f"{rows.index(row) + 1} of {len(rows)}" if row in rows else f"{len(rows)} fields"
-        # the position first: the title crops from the right, and at 60 to 66 columns the tail
-        # was the counter - the one thing on the line the reader cannot infer
-        self.query_one(HeaderBar).set_context(f"{place} ⸱ {self.ui.template_name} questionnaire")
+        self.query_one(HeaderBar).set_position(place)
 
     def _focus_first(self) -> None:
         """Put the cursor in the first field."""
@@ -509,7 +508,7 @@ def _where_text(dst: Path, room: int) -> Text:
 
 
 def _branch(ui: TemplateUI, order: list[str], position: int) -> tuple[str, bool]:
-    """The connector the row prints, and whether a sibling sits directly above it.
+    """The connector the row prints, and whether the run comes down into it from above.
 
     `condition_ids` is what a question's `when` reads, so the renderer never has to know what
     the rule says to know there is one, or which answer it hangs from.
@@ -524,7 +523,12 @@ def _branch(ui: TemplateUI, order: list[str], position: int) -> tuple[str, bool]
     def shares(index: int) -> bool:
         return 0 <= index < len(order) and schema.by_id(order[index]).condition_ids == parents
 
-    return (BRANCH_MORE if shares(position + 1) else BRANCH_LAST), shares(position - 1)
+    # the row above continues the run when it is a sibling, and equally when it is the
+    # question this one hangs from - the first child of an answer otherwise showed a gap
+    # between that answer and its own connector
+    above = position - 1
+    parent_above = above >= 0 and order[above] in parents
+    return (BRANCH_MORE if shares(position + 1) else BRANCH_LAST), shares(above) or parent_above
 
 
 def askable_ids(state: State) -> list[str]:

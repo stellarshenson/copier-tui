@@ -14,6 +14,7 @@ import json
 from textwrap import wrap
 from typing import Any
 
+from rich.cells import cell_len, set_cell_size
 from rich.text import Text
 from textual import events
 from textual.app import ComposeResult
@@ -66,10 +67,23 @@ The tail is why the caption is wrapped here rather than left to Rich. A caption 
 to wrap ran its second line back under the connector, which put prose where the tree is and
 broke the column the connectors are read down."""
 
-HEADER_FIXED = 8
-"""Columns the header spends on things that are not the title: 3 for the separator before the
-path, 1 for the `v`, 2 for `#hdr-version`'s padding and 2 for `#hdr-title`'s - every one of
-them set in `theme.py`, so this is the number to revisit if that padding changes."""
+HEADER_FIXED = 4
+"""Columns the header spends on padding: 2 for `#hdr-version`'s and 2 for `#hdr-title`'s, both
+set in `theme.py`, so this is the number to revisit if that padding changes. Everything else
+the right-hand cell costs is measured from its own text."""
+
+HEADER_SEP = " \u2e31 "
+"""What stands between the header's parts. U+2E31 WORD SEPARATOR MIDDLE DOT, not the U+00B7 it
+looks identical to: U+00B7 has an ambiguous East Asian width, so a terminal set to render such
+characters wide gives it two cells where `rich.cells.cell_len` counts one."""
+
+_BRAND_TEXT = f"copier-tui v{__version__}"
+"""The right-hand cell: the tool and the version, the two facts that never change between
+screens - so they sit where the eye is not reading the run's own state."""
+
+HEADER_LEAD = f"bold {CYAN_BRIGHT}"
+"""Ink for the project and the field position - the two parts of the title nothing else on
+the screen says."""
 
 HEADER_PATH_FLOOR = 12
 """The least the path is ever cropped to. Below about 45 columns the stylesheet's own ellipsis
@@ -226,7 +240,7 @@ def read_control(question: Question, control: Widget) -> Any:
 
 
 class HeaderBar(Horizontal):
-    """One-row header: app name and context left, version right."""
+    """One-row header: project, context and position left, the tool and its version right."""
 
     def __init__(self, context: str = "", project: str | None = None) -> None:
         """Build the header: the screen's context, and the project - the destination
@@ -236,11 +250,12 @@ class HeaderBar(Horizontal):
         super().__init__(id="app-header")
         self._label_context = context
         self._project = project
+        self._position = ""
 
     def compose(self) -> ComposeResult:
         """The title cell and the version cell."""
         yield Static(self._title(), id="hdr-title")
-        yield Static(f"v{__version__}", id="hdr-version")
+        yield Static(_BRAND_TEXT, id="hdr-version")
 
     def on_resize(self) -> None:
         """Re-fit the title to the width the bar actually has.
@@ -253,33 +268,64 @@ class HeaderBar(Horizontal):
         self.query_one("#hdr-title", Static).update(self._title())
 
     def set_context(self, context: str) -> None:
-        """Rewrite the context: the survey keeps the field position here as focus moves."""
+        """Rewrite the context - which screen this is, and on the survey which template."""
         self._label_context = context
         self.query_one("#hdr-title", Static).update(self._title())
 
-    def _title(self) -> str:
-        """The title cell's text: the app name, the project, and the screen's context.
+    def set_position(self, position: str) -> None:
+        """Rewrite the position: the survey keeps its field counter here as focus moves."""
+        self._position = position
+        self.query_one("#hdr-title", Static).update(self._title())
 
-        A project name too long for the row is shortened from the left, so what survives is
-        its end. The stylesheet crops from the right as a backstop, and on a name like
-        `customer-portal-v2` that removes exactly the part that tells two projects apart, so
-        this has to get there first.
+    def _title(self) -> Text:
+        """The title cell: the project, the screen's context, and the field position.
 
-        The separator is U+2E31 WORD SEPARATOR MIDDLE DOT rather than the U+00B7 middle dot it
-        looks identical to. U+00B7 has an ambiguous East Asian width, so a terminal configured
-        to render ambiguous characters wide gives it two cells while `rich.cells.cell_len`
-        counts one, and the header's right-aligned half is pushed a cell out. U+2E31 is width
-        neutral, which no terminal has the latitude to widen.
+        The project leads because it names what the run is for, and it and the position are
+        the two facts nothing else on the screen carries - so both are written in the bright
+        accent and the context between them is not. The tool's own name and version say the
+        same thing on every screen of every run, so they sit in the right-hand cell.
+
+        The three are cropped in the order they can be spared. The position is never cropped:
+        it is eight cells and the one thing on the row a reader cannot work out. The project
+        name is shortened from the left, so what survives is its end - the stylesheet crops
+        from the right as a backstop, and on a name like `customer-portal-v2` that removes
+        exactly the part that tells two projects apart. The context gives way first and keeps
+        its head, since `questionnaire` is worth less than the template it names.
         """
-        parts = ["copier-tui"]
-        if self._label_context:
-            parts.append(self._label_context)
+        title = Text(no_wrap=True, overflow="ellipsis")
+        # what the row has for the title: everything the right-hand cell and the padding
+        # are not using
+        room = self.size.width - cell_len(_BRAND_TEXT) - HEADER_FIXED
+        parts: list[tuple[str, str]] = []
         if self._project:
-            # what the row has left, once the fixed halves have taken theirs: the version cell,
-            # this bar's padding, and the words already in `parts`
-            room = self.size.width - len(" ⸱ ".join(parts)) - len(__version__) - HEADER_FIXED
-            parts.insert(1, fit_name(self._project, max(room, HEADER_PATH_FLOOR)))
-        return " ⸱ ".join(parts)
+            spare = room - _spent(self._label_context, self._position)
+            parts.append((fit_name(self._project, max(spare, HEADER_PATH_FLOOR)), HEADER_LEAD))
+        if self._label_context:
+            spare = room - _spent(*(part for part, _ in parts), self._position)
+            parts.append((_crop(self._label_context, max(spare, 0)), TEXT))
+        if self._position:
+            parts.append((self._position, HEADER_LEAD))
+        for part, style in parts:
+            if not part:
+                continue
+            if title.plain:
+                title.append(HEADER_SEP, style=TEXT_SUBTLE)
+            title.append(part, style=style)
+        return title
+
+
+def _spent(*parts: str) -> int:
+    """Cells the parts beside this one take, each with the separator that precedes it."""
+    return sum(cell_len(part) + len(HEADER_SEP) for part in parts if part)
+
+
+def _crop(text: str, limit: int) -> str:
+    """`text`, or its head behind a `...` marker when it is wider than `limit`."""
+    if cell_len(text) <= limit:
+        return text
+    if limit <= len("..."):
+        return set_cell_size(text, max(limit, 0))
+    return set_cell_size(text, limit - len("...")) + "..."
 
 
 _PULSE_CSS = "\n    ".join(
@@ -589,16 +635,19 @@ class FieldRow(Vertical):
         # control looked like
         self.set_class(not field.enabled, "row-off")
 
-    def set_branch(self, glyph: str, sibling_above: bool = False) -> None:
+    def set_branch(self, glyph: str, run_above: bool = False) -> None:
         """Print a tree connector before the caption, and carry the run over the spacers.
 
         The form owns both because only the form knows what sits around this row, and a
         connector is a statement about its neighbours rather than about this question. A
         spacer carries the run only where the run actually crosses it - under a row with a
-        sibling below, over a row with one above - so a rail never points at nothing.
+        sibling below, over a row the run comes down into - so a rail never points at nothing.
+        The row above is either a sibling or the question this one hangs from; both continue
+        the run, and leaving the parent's case out opened a gap directly under the answer the
+        connector points at.
         """
         rail = Text(RAIL, style=TEXT_SUBTLE)
-        self._rail_above.update(rail if sibling_above else Text(""))
+        self._rail_above.update(rail if run_above else Text(""))
         self._rail_below.update(rail if glyph == BRANCH_MORE else Text(""))
         if glyph == self._branch:
             return
@@ -692,11 +741,6 @@ def _help_text(question: Question, field: FieldState) -> Text:
         help = f"{help}  -  {move}" if help else move
     elif question.kind is Kind.MULTISELECT:
         pick = "space ticks an option"
-        help = f"{help}  -  {pick}" if help else pick
-    elif question.kind is Kind.BOOL:
-        # "flips" rather than "cycles": on two options that is what the key does, and it is
-        # what `action_toggle` calls it
-        pick = "space flips"
         help = f"{help}  -  {pick}" if help else pick
     elif question.kind is Kind.CHOICE:
         pick = "space cycles the answer"
