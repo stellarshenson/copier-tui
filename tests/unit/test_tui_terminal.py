@@ -28,8 +28,9 @@ from typing import Any
 import pytest
 from textual.widgets import RichLog
 
+from copier_tui import app as app_module
 from copier_tui.app import SurveyApp
-from copier_tui.errors import EXIT_CANCELLED, EXIT_FAILURE
+from copier_tui.errors import EXIT_CANCELLED, EXIT_FAILURE, EXIT_OK
 from copier_tui.screens.execution import (
     ExecutionScreen,
     _children_without_stdin,
@@ -564,3 +565,48 @@ def test_the_descendant_walk_gives_up_quietly_where_there_is_no_proc(
 
     monkeypatch.setattr(Path, "iterdir", no_proc)
     assert _descendants(os.getpid()) == []
+
+
+def test_the_survey_clears_the_terminal_state_the_last_program_left(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Startup: the scroll region and origin mode are reset before the first frame.
+
+    A full-screen program that exits without restoring them leaves every line another
+    program addresses afterwards offset by a row, and a screen redrawn by differences never
+    corrects itself - the lines it believes unchanged are the ones in the wrong place. Seen
+    launching the survey from another terminal program's menu: a caption drawn on the row
+    below its own answer, and the same caption left standing two rows up.
+    """
+    written: list[str] = []
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
+    monkeypatch.setattr(sys.stdout, "write", written.append)
+    monkeypatch.setattr(sys.stdout, "flush", lambda: None)
+    monkeypatch.setattr(app_module.SurveyApp, "run", lambda self, **kwargs: EXIT_OK)
+
+    with TemplateUI.from_template(str(FIXTURES / "tui_flow"), dst=tmp_path / "out") as ui:
+        app_module.run_survey(ui, tmp_path / "out", {})
+
+    # the bytes, not the constant: compared symbolically this test stays green through any
+    # edit to it, including one that drops the cursor save and sends the prompt to row 1
+    assert "".join(written) == "\x1b7\x1b[r\x1b[?6l\x1b8"
+    assert "".join(written) == app_module.TERMINAL_RESET
+
+
+def test_a_piped_run_writes_no_escape_sequence(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Startup: nothing is emitted where there is no terminal to put back.
+
+    The sequences are meaningless to a pipe and would land in whatever is reading it, which
+    is how a reset ends up inside a captured log or a test's own output.
+    """
+    written: list[str] = []
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: False)
+    monkeypatch.setattr(sys.stdout, "write", written.append)
+    monkeypatch.setattr(app_module.SurveyApp, "run", lambda self, **kwargs: EXIT_OK)
+
+    with TemplateUI.from_template(str(FIXTURES / "tui_flow"), dst=tmp_path / "out") as ui:
+        app_module.run_survey(ui, tmp_path / "out", {})
+
+    assert written == []

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 from typing import Any, ClassVar
 
 from rich.text import Text
@@ -211,6 +212,25 @@ class SurveyApp(App[int]):
             prompt.remove()
 
 
+TERMINAL_RESET = "\x1b7\x1b[r\x1b[?6l\x1b8"
+"""Scroll region back to the whole screen and origin mode off, between a saved cursor.
+
+Both are terminal state a full-screen program can leave behind and the next one inherits,
+and both offset every line a program addresses afterwards: what the next program draws lands
+a row away from where it computed it, and a screen redrawn by differences never corrects
+itself, because the lines it believes unchanged are the ones sitting in the wrong place.
+Seen when copier-tui was started from another full-screen program's menu, which had exited a
+moment before - the survey came up with one question's caption on the row below its own
+answer.
+
+The save and restore around them are not decoration. Resetting the margins homes the cursor,
+and Textual saves the cursor where it finds it and puts it back on exit, so a bare reset
+returns the shell prompt to the top of the screen and the next lines print over the work the
+developer ran before us. Restoring also puts back the origin-mode flag on the terminals whose
+save includes it, which changes nothing once the margins are the full page: origin-relative
+addressing and absolute addressing are then the same thing."""
+
+
 def run_survey(ui: TemplateUI, dst: Path, copier_kwargs: dict[str, Any]) -> int:
     """Run the app to completion and return its exit code.
 
@@ -221,5 +241,8 @@ def run_survey(ui: TemplateUI, dst: Path, copier_kwargs: dict[str, Any]) -> int:
     a report per pointer twitch pays for nothing, and asking for none leaves the terminal its
     own selection and copy.
     """
+    if sys.stdout.isatty():
+        sys.stdout.write(TERMINAL_RESET)
+        sys.stdout.flush()
     exit_code = SurveyApp(ui, dst, copier_kwargs).run(mouse=False)
     return EXIT_CANCELLED if exit_code is None else exit_code

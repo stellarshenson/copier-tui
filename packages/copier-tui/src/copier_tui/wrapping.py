@@ -13,6 +13,7 @@ from __future__ import annotations
 from bisect import bisect_right
 
 from rich.cells import get_character_cell_size
+from textual import content
 from textual.document import _wrapped_document
 from textual.expand_tabs import get_tab_widths
 
@@ -50,6 +51,20 @@ def _cell_offsets(text: str, tab_sections: list[tuple[str, int]]) -> list[int]:
     return offsets
 
 
+def _ink_offsets(text: str, offsets: list[int]) -> list[int]:
+    """`offsets` with each prefix's own trailing whitespace discounted.
+
+    A line's trailing space hangs past the edge rather than occupying a cell of it - the rule
+    every wrapper outside an editor keeps, `rich` included. Measured with the space counted, a
+    word that ends exactly at the edge is pushed to the next line and every line comes out one
+    word short; over a three-line box that costs the last line, and the caption is cut.
+    """
+    ink = [0]
+    for index, character in enumerate(text):
+        ink.append(ink[index] if character.isspace() else offsets[index + 1])
+    return ink
+
+
 def _starts(text: str, after: str, *, space: bool = False) -> list[int]:
     """The offsets a line may start at, given the characters a break may follow.
 
@@ -84,6 +99,8 @@ def compute_wrap_offsets(
     tab_size: int,
     fold: bool = True,
     precomputed_tab_sections: list[tuple[str, int]] | None = None,
+    *,
+    hang: bool = False,
 ) -> list[int]:
     """The offsets to break `text` at so that every line fits `width` cells.
 
@@ -91,26 +108,36 @@ def compute_wrap_offsets(
     and the ranking decides which break that is. A natural one wins; a fallback is reached
     only where the line holds no natural one; the fold is reached only where it holds
     neither, which is the single case Textual handles today.
+
+    `hang` decides whether a line's trailing space occupies a cell of the width or hangs past
+    it. An editor counts it, because the cursor can sit on it and Textual measures the box
+    that way; static text does not, because `rich` does not, and a line that counted it would
+    come out a word short of the one beside it drawn by anything else.
     """
     if width <= 0:
         return []
     tab_sections = precomputed_tab_sections or get_tab_widths(text, min(tab_size, width))
     offsets = _cell_offsets(text, tab_sections)
-    if offsets[-1] <= width:
+    fit = _ink_offsets(text, offsets) if hang else offsets
+    if fit[-1] <= width:
         return []
     natural = _starts(text, NATURAL, space=True)
     fallback = _starts(text, FALLBACK)
     breaks: list[int] = []
     start = 0
-    while offsets[-1] - offsets[start] > width:
+    while fit[-1] - offsets[start] > width:
         # the furthest offset that still fits. Equal widths bisect right, so a combining mark
         # stays on the line of the character it is drawn over
-        room = bisect_right(offsets, offsets[start] + width) - 1
+        limit = offsets[start] + width
+        room = bisect_right(fit, limit) - 1
         end = _last_before(natural, start, room)
         if end is None and fold:
             # nothing natural on this line, so break inside the token: on its own punctuation
-            # where it has any, character by character where it has none
-            end = _last_before(fallback, start, room) or max(room, start + 1)
+            # where it has any, character by character where it has none. The fold counts every
+            # cell - there is no trailing space in the middle of a word to hang
+            end = _last_before(fallback, start, room) or max(
+                bisect_right(offsets, limit) - 1, start + 1
+            )
         if end is None:
             # folding off - the token keeps its line and overruns it, breaking at the next
             # natural opportunity, because that is the whole of what folding off asks for
@@ -124,11 +151,33 @@ def compute_wrap_offsets(
     return breaks
 
 
-def install() -> None:
-    """Put this wrapper in front of Textual's.
+def divide_line(text: str, width: int, fold: bool = True) -> list[int]:
+    """The same offsets under the name, signature and spacing rule `rich` wraps static text by.
 
-    `WrappedDocument` reads `compute_wrap_offsets` as a module global and offers no hook of
-    its own, so that name is the whole seam - and both of its call sites read it, so
-    replacing it is complete.
+    The tab stop is the conventional 8 and is never read: `Content` expands every tab before
+    it calls this, so no text arriving here holds one.
+    """
+    return compute_wrap_offsets(text, width, 8, fold, hang=True)
+
+
+def install() -> None:
+    """Put this wrapper in front of the two Textual wraps at once.
+
+    Textual wraps text in two places that share nothing. An editor goes through
+    `WrappedDocument`, which reads `compute_wrap_offsets` as a module global; everything
+    else - a `Static`, a `Label`, the review screen's answers - goes through `Content`,
+    which holds its own import of `rich`'s `divide_line` and reads that. Neither offers a
+    hook, so the names are the seam, and both have to be replaced: patching only the editor
+    left the review screen folding a hostname in half on the last screen before a write.
+
+    What this does not reach, deliberately: `inline.py` calls `rich`'s `divide_line` by
+    the name it imported, so an option list keeps folding the way the count that reserves
+    its height measures it, and the two cannot disagree.
+
+    What it does reach, and must: every caption on the survey. Only a conditional question's
+    caption is pre-wrapped by `textwrap`, because its tree connector has to be carried down
+    the lines it wraps onto; every other caption is handed over whole and wrapped here, in a
+    box three lines tall - which is the box a line ending one word short overflows.
     """
     _wrapped_document.compute_wrap_offsets = compute_wrap_offsets
+    content.divide_line = divide_line

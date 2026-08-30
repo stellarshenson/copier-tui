@@ -11,12 +11,18 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
+import pytest
 from rich.cells import cell_len
+from textual import content
+from textual.widgets import Static, TextArea
 
+from copier_tui import inline
 from copier_tui.app import SurveyApp
+from copier_tui.screens import ReviewScreen
 from copier_tui.widgets import WrapInput
-from copier_tui.wrapping import compute_wrap_offsets
+from copier_tui.wrapping import compute_wrap_offsets, divide_line
 from copier_ui import TemplateUI
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
@@ -26,6 +32,19 @@ HOSTS = (
     "*.lab.stellars-tech.eu,lab.stellars-tech.eu"
 )
 """The answer that reported this: seven values, not one space between them."""
+
+
+def _rich_lines(text: str, width: int) -> list[str]:
+    """The lines rich itself draws `text` on, as the thing static text is measured against."""
+    from rich._wrap import divide_line as rich_divide
+
+    lines = []
+    start = 0
+    for offset in rich_divide(text, width, fold=True):
+        lines.append(text[start:offset])
+        start = offset
+    lines.append(text[start:])
+    return lines
 
 
 def wrapped(text: str, width: int) -> list[str]:
@@ -151,3 +170,218 @@ def test_the_wrapper_answers_the_calls_textual_makes_of_it() -> None:
     assert wrapped("ab\tcdef ghij", 8) == ["ab\t", "cdef ", "ghij"]
 
     assert compute_wrap_offsets("aaaa bbbbbbbb cc", 4, tab_size=4, fold=False) == [5, 14]
+
+
+@asynccontextmanager
+async def prefilled(dst: Path, value: str, size: tuple[int, int]) -> AsyncIterator[Any]:
+    """A survey over a one-question template whose answer is already `value`.
+
+    Written as a template default rather than typed, because that is the path that carries a
+    long answer in practice - a Jinja default, `--data`, or `recopy` seeding from the answers
+    file - and the one where the control opens holding more than fits.
+    """
+    (dst / "template").mkdir(parents=True)
+    (dst / "template" / "README.md").write_text("x\n")
+    (dst / "copier.yml").write_text(
+        f'_subdirectory: template\nhosts:\n  type: str\n  default: "{value}"\n'
+    )
+    with TemplateUI.from_template(str(dst), dst=dst / "out") as ui:
+        app = SurveyApp(ui, dst / "out", {"quiet": True, "unsafe": True})
+        async with app.run_test(size=size) as pilot:
+            await pilot.pause()
+            yield app, pilot
+
+
+@pytest.mark.parametrize("size", [(100, 40), (70, 40), (60, 40)])
+async def test_the_answer_box_is_as_tall_as_the_answer_needs(
+    size: tuple[int, int], tmp_path: Path
+) -> None:
+    """ACC-TUI-135: the box shows every line it wraps onto, and shows them from the first.
+
+    It used to stop at three, which cost the reader the rest - and cost them the head rather
+    than the tail, because the cursor opens at the end of a prefilled value, so the box was
+    already scrolled past the beginning before anything was typed. Both go away together:
+    a box the height of its own content has nothing to scroll.
+    """
+    async with prefilled(tmp_path, HOSTS, size) as (app, _):
+        control = app.screen.query_one("#ctl-hosts", WrapInput)
+        sections = control.wrapped_document.get_sections(0)
+
+        assert control.size.height == len(sections), "the box is not the height of its answer"
+        assert control.scroll_offset.y == 0, "the box opened past the start of the answer"
+
+
+async def test_a_document_answer_keeps_its_cap(tmp_path: Path) -> None:
+    """The exception: a multiline answer is scrolled, not grown.
+
+    An answer is a sentence and is read whole; a `multiline` or `type: json` answer is a
+    document, and letting one grow without limit pushes every question below it off the form.
+    """
+    (tmp_path / "template").mkdir(parents=True)
+    (tmp_path / "template" / "README.md").write_text("x\n")
+    (tmp_path / "copier.yml").write_text(
+        "_subdirectory: template\n"
+        'notes:\n  type: str\n  multiline: true\n  default: "' + r"\n".join("l" * 9) + '"\n'
+    )
+    with TemplateUI.from_template(str(tmp_path), dst=tmp_path / "out") as ui:
+        app = SurveyApp(ui, tmp_path / "out", {"quiet": True, "unsafe": True})
+        async with app.run_test(size=(100, 40)) as pilot:
+            await pilot.pause()
+            editor = app.screen.query_one("#ctl-notes", TextArea)
+
+            assert "field-doc" in editor.classes
+            assert editor.size.height == 6
+            assert editor.virtual_size.height > editor.size.height
+
+
+@pytest.mark.parametrize("size", [(80, 40), (60, 40)])
+async def test_the_review_screen_wraps_on_the_ladder_too(
+    size: tuple[int, int], tmp_path: Path
+) -> None:
+    """The last screen before a write breaks an answer where the writer ended a value.
+
+    Textual wraps in two places that share nothing: an editor through `WrappedDocument`, and
+    every `Static` through `Content`, which holds its own import of rich's `divide_line`.
+    Replacing only the first left the review folding a hostname in half on the one screen
+    whose whole job is to be checked - which is the screen where two hostnames that each look
+    real do the most damage.
+    """
+    async with prefilled(tmp_path, HOSTS, size) as (app, pilot):
+        await pilot.press("enter")
+        await pilot.pause()
+        assert isinstance(app.screen, ReviewScreen)
+
+        value = app.screen.query_one(".review-value", Static)
+        drawn = [
+            "".join(segment.text for segment in value.render_line(row)).rstrip()
+            for row in range(value.size.height)
+        ]
+
+        assert all(line.endswith(",") for line in drawn[:-1]), drawn
+        assert "".join(drawn) == HOSTS
+
+
+def test_the_option_rows_keep_the_wrapper_that_measures_them() -> None:
+    """What the patch deliberately leaves alone.
+
+    An option list folds its chips with rich's own `divide_line` and reserves its height by
+    counting the same folds. Both sides have to move together or the list reserves a height
+    it does not paint, so the module that does the counting keeps the wrapper it counts with.
+    """
+    from rich._wrap import divide_line
+
+    assert inline.divide_line is divide_line
+    assert content.divide_line is not divide_line
+
+
+def test_static_text_hangs_its_trailing_space_the_way_rich_does() -> None:
+    """A line's trailing space hangs past the edge rather than taking a cell of it.
+
+    Counted, a word ending exactly at the edge is pushed to the next line and every line
+    comes out one word short. Over the three-line caption box that costs the last line: at a
+    60-column terminal the caption gutter is 30 cells, and this question wrapped to four
+    lines where rich wraps it to three, so `exported skills)` was cut off the question the
+    reader is being asked.
+    """
+    caption = (
+        "Scaffold an agents/ folder for deployable agentic resources (workflows, exported skills)"
+    )
+
+    drawn = []
+    start = 0
+    for offset in divide_line(caption, 30):
+        drawn.append(caption[start:offset])
+        start = offset
+    drawn.append(caption[start:])
+
+    assert drawn == [
+        "Scaffold an agents/ folder for ",
+        "deployable agentic resources ",
+        "(workflows, exported skills)",
+    ]
+    assert drawn == _rich_lines(caption, 30)
+
+
+def test_an_editor_still_counts_the_space_its_cursor_can_sit_on() -> None:
+    """The hanging rule is the static text convention and stops there.
+
+    Textual measures an editor's box with the trailing space counted, and the cursor can be
+    put on it, so the wrapper Textual's own document reads keeps counting it. The two
+    conventions belong to two hosts, not to two opinions.
+    """
+    assert wrapped("aaa bbbb cc", 8) == ["aaa ", "bbbb cc"]
+    assert _rich_lines("aaa bbbb cc", 8) == ["aaa bbbb ", "cc"]
+
+
+@pytest.mark.parametrize("chars", [250, 600])
+async def test_typing_past_the_fold_brings_the_form_with_it(chars: int, tmp_path: Path) -> None:
+    """ACC-TUI-135's other half: the row grows with the answer AND the form scrolls.
+
+    A box is as tall as its answer, so the caret's row is a row of the form and the box has
+    nothing left to scroll. Textual scrolls a widget into view when the focus moves and never
+    again, so at 60x18 a 250-character answer put the typed characters on no row at all -
+    they were in the value and nowhere on screen. The height tests run at 40 rows, which is
+    why nothing else in the suite can see this.
+    """
+    words = "machine learning pipeline predicting customer churn behavioural telemetry "
+    (tmp_path / "template").mkdir(parents=True)
+    (tmp_path / "template" / "README.md").write_text("x\n")
+    (tmp_path / "copier.yml").write_text(
+        "_subdirectory: template\n"
+        f'description:\n  type: str\n  default: "{(words * 9)[:chars].strip()}"\n'
+    )
+    with TemplateUI.from_template(str(tmp_path), dst=tmp_path / "out") as ui:
+        app = SurveyApp(ui, tmp_path / "out", {"quiet": True, "unsafe": True})
+        async with app.run_test(size=(60, 18)) as pilot:
+            await pilot.pause()
+            control = app.screen.query_one("#ctl-description", WrapInput)
+            form = app.screen.query_one("#survey-form")
+            control.focus()
+            await pilot.pause()
+            control.move_cursor(control.document.end)
+            await pilot.pause()
+
+            await pilot.press("X")
+            await pilot.pause()
+
+            view = form.content_region
+            caret = control.cursor_screen_offset.y
+            assert control.size.height > view.height, "the answer is not taller than the form"
+            assert view.y <= caret < view.bottom, (
+                f"caret at {caret}, form shows {view.y}-{view.bottom - 1}"
+            )
+
+
+async def test_an_editor_nobody_is_typing_in_does_not_drag_the_form(tmp_path: Path) -> None:
+    """The scroll follows the caret only while the editor has the focus.
+
+    `FieldRow.update` rewrites every control whenever any answer changes, which puts each
+    editor's caret back at the end of its own value. Unguarded, every one of those pulled the
+    form to a row nobody was looking at, and walking the form stopped keeping its place.
+    """
+    words = "machine learning pipeline predicting customer churn behavioural telemetry "
+    (tmp_path / "template").mkdir(parents=True)
+    (tmp_path / "template" / "README.md").write_text("x\n")
+    (tmp_path / "copier.yml").write_text(
+        "_subdirectory: template\n"
+        "top:\n  type: str\n  default: short\n"
+        f'far:\n  type: str\n  default: "{(words * 9)[:400].strip()}"\n'
+    )
+    with TemplateUI.from_template(str(tmp_path), dst=tmp_path / "out") as ui:
+        app = SurveyApp(ui, tmp_path / "out", {"quiet": True, "unsafe": True})
+        async with app.run_test(size=(60, 18)) as pilot:
+            await pilot.pause()
+            top = app.screen.query_one("#ctl-top", WrapInput)
+            far = app.screen.query_one("#ctl-far", WrapInput)
+            form = app.screen.query_one("#survey-form")
+            top.focus()
+            await pilot.pause()
+            resting = form.scroll_offset.y
+
+            # the caret of the long unfocused answer, put back where FieldRow.update puts it
+            far.move_cursor(far.document.end)
+            far.scroll_cursor_visible()
+            await pilot.pause()
+
+            assert far.size.height > form.content_region.height, "the other answer is not long"
+            assert form.scroll_offset.y == resting, "an unfocused editor moved the form"

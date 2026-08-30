@@ -19,6 +19,7 @@ from rich.text import Text
 from textual import events
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
+from textual.geometry import Offset
 from textual.message import Message
 from textual.timer import Timer
 from textual.widget import Widget
@@ -48,13 +49,15 @@ from copier_tui.theme import (
     TEXT,
     TEXT_MUTED,
     TEXT_SUBTLE,
-    VALUE_LINES,
 )
 from copier_tui.wrapping import install as install_wrapping
 from copier_ui import FieldState, Kind, Question
 
 install_wrapping()
-"""Every control that wraps is built here, so Textual's wrapper is replaced before any is."""
+"""Both of Textual's wraps are replaced here, before the first control is built.
+
+The editors are built in this module and the static text is drawn from it, so this is the
+last point common to both."""
 
 BRANCH_MORE = "\u251c\u2500 "
 BRANCH_LAST = "\u2514\u2500 "
@@ -140,6 +143,43 @@ class WrapInput(TextArea):
             return
         await super()._on_key(event)
 
+    def scroll_cursor_visible(self, center: bool = False, animate: bool = False) -> Offset:
+        """Bring the caret onto the screen, scrolling the form when the box cannot.
+
+        A box is as tall as its answer, so the caret's row is a row of the form, not of the
+        box - and the box has nothing left to scroll. Textual scrolls a widget into view when
+        the focus moves and never again, so typing past the fold wrote characters onto no row
+        at all: the text was in the answer and nowhere on screen. It bites twice, and the
+        second is why capping the height does not fix it - a box that fits the form still puts
+        its last line below the form's last row when the rows above it fill the rest.
+
+        Only while this editor has the focus. `FieldRow.update` rewrites every control on any
+        change, which puts the caret back at the end of editors nobody is typing in; without
+        the guard each of those dragged the form off to its own row.
+        """
+        offset = super().scroll_cursor_visible(center, animate)
+        if not self.has_focus:
+            return offset
+        # the walk ends at the app, which is a node rather than a widget and answers no
+        # question about scrolling
+        form = next(
+            (
+                node
+                for node in self.ancestors
+                if isinstance(node, Widget) and node.allow_vertical_scroll
+            ),
+            None,
+        )
+        if form is None:
+            return offset
+        caret = self.cursor_screen_offset.y
+        view = form.content_region
+        if caret < view.y:
+            form.scroll_to(y=form.scroll_offset.y - (view.y - caret), animate=animate)
+        elif caret >= view.bottom:
+            form.scroll_to(y=form.scroll_offset.y + (caret - view.bottom + 1), animate=animate)
+        return offset
+
 
 def _as_text(value: Any) -> str:
     """Render a field value as editable text."""
@@ -223,7 +263,13 @@ def control_for(question: Question, field: FieldState) -> Widget:
     if widget is WrapInput:
         return WrapInput(_as_text(field.value), id=control_id)
     if widget is TextArea:
-        return TextArea(_as_text(field.value), soft_wrap=True, compact=True, id=control_id)
+        return TextArea(
+            _as_text(field.value),
+            soft_wrap=True,
+            compact=True,
+            id=control_id,
+            classes="field-doc",
+        )
     return Input(
         value=_as_text(field.value),
         password=question.secret,
@@ -269,11 +315,6 @@ class HeaderBar(Horizontal):
         a narrow one, where the stylesheet's own ellipsis took the tail instead. The width is
         known here and nowhere earlier, so this is where the decision belongs.
         """
-        self.query_one("#hdr-title", Static).update(self._title())
-
-    def set_context(self, context: str) -> None:
-        """Rewrite the context - which screen this is, and on the survey which template."""
-        self._label_context = context
         self.query_one("#hdr-title", Static).update(self._title())
 
     def set_position(self, position: str) -> None:
@@ -433,11 +474,18 @@ class FieldRow(Vertical):
         color: {TEXT_SUBTLE};
     }}
     FieldRow > .field-head > TextArea {{
+        /* every editor is as tall as what it holds: an answer that wraps onto five lines
+           gets five, one that wraps onto ten gets ten. A cap here scrolled the rest out of
+           sight, and a prefilled answer taller than the cap opened showing its tail,
+           because the cursor starts at the end of the value - so the one field whose whole
+           point is to be read back before the write was the one that could not be. */
         height: auto;
-        max-height: 6;
     }}
-    FieldRow > .field-head > WrapInput {{
-        max-height: {VALUE_LINES};
+    FieldRow > .field-head > .field-doc {{
+        /* the exception: a multiline or structured answer is a document, not a sentence,
+           and is written and read by scrolling. Left uncapped it would push every question
+           below it off the form. */
+        max-height: 6;
     }}
     FieldRow > .field-help {{
         display: none;

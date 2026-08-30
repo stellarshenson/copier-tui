@@ -250,14 +250,6 @@ captions that need it, since a row is `height: auto`."""
 HELP_LINES = 2
 """Lines the focused row gives its help. Two holds about 90 characters at this gutter."""
 
-VALUE_LINES = 3
-"""Lines a free-text answer may wrap onto before it scrolls.
-
-The value column is what the gutter leaves, about 40 columns at 100, so a one-sentence
-project description needs three of them. Three is what the reference template's longest
-demo answer takes; a fourth would cost a row on every long field to catch an outlier."""
-
-
 THEME = Theme(
     name="copier-tui",
     primary=CYAN,

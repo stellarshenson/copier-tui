@@ -826,6 +826,7 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
   - log: 2026-08-24T00:00:00Z @kj closed: built - tests/unit/test_tui_survey.py, test_tui_widgets.py, test_tui_flow.py (v0.6.9)
   - log: 2026-08-29T13:27:34Z @kj edited importance
   - log: 2026-08-29T13:28:34Z @kj edited test (added) and test-tags (added) and evidence (added)
+  - log: 2026-08-29T16:14:59Z @kj superseded in part: the three-line limit in this criterion is replaced by ACC-TUI-135, which shows every line an answer wraps onto; the rest of this criterion - a free-text answer wraps within its column rather than scrolling out of a one-line box - still stands, and its evidence describes what was built in v0.6.9
 - [x] `ACC-TUI-95` **Defaults are not de-emphasised** - LOW; an untouched default is rendered no dimmer than an answer the user gave and carries no warning glyph - it is the answer most in need of checking, and de-emphasis is concealment rather than styling
   - evidence: built - tests/unit/test_tui_survey.py, test_tui_widgets.py, test_tui_flow.py (v0.6.9)
   - test-tags: UNIT
@@ -1169,3 +1170,8 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
   - test-tags: UNIT
   - log: 2026-08-29T13:46:16Z @kj added
   - log: 2026-08-29T13:46:23Z @kj closed
+- [ ] `ACC-TUI-135` **an answer box is as tall as its answer needs** - MEDIUM; a free-text answer shows every line it wraps onto - five where it wraps to five, ten where it wraps to ten - rather than a fixed three with the rest scrolled out of sight; the row grows with the answer and the form scrolls; the structured editor keeps a cap of its own, being multiline by nature and holding a document rather than a sentence; `packages/copier-tui/src/copier_tui/widgets.py`, `packages/copier-tui/src/copier_tui/theme.py`
+  - related: ACC-TUI-94 - the criterion whose three-line limit this replaces
+  - test: put a value that wraps to five lines into a string question and compare the control's height with the number of lines it wraps onto
+  - test-tags: UNIT
+  - log: 2026-08-29T16:14:53Z @kj added

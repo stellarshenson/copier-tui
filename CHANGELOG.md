@@ -2,6 +2,14 @@
 
 `copier-ui` and `copier-tui` share one version and are published to PyPI in lockstep, so every entry below covers both packages.
 
+## v1.0.24 (2026-08-30) - Answer boxes as tall as their answers
+
+- An answer box now shows every line its answer wraps onto instead of stopping at three; the six-line cap survives only on the multiline and structured editors, which carry a scrollbar of their own
+- The review screen wraps the way the survey does: the word-aware wrapper replaces Textual's `content.divide_line` as well as the editor's, so an answer read back breaks at the same boundaries it did while it was typed
+- A line's trailing whitespace no longer counts against the box width, which had been costing every wrapped line its last word
+- Typing past the fold of a tall answer scrolls the form to keep the caret in view
+- Before drawing its first frame the survey clears a scroll region or origin mode a previous program left behind, between a cursor save and restore, so the shell prompt comes back where it was rather than over the scrollback
+
 ## v1.0.23 (2026-08-29) - Word-aware wrapping in the answer boxes
 
 - A long answer now breaks at natural boundaries rather than being folded one character at a time: a space or a comma first, the token's own `-`, `.` or `/` only where the line offers neither, and the character fold only where it offers none of them
