@@ -11,6 +11,7 @@ import ast
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+import re
 from textwrap import wrap
 from typing import Any
 import unicodedata
@@ -21,46 +22,29 @@ from textual.widgets import Static
 
 from copier_tui import __version__, inline
 from copier_tui.app import SurveyApp
-from copier_tui.inline import CURSOR, FREE, TAKEN, InlineOptions
+from copier_tui.inline import FREE, TAKEN, InlineOptions
 from copier_tui.screens import SurveyScreen
-from copier_tui.theme import (
-    ANSWER_FG,
-    ANSWER_FOCUS_FG,
-    CURSOR_BG,
-    CURSOR_FG,
-    CURSOR_PICKED_BG,
-    CURSOR_PICKED_FG,
-    CYAN_BRIGHT,
-    FIELD_ALT_BG,
-    FIELD_ALT_COND_BG,
-    FIELD_BG,
-    FIELD_COND_BG,
-    FIELD_COND_FOCUS_BG,
-    FIELD_FOCUS_BG,
-    MARK_SHADES,
-    OPTION_BG,
-    OPTION_FG,
-    PICKED_BG,
-    PICKED_FG,
-    PULSE_CYCLE,
-    PULSE_INTERVAL,
-    PULSE_SHADES,
-    ROW_ALT_BG,
-    ROW_ALT_COND_BG,
-    ROW_BG,
-    ROW_COND_BG,
-    ROW_COND_FOCUS_BG,
-    ROW_FOCUS_BG,
-    SURFACE_BG,
-)
+from copier_tui.theme import PALETTES, PULSE_CYCLE, PULSE_INTERVAL, THEMES, pulse_shades
 from copier_tui.widgets import BRANCH_LAST, BRANCH_MORE, RAIL, FieldRow
 from copier_ui import TemplateUI
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
-REFERENCE = Path("/home/lab/workspace/private/copier-data-science")
+REFERENCE = Path("/home/lab/workspace/private/copier-projects/copier-data-science")
 
 BAND = "row-alt"
 """The class the survey puts on every second visible row."""
+
+MODES = ("dark", "light")
+"""The two themes. A test of a rule the palette states runs in both."""
+
+P = PALETTES["dark"]
+"""The palette a test reads when it does not name a theme: the theme a survey opens in."""
+
+RESTING = ("row", "row-alt", "row-cond", "row-alt-cond")
+CURRENT = ("row-focus", "row-cond-focus")
+ROW_GROUNDS = (*RESTING, *CURRENT)
+"""Every ground a row can have, by role: two bands, each band on a conditional row, and the
+two the cursor takes."""
 
 
 @asynccontextmanager
@@ -69,10 +53,11 @@ async def survey(
     template: str = "tui_flow",
     size: tuple[int, int] = (100, 40),
     data: dict[str, Any] | None = None,
+    mode: str = "dark",
 ) -> AsyncIterator[tuple[SurveyApp, Any]]:
     """A running survey over a fixture template, paused on its first screen."""
     with TemplateUI.from_template(str(FIXTURES / template), dst=dst, data=data) as ui:
-        app = SurveyApp(ui, dst, {"quiet": True, "unsafe": True})
+        app = SurveyApp(ui, dst, {"quiet": True, "unsafe": True}, THEMES[mode].name)
         async with app.run_test(size=size) as pilot:
             await pilot.pause()
             yield app, pilot
@@ -92,12 +77,12 @@ def option_grounds(options: InlineOptions) -> dict[str, str]:
     """Map each option's label to the background it is painted on.
 
     Read off the painted strip rather than the source Text, and matched on the label alone -
-    a chip also carries its cursor mark and its filled-or-empty circle.
+    a chip also carries its filled-or-empty circle.
     """
     grounds: dict[str, str] = {}
     for line in range(max(1, options.size.height)):
         for segment in options.render_line(line):
-            label = segment.text.strip(f" {TAKEN}{FREE}{CURSOR}")
+            label = segment.text.strip(f" {TAKEN}{FREE}")
             if label and segment.style and segment.style.bgcolor:
                 grounds[label] = segment.style.bgcolor.triplet.hex
     return grounds
@@ -132,27 +117,31 @@ async def test_the_band_restripes_when_a_conditional_question_appears(tmp_path: 
         assert banding(app) == [False, True, False, True]
 
 
-async def test_a_typing_ground_carries_the_band_through_the_control(tmp_path: Path) -> None:
+@pytest.mark.parametrize("mode", MODES)
+async def test_a_typing_ground_carries_the_band_through_the_control(
+    mode: str, tmp_path: Path
+) -> None:
     """Field ground: a text box spans the row, so it takes the band or the stripe vanishes.
 
     Five consecutive text questions otherwise merge into one lit block - the same
     undifferentiated wall the banding exists to break up.
     """
-    async with survey(tmp_path / "out") as (app, _):
+    p = PALETTES[mode]
+    async with survey(tmp_path / "out", mode=mode) as (app, _):
         grounds = {
             row.question.id: row.query_one(f"#ctl-{row.question.id}").styles.background.hex6
             for row in rows(app)
             if row.question.id in {"name", "token"}
         }
         # `name` is the first row and holds the focus on mount, so it wears the focus ground
-        assert grounds["name"].lower() == FIELD_FOCUS_BG.lower()
-        assert grounds["token"].lower() == FIELD_BG.lower()
-        assert FIELD_ALT_BG != FIELD_BG
-        assert ROW_ALT_BG != ROW_BG
+        assert grounds["name"].lower() == p["field-focus"]
+        assert grounds["token"].lower() == p["field"]
+        assert p["field-alt"] != p["field"]
+        assert p["row-alt"] != p["row"]
         # app CSS outranks a widget's default sheet whatever the specificity, so the ground
         # only lands if the rule lives in BASE_CSS - it did not, and the test passed anyway
-        # for as long as FIELD_BG happened to equal the generic Input background
-        assert FIELD_BG != SURFACE_BG
+        # for as long as the field ground happened to equal the generic Input background
+        assert p["field"] != p["surface"]
 
 
 async def test_an_option_row_takes_no_typing_ground(tmp_path: Path) -> None:
@@ -171,8 +160,8 @@ async def test_the_answer_sits_on_a_chip_and_the_alternatives_do_not(tmp_path: P
     async with survey(tmp_path / "out") as (app, _):
         grounds = option_grounds(app.screen.query_one("#ctl-advanced", InlineOptions))
         # no focus here, so the answer wears its resting blue
-        assert grounds["No"] == PICKED_BG
-        assert grounds["Yes"] != PICKED_BG
+        assert grounds["No"] == P["picked"]
+        assert grounds["Yes"] != P["picked"]
 
 
 async def test_a_row_the_answers_rule_out_is_marked_inert(tmp_path: Path) -> None:
@@ -217,29 +206,40 @@ async def test_every_place_the_cursor_stops_is_a_control(tmp_path: Path) -> None
         assert app.screen.query_one("#survey-form").can_focus is False
 
 
-async def test_the_three_option_states_each_have_their_own_ground(tmp_path: Path) -> None:
+@pytest.mark.parametrize("mode", MODES)
+async def test_the_three_option_states_each_have_their_own_ground(
+    mode: str, tmp_path: Path
+) -> None:
     """Option chips: chosen, under the cursor, and passed over are three separate grounds.
 
     The answer is the only one that changes hue, so being chosen is never inferred from which
     neutral is brighter, and nothing is dimmed out of legibility - the options passed over are
     the alternatives being decided against.
+
+    An option passed over has one ground on the row the cursor is on and another elsewhere.
+    The cursor's row is the surface band, which the resting chip is six parts off, so on that
+    row every alternative would otherwise be a label with no chip under it.
     """
-    async with survey(tmp_path / "out") as (app, pilot):
-        app.screen.set_focus(app.screen.query_one("#ctl-advanced", InlineOptions))
-        await pilot.pause()
+    p = PALETTES[mode]
+    async with survey(tmp_path / "out", mode=mode) as (app, pilot):
         options = app.screen.query_one("#ctl-advanced", InlineOptions)
+        assert option_grounds(options)["Yes"] == p["option"]  # the cursor is on another row
+
+        app.screen.set_focus(options)
+        await pilot.pause()
         grounds = option_grounds(options)
-        # the cursor starts on the answer, so that chip shows the cursor's brighter blue
-        assert grounds["No"] == CURSOR_PICKED_BG
-        assert grounds["Yes"] == OPTION_BG
-        assert len({PICKED_BG, CURSOR_PICKED_BG, OPTION_BG, CURSOR_BG}) == 4
+        # the cursor starts on the answer, so that chip shows the cursor's own cyan
+        assert grounds["No"] == p["cursor-picked"]
+        assert grounds["Yes"] == p["option-focus"]
+        chips = {p["picked"], p["cursor-picked"], p["option"], p["option-focus"], p["cursor"]}
+        assert len(chips) == 5
 
         await pilot.press("right")
         await pilot.pause()
         moved = option_grounds(options)
-        assert moved["Yes"] == CURSOR_PICKED_BG
+        assert moved["Yes"] == p["cursor-picked"]
         # left behind by the cursor, the old answer is an ordinary alternative again
-        assert moved["No"] == OPTION_BG
+        assert moved["No"] == p["option-focus"]
 
 
 def option_text(options: InlineOptions) -> str:
@@ -265,23 +265,44 @@ async def test_the_answer_is_a_filled_circle_and_the_rest_are_empty(tmp_path: Pa
         assert painted.count(TAKEN) == 1
 
 
-async def test_the_cursor_shows_even_when_it_sits_on_the_answer(tmp_path: Path) -> None:
+@pytest.mark.parametrize("mode", MODES)
+async def test_the_cursor_shows_even_when_it_sits_on_the_answer(mode: str, tmp_path: Path) -> None:
     """Cursor: where you are and what is chosen are two facts, and both must show at once.
 
-    The cursor starts on the answer every time, so a ground that only says "chosen" leaves
-    the row with nothing to say "and you are here" - the mark carries it instead.
+    The cursor starts on the answer every time. The shape says which option is chosen and the
+    chip's ground says where the cursor is, so the chip under the cursor has a ground no other
+    chip on the row has - on the answer and off it. Nothing is drawn beside the chip: a
+    square used to mark it, from when the two grounds were one shade apart.
     """
-    async with survey(tmp_path / "out") as (app, pilot):
-        options = app.screen.query_one("#ctl-advanced", InlineOptions)
+    p = PALETTES[mode]
+    async with survey(tmp_path / "out", template="tui_kinds", mode=mode) as (app, pilot):
+        options = app.screen.query_one("#ctl-extras", InlineOptions)
         app.screen.set_focus(options)
         await pilot.pause()
-        assert f"{CURSOR} {TAKEN} No" in option_text(options)
+        labels = [choice.label for choice in options.choices]
+        assert options.value == [], "the fixture ticks nothing, so the cursor is off the answer"
 
+        grounds = option_grounds(options)
+        assert grounds[labels[0]] == p["cursor"]
+        assert [grounds[label] for label in labels[1:]] == [p["option-focus"]] * (len(labels) - 1)
+
+        await pilot.press("space")
         await pilot.press("right")
         await pilot.pause()
+        grounds = option_grounds(options)
+        # ticked and left behind: chosen, on the row the cursor is on
+        assert grounds[labels[0]] == p["picked-focus"]
+        assert grounds[labels[1]] == p["cursor"]
+
+        await pilot.press("left")
+        await pilot.pause()
+        assert option_grounds(options)[labels[0]] == p["cursor-picked"]
+
         painted = option_text(options)
-        assert f"{CURSOR} {TAKEN} Yes" in painted
-        assert painted.count(CURSOR) == 1
+        assert painted.count(TAKEN) == 1
+        assert "\u25fc" not in painted, "the square beside the cursor's chip is gone"
+        # the first chip starts in the control's first cell: no cell is kept for a mark
+        assert painted.startswith(f" {TAKEN} {labels[0]} ")
 
 
 async def test_short_options_share_a_line(tmp_path: Path) -> None:
@@ -350,14 +371,16 @@ async def test_the_focus_bar_breathes_while_the_cursor_rests_on_a_question(
         assert shade("advanced") is not None
 
 
-def test_the_breath_moves_in_steps_too_small_to_see() -> None:
+@pytest.mark.parametrize("mode", MODES)
+def test_the_breath_moves_in_steps_too_small_to_see(mode: str) -> None:
     """Focus bar: consecutive phases are near-identical, so the bar reads as a breath.
 
     Four shades a third of a second apart was a sequence of shades rather than a breath. The
     bound is on the ramp itself because it is what went wrong - a cycle can be any length and
     still look stepped if the colours between its phases are far apart.
     """
-    frames = [PULSE_SHADES[index] for index in PULSE_CYCLE]
+    shades = pulse_shades(mode)
+    frames = [shades[index] for index in PULSE_CYCLE]
     jumps = [
         max(abs(int(a[i : i + 2], 16) - int(b[i : i + 2], 16)) for i in (1, 3, 5))
         for a, b in zip(frames, frames[1:] + frames[:1])
@@ -366,28 +389,41 @@ def test_the_breath_moves_in_steps_too_small_to_see() -> None:
     assert PULSE_INTERVAL * len(PULSE_CYCLE) < 2.5
 
 
-async def test_the_focused_row_leans_its_ground_towards_blue(tmp_path: Path) -> None:
-    """Row ground: the row under the cursor tints its band, on either band.
+@pytest.mark.parametrize("mode", MODES)
+async def test_the_row_under_the_cursor_is_the_reverse_of_the_form(
+    mode: str, tmp_path: Path
+) -> None:
+    """Row ground: the current row is drawn in reversed colours, ground and ink both.
 
-    Small on purpose - the row already carries a breathing bar, a blank line either side and
-    a lit caption. Each tint stays nearer its own band than the other band, so a focused row
-    is never read as a banded one.
+    The row is the only thing that says where the cursor is without moving anything, so it
+    has to be seen at a glance: light with dark ink in the dark theme, dark with light ink in
+    the light one, and at least 7:1 from every band. Lifted onto the surface it stood 1.40:1
+    from them, which was not enough. It is the same ground on either band, so walking the
+    form does not make the current row change shade.
     """
-    async with survey(tmp_path / "out") as (app, pilot):
+    p = PALETTES[mode]
+    async with survey(tmp_path / "out", mode=mode) as (app, pilot):
         grounds = {row.question.id: row.styles.background.hex6.lower() for row in rows(app)}
-        assert grounds["name"] == ROW_FOCUS_BG  # first row, focused on mount
-        assert grounds["token"] == ROW_BG
+        assert grounds["name"] == p["row-focus"]  # first row, focused on mount
+        assert grounds["token"] == p["row"]
 
         app.screen.set_focus(app.screen.query_one("#ctl-advanced", InlineOptions))
         await pilot.pause()
         banded = {row.question.id: row.styles.background.hex6.lower() for row in rows(app)}
-        assert banded["advanced"] == ROW_FOCUS_BG  # one plate, whatever band the row is in
-        assert banded["name"] == ROW_BG
+        assert banded["advanced"] == p["row-focus"]  # one ground, whatever band the row is in
+        assert banded["name"] == p["row"]
 
-        def blue(colour: str) -> int:
-            return int(colour[5:7], 16)
+        caption = app.screen.query_one("#row-advanced .field-label")
+        assert caption.styles.color.hex6.lower() == p["caption-focus"]
 
-        assert blue(ROW_FOCUS_BG) - blue(ROW_BG) < blue(ROW_ALT_BG) - blue(ROW_BG)
+    for current in CURRENT:
+        for band in RESTING:
+            assert contrast(p[current], p[band]) >= 7.0, f"{mode}: {current} against {band}"
+    # reversed: the form is light ink on a dark ground or the other way round, and the
+    # current row is the opposite
+    form_is_dark = _relative_luminance(p["row"]) < _relative_luminance(p["text"])
+    row_is_dark = _relative_luminance(p["row-focus"]) < _relative_luminance(p["caption-focus"])
+    assert row_is_dark is not form_is_dark
 
 
 async def test_a_conditional_row_leans_green_and_hangs_off_its_answer(tmp_path: Path) -> None:
@@ -406,16 +442,16 @@ async def test_a_conditional_row_leans_green_and_hangs_off_its_answer(tmp_path: 
         assert marked == {"detail"}
 
         by_id = {row.question.id: row for row in rows(app)}
-        assert by_id["detail"].styles.background.hex6.lower() == ROW_COND_BG
-        assert by_id["token"].styles.background.hex6.lower() == ROW_ALT_BG
+        assert by_id["detail"].styles.background.hex6.lower() == P["row-cond"]
+        assert by_id["token"].styles.background.hex6.lower() == P["row-alt"]
         # the control spans the row, so a neutral typing ground would cut the tint in half
         # across the widest part of the question
         assert (
             by_id["detail"].query_one("#ctl-detail").styles.background.hex6.lower()
-            == FIELD_COND_BG
+            == P["field-cond"]
         )
         assert (
-            by_id["token"].query_one("#ctl-token").styles.background.hex6.lower() == FIELD_ALT_BG
+            by_id["token"].query_one("#ctl-token").styles.background.hex6.lower() == P["field-alt"]
         )
 
         def caption(field_id: str) -> str:
@@ -425,38 +461,65 @@ async def test_a_conditional_row_leans_green_and_hangs_off_its_answer(tmp_path: 
         assert not caption("token").startswith((BRANCH_LAST, BRANCH_MORE))
 
 
-def test_the_two_row_tints_lean_on_different_channels() -> None:
-    """Row ground: focus leans blue and a conditional question leans green, by construction.
+@pytest.mark.parametrize("mode", MODES)
+async def test_the_caret_is_drawn_in_the_colours_of_the_field_it_is_in(
+    mode: str, tmp_path: Path
+) -> None:
+    """Field ground: the caret and a selection use the current row's colours, not the theme's.
 
-    Two tints a few parts apart on one channel are one tint the reader cannot place, so the
-    axes are asserted rather than the hexes - either lean may be retuned, but not onto the
-    other's channel.
-
-    The focus lean is measured from the first band alone, because there is one focus ground
-    and not one per band: the plate under the cursor is the thing the reader is watching, and
-    a plate that changed shade with the banding flickered on every press of an arrow.
+    The field being typed into is on the row under the cursor, whose colours are the other
+    theme's. Textual colours a caret from the theme's own foreground and background, which on
+    that field is a light block on white in the dark theme and a dark block on slate in the
+    light one. The caret is a block in the answer's ink and a selection is the cursor chip's
+    pair, on the wrapping editor and on the one-line input alike.
     """
+    p = PALETTES[mode]
+    async with survey(tmp_path / "out", template="tui_kinds", mode=mode) as (app, pilot):
+        for field_id, part in (("text", "text-area"), ("count", "input")):
+            control = app.screen.query_one(f"#ctl-{field_id}")
+            app.screen.set_focus(control)
+            await pilot.pause()
+            assert control.styles.background.hex6.lower() == p["field-focus"]
+            caret = control.get_component_styles(f"{part}--cursor")
+            assert caret.background.hex6.lower() == p["answer-focus"], field_id
+            assert caret.color.hex6.lower() == p["field-focus"], field_id
+            selection = control.get_component_styles(f"{part}--selection")
+            assert selection.background.hex6.lower() == p["cursor"], field_id
+            assert selection.color.hex6.lower() == p["cursor-ink"], field_id
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_the_cursor_and_the_condition_are_told_by_different_properties(mode: str) -> None:
+    """Row ground: the cursor changes how light a row is, a condition changes its hue.
+
+    Two cues on one property are one cue the reader cannot place, so the properties are
+    asserted rather than the hexes - either may be retuned, but not onto the other's.
+
+    A conditional row leans green and stays as light as its band: under 1.1:1 against it,
+    where the current row is at least 1.2:1 against every band. The lean survives the cursor,
+    so the conditional current row is green of the plain current row and about as light.
+    """
+    p = PALETTES[mode]
 
     def channels(colour: str) -> tuple[int, int, int]:
         return tuple(int(colour[i : i + 2], 16) for i in (1, 3, 5))
 
-    _, base_green, base_blue = channels(ROW_BG)
-    _, focus_green, focus_blue = channels(ROW_FOCUS_BG)
-    assert focus_blue > base_blue and focus_green - base_green <= 1
-
-    for band, cond in ((ROW_BG, ROW_COND_BG), (ROW_ALT_BG, ROW_ALT_COND_BG)):
-        _, band_green, band_blue = channels(band)
-        _, cond_green, cond_blue = channels(cond)
+    for band, cond in (("row", "row-cond"), ("row-alt", "row-alt-cond")):
+        _, band_green, band_blue = channels(p[band])
+        _, cond_green, cond_blue = channels(p[cond])
         assert cond_green > band_green and cond_blue < band_blue
+        assert contrast(p[cond], p[band]) < 1.1
 
-    # the conditional lean survives the cursor, on the same axes and by the same amounts
-    _, cond_focus_green, cond_focus_blue = channels(ROW_COND_FOCUS_BG)
-    assert cond_focus_green - focus_green == 8
-    assert focus_blue - cond_focus_blue == 6
+    _, focus_green, focus_blue = channels(p["row-focus"])
+    _, cond_focus_green, cond_focus_blue = channels(p["row-cond-focus"])
+    assert cond_focus_green > focus_green and cond_focus_blue < focus_blue
+    assert cond_focus_green > cond_focus_blue  # it reads green, where the plain one reads blue
+    assert contrast(p["row-cond-focus"], p["row-focus"]) < 1.1
 
 
+@pytest.mark.parametrize("mode", MODES)
 async def test_a_banded_conditional_row_still_yields_its_grounds_to_the_cursor(
-    tmp_path: Path,
+    mode: str, tmp_path: Path
 ) -> None:
     """Row ground: the cursor wins on a row wearing both classes, ground and control alike.
 
@@ -465,7 +528,8 @@ async def test_a_banded_conditional_row_still_yields_its_grounds_to_the_cursor(
     keeps its conditional tint and stops looking focused. The fixture's one conditional
     question always lands on the plain band, so the band is put on it here.
     """
-    async with survey(tmp_path / "out") as (app, pilot):
+    p = PALETTES[mode]
+    async with survey(tmp_path / "out", mode=mode) as (app, pilot):
         app.screen.set_focus(app.screen.query_one("#ctl-advanced", InlineOptions))
         await pilot.press("right")
         await pilot.pause()
@@ -473,41 +537,39 @@ async def test_a_banded_conditional_row_still_yields_its_grounds_to_the_cursor(
         row = {r.question.id: r for r in rows(app)}["detail"]
         row.add_class(BAND)
         await pilot.pause()
-        assert row.styles.background.hex6.lower() == ROW_ALT_COND_BG
-        assert row.query_one("#ctl-detail").styles.background.hex6.lower() == FIELD_ALT_COND_BG
+        assert row.styles.background.hex6.lower() == p["row-alt-cond"]
+        assert row.query_one("#ctl-detail").styles.background.hex6.lower() == p["field-alt-cond"]
 
         app.screen.set_focus(row.query_one("#ctl-detail"))
         await pilot.pause()
-        assert row.styles.background.hex6.lower() == ROW_COND_FOCUS_BG
+        assert row.styles.background.hex6.lower() == p["row-cond-focus"]
         ground = row.query_one("#ctl-detail").styles.background.hex6.lower()
-        assert ground == FIELD_COND_FOCUS_BG
+        assert ground == p["field-cond-focus"]
 
 
-async def test_the_focused_row_paints_the_blank_line_either_side_of_itself(
-    tmp_path: Path,
-) -> None:
-    """Row ground: the spacing around the focused row belongs to the row, not to the gap.
+async def test_no_row_moves_when_the_cursor_moves(tmp_path: Path) -> None:
+    """Row size: the row under the cursor is as tall as it is anywhere else.
 
-    The blank lines are two widgets of the row's own rather than margin or padding. Margin
-    sits outside the widget, so it took the form's ground and cut the plate into a strip with
-    the screen showing through; padding took the ground but stayed empty, and a run of
-    children has to cross it.
+    The current row used to open a blank line above and below itself, so every row under the
+    cursor moved down by two on each press of an arrow and back up on the next. None of the
+    three questions here prints help, so each is one line with the cursor on it and one line
+    without, and every row stays on the line it started on.
     """
-    async with survey(tmp_path / "out") as (app, _):
-        row = rows(app)[0]  # `name`, focused on mount
-        rails = list(row.query(".field-rail"))
-        assert len(rails) == 2
-        assert all(rail.display for rail in rails)
-        assert row.styles.margin.top == 0
-        assert row.region.height == 3
+    async with survey(tmp_path / "out") as (app, pilot):
+        before = {row.question.id: row.region.y for row in rows(app)}
+        for row in rows(app):
+            app.screen.set_focus(row.query_one(f"#ctl-{row.question.id}"))
+            await pilot.pause()
+            assert row.region.height == 1, f"{row.question.id} is {row.region.height} rows tall"
+            assert row.region.height == row.query_one(".field-head").region.height
+            assert {r.question.id: r.region.y for r in rows(app)} == before
 
-        painted = {
-            segment.style.bgcolor.triplet.hex.lower()
-            for line in range(row.region.height)
-            for segment in row.render_line(line)
-            if segment.style and segment.style.bgcolor
-        }
-        assert painted == {ROW_FOCUS_BG}
+            painted = {
+                segment.style.bgcolor.triplet.hex.lower()
+                for segment in row.render_line(0)
+                if segment.style and segment.style.bgcolor
+            }
+            assert painted == {P["row-focus"]}
 
 
 async def test_children_of_one_answer_are_drawn_as_a_run(tmp_path: Path) -> None:
@@ -565,62 +627,107 @@ async def test_a_wrapped_child_caption_hangs_off_its_connector(tmp_path: Path) -
         assert not any(line.startswith("\u2502") for line in captions["region"][1:])
 
 
-async def test_the_run_crosses_the_blank_line_the_cursor_opens(tmp_path: Path) -> None:
-    """Tree connectors: the spacing around the focused row does not break the run.
+async def test_the_cursor_opens_no_gap_inside_a_run(tmp_path: Path) -> None:
+    """Tree connectors: a child with the cursor on it still touches the rows around it.
 
-    The blank line the cursor opens either side of itself landed in the middle of a run of
-    children and cut the column the connectors are read down. It carries the run now, and
-    only where the run actually crosses it - the row above being a sibling or the question
-    the child hangs from, and never below a last child.
+    The connector column is read down the captions, so it is unbroken exactly when each row
+    of a run starts on the line after the one before it ends. The blank line the cursor used
+    to open either side of itself landed inside the run and had to carry a rail across; no
+    line opens now, so there is nothing to cross.
     """
     async with survey(tmp_path / "out", template="tui_tree") as (app, pilot):
+        by_id = {row.question.id: row for row in rows(app)}
+        for field_id in ("bucket", "region"):
+            app.screen.set_focus(app.screen.query_one(f"#ctl-{field_id}"))
+            await pilot.pause()
+            assert by_id["bucket"].region.y == by_id["storage"].region.bottom
+            assert by_id["region"].region.y == by_id["bucket"].region.bottom
+            head = by_id[field_id].query_one(".field-head").region.height
+            assert by_id[field_id].region.height == head
 
-        def rails(field_id: str) -> list[str]:
-            row = {r.question.id: r for r in rows(app)}[field_id]
-            return [str(rail.visual) for rail in row.query(".field-rail")]
 
-        app.screen.set_focus(app.screen.query_one("#ctl-bucket"))
-        await pilot.pause()
-        # the run comes down from the parent directly above, so the first child is not a gap
-        assert rails("bucket") == [RAIL, RAIL]
+async def test_a_child_apart_from_its_answer_draws_no_connector(tmp_path: Path) -> None:
+    """Tree connectors: a child asked for further down the form hangs from nothing.
 
-        app.screen.set_focus(app.screen.query_one("#ctl-region"))
-        await pilot.pause()
-        assert rails("region") == [RAIL, ""]  # the run above a last child, nothing below it
+    A connector joins a row to the row its run starts under. The JupyterLab extension template
+    asks for the extension kind first and for the MIME type fields last, after the repository
+    URL, and their connectors made them read as children of the repository. The row keeps
+    the conditional ground, which is what says it is conditional.
+    """
+    async with survey(tmp_path / "out", template="tui_tree_tall") as (app, _):
+        by_id = {row.question.id: row for row in rows(app)}
+        captions = {
+            field_id: str(row.query_one(".field-label", Static).visual)
+            for field_id, row in by_id.items()
+        }
+        assert list(captions) == ["storage", "bucket", "mode", "region", "owner", "endpoint"]
+        assert captions["region"].startswith(BRANCH_LAST)
+        assert not captions["endpoint"].startswith((BRANCH_MORE, BRANCH_LAST))
+        assert "row-cond" in by_id["endpoint"].classes
+
+
+async def test_the_tree_runs_down_a_row_taller_than_its_caption(tmp_path: Path) -> None:
+    """Tree connectors: the line goes on down the lines a row has under its caption.
+
+    A question whose options stack is several lines tall and its caption is one. The lines
+    under the caption were blank, so the tree stopped at a parent and started again at its
+    first child, and stopped again at every tall child inside the run. The help line of the
+    row the cursor is on is one more line of the row, and the tree crosses it the same way.
+    """
+    async with survey(tmp_path / "out", template="tui_tree_tall") as (app, pilot):
+        by_id = {row.question.id: row for row in rows(app)}
+
+        def under_caption(field_id: str) -> list[tuple[str, str]]:
+            """What shows in the tree's column on each line under the caption, and its ink."""
+            head = by_id[field_id].query_one(".field-head")
+            label = by_id[field_id].query_one(".field-label", Static)
+            shown = []
+            for line in range(label.region.height, head.region.height):
+                at = (head.region.x + 1, head.region.y + line)
+                assert app.screen.get_widget_at(*at)[0] is head, (
+                    f"{field_id}: line {line} is covered"
+                )
+                first = next(iter(head.render_line(line)))
+                shown.append((first.text[:2], first.style.color.triplet.hex.lower()))
+            return shown
 
         app.screen.set_focus(app.screen.query_one("#ctl-owner"))
         await pilot.pause()
-        assert rails("owner") == ["", ""]  # a row in no run at all opens two blank lines
+        for field_id in ("storage", "mode"):
+            lines = under_caption(field_id)
+            assert len(lines) >= 3, f"{field_id} is not taller than its caption"
+            assert set(lines) == {(f" {RAIL}", P["subtle"])}, field_id
+        for field_id in ("region", "owner", "endpoint"):
+            head = by_id[field_id].query_one(".field-head")
+            painted = "".join(segment.text for segment in head.render_line(0))
+            assert RAIL not in painted, f"{field_id} draws a line with nothing under it"
 
-
-async def test_the_cursor_mark_blinks_on_the_bars_clock(tmp_path: Path) -> None:
-    """Focus bar: the mark on the option row takes its colour from the row's own beat.
-
-    Two things breathing on separate timers drift apart and read as two signals rather than
-    one row being answered, so the row drives both and the mark never keeps a beat of its own.
-    """
-    async with survey(tmp_path / "out") as (app, pilot):
-        row = {r.question.id: r for r in rows(app)}["advanced"]
-        app.screen.set_focus(app.screen.query_one("#ctl-advanced", InlineOptions))
+        app.screen.set_focus(app.screen.query_one("#ctl-storage"))
         await pilot.pause()
+        assert set(under_caption("storage")) == {(f" {RAIL}", P["rail-focus"])}
+        crossed = by_id["storage"].query_one(".field-help", Static)
+        assert crossed.display and crossed.styles.border_left[0] == "solid"
+        assert crossed.styles.border_left[1].hex.lower() == P["rail-focus"]
+        assert crossed.region.y == by_id["bucket"].region.y - 1
 
-        def mark_ink() -> str:
-            for line in range(max(1, row.size.height)):
-                for segment in row.query_one("#ctl-advanced", InlineOptions).render_line(line):
-                    if CURSOR in segment.text and segment.style and segment.style.color:
-                        return segment.style.color.triplet.hex.lower()
-            raise AssertionError("the cursor mark was never painted")
+        answer = app.screen.query_one("#ctl-storage")
+        assert crossed.content_region.x == answer.region.x, "the line moved the help text"
 
-        # the beat is driven by hand here: the row's own timer keeps running through an
-        # awaited pause, so a sampled cycle skips phases and misses the ends of the ramp
-        row._pulse.stop()
-        row._beat = 0
-        seen = set()
-        for _ in range(len(PULSE_CYCLE)):
-            row._breathe()
-            await pilot.pause()
-            seen.add(mark_ink())
-        assert seen == {shade.lower() for shade in MARK_SHADES}
+
+@pytest.mark.parametrize("mode", MODES)
+async def test_the_scrollbar_thumb_stands_out_from_its_track(tmp_path: Path, mode: str) -> None:
+    """Scrollbar: the thumb is a mark, and clears 3:1 on its track in both themes.
+
+    A theme that names neither colour gets both derived from its primary and its background:
+    2.06:1 in the dark theme and 1.72:1 in the light one, on the one mark that says the form
+    goes on below the screen.
+    """
+    async with survey(tmp_path / "out", template="tui_kinds", mode=mode) as (app, _):
+        form = app.screen.query_one("#survey-form")
+        thumb = form.styles.scrollbar_color.hex6.lower()
+        track = form.styles.scrollbar_background.hex6.lower()
+        assert (thumb, track) == (PALETTES[mode]["subtle"], PALETTES[mode]["chrome"])
+        assert contrast(thumb, track) >= 3.0
 
 
 def _relative_luminance(colour: str) -> float:
@@ -637,7 +744,8 @@ def contrast(one: str, other: str) -> float:
     return (max(first, second) + 0.05) / (min(first, second) + 0.05)
 
 
-def test_the_cursor_is_told_apart_from_the_option_it_sits_on() -> None:
+@pytest.mark.parametrize("mode", MODES)
+def test_the_cursor_is_told_apart_from_the_option_it_sits_on(mode: str) -> None:
     """Option chips: where the cursor is and what is chosen are separate at a glance.
 
     Both were painted in the same blue a shade apart, which measured 1.32:1 - a reader moving
@@ -646,31 +754,109 @@ def test_the_cursor_is_told_apart_from_the_option_it_sits_on() -> None:
     surfaces apart, and it is asserted rather than eyeballed because the pair that failed it
     looked deliberate: the docstring beside them described an inversion the colours never had.
     """
-    assert contrast(CURSOR_PICKED_BG, PICKED_BG) >= 3.0
-    assert contrast(CURSOR_BG, OPTION_BG) >= 3.0
+    p = PALETTES[mode]
+    # the chips the cursor's chip sits beside are the ones of its own row
+    assert contrast(p["cursor-picked"], p["picked-focus"]) >= 3.0
+    assert contrast(p["cursor"], p["option-focus"]) >= 3.0
 
 
-def test_every_ink_clears_the_floor_on_every_ground_it_lands_on() -> None:
-    """Every pair the palette actually paints, held to 4.5:1 - not only the option chips.
+TEXT_ON = (
+    # captions, answers and option labels, each on the ground it is written on
+    *(("text", ground) for ground in ("screen", "chrome", "surface", *RESTING)),
+    *(("cyan-bright", ground) for ground in ("chrome", "surface", "row", "row-alt")),
+    *(("answer", ground) for ground in ("field", "field-alt", "field-cond", "field-alt-cond")),
+    ("option-ink", "option"),
+    ("picked-ink", "picked"),
+    # the footer, the status lines and the file list
+    *(("muted", ground) for ground in ("screen", "chrome", "surface")),
+    # the destination line, the version, and the caption of a row the answers rule out
+    *(("subtle", ground) for ground in ("screen", "chrome", *RESTING)),
+    # an error under a question the cursor is not on, and the failure text in the banner
+    # and in the file list
+    *(("error", ground) for ground in (*RESTING, "chrome", "surface")),
+    # the row under the cursor: its caption, its help, an error, the answer being typed and
+    # its caret, and the four chips an option can have there
+    *(("caption-focus", ground) for ground in CURRENT),
+    *(("help-focus", ground) for ground in CURRENT),
+    *(("error-focus", ground) for ground in CURRENT),
+    ("answer-focus", "field-focus"),
+    ("answer-focus", "field-cond-focus"),
+    ("option-focus-ink", "option-focus"),
+    ("picked-focus-ink", "picked-focus"),
+    ("cursor-ink", "cursor"),
+    ("cursor-picked-ink", "cursor-picked"),
+    # the verdicts and warnings printed on the screen ground, and the counts in the banner
+    ("rose", "screen"),
+    ("mint", "screen"),
+    ("mint", "chrome"),
+    ("orange", "chrome"),
+    ("amber", "screen"),
+)
+"""Every ink and the grounds it is written on as text, by role. Each pair is held to 4.5:1."""
+
+MARKS_ON = (
+    # the bar beside the current row at rest, and the tree connector on that row
+    *(("bar", ground) for ground in CURRENT),
+    *(("rail-focus", ground) for ground in CURRENT),
+    # the flag of a row the answers rule out
+    *(("amber", ground) for ground in RESTING),
+    # the progress bar on its track
+    ("orange", "surface"),
+    ("mint", "surface"),
+    # the border of the failed banner
+    ("rose", "chrome"),
+)
+"""Every mark that is not text and the grounds it is drawn on. Each pair is held to 3:1."""
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_every_ink_clears_the_floor_on_every_ground_it_lands_on(mode: str) -> None:
+    """Every pair the palette actually paints, in each theme: 4.5:1 for text, 3:1 for a mark.
 
     The typing grounds went unasserted, and one of them drifted below the floor when the
     conditional lean was applied to it: the orange answer measured 4.19:1 on the focused
     conditional field, which is the most important text in the app on the row it is being
     typed into. It was found by a reviewer, not by this suite.
     """
-    for ink, ground in (
-        (CURSOR_PICKED_FG, CURSOR_PICKED_BG),
-        (CURSOR_FG, CURSOR_BG),
-        (PICKED_FG, PICKED_BG),
-        (OPTION_FG, OPTION_BG),
-        (ANSWER_FG, FIELD_BG),
-        (ANSWER_FG, FIELD_ALT_BG),
-        (ANSWER_FG, FIELD_COND_BG),
-        (ANSWER_FG, FIELD_ALT_COND_BG),
-        (ANSWER_FOCUS_FG, FIELD_FOCUS_BG),
-        (ANSWER_FOCUS_FG, FIELD_COND_FOCUS_BG),
-    ):
-        assert contrast(ink, ground) >= 4.5, f"{ink} on {ground} is {contrast(ink, ground):.2f}:1"
+    p = PALETTES[mode]
+    for floor, pairs in ((4.5, TEXT_ON), (3.0, MARKS_ON)):
+        for ink, ground in pairs:
+            measured = contrast(p[ink], p[ground])
+            assert measured >= floor, f"{mode}: {ink} on {ground} is {measured:.2f}:1"
+
+
+def test_both_themes_define_the_same_roles() -> None:
+    """Palette: a role one theme lacks is a variable the stylesheet cannot resolve there."""
+    assert set(PALETTES["dark"]) == set(PALETTES["light"])
+    for mode in MODES:
+        for role, value in PALETTES[mode].items():
+            assert value == value.lower() and len(value) == 7 and value[0] == "#", (mode, role)
+
+
+def test_no_colour_is_written_outside_the_palette() -> None:
+    """Palette: a hex colour in a stylesheet or a style is one theme's colour in both themes.
+
+    Every colour is a role, read from the theme being shown. A literal would be right in the
+    theme it was chosen in and wrong in the other, with nothing reporting it.
+    """
+    package = Path(inline.__file__).parent
+    for source in sorted(package.rglob("*.py")):
+        if source.name == "theme.py":
+            continue
+        found = re.findall(r"#[0-9a-fA-F]{6}\b", source.read_text(encoding="utf-8"))
+        assert not found, f"{source.name} writes {found}"
+
+
+@pytest.mark.parametrize("mode", MODES)
+async def test_the_survey_opens_in_the_theme_it_is_given(mode: str, tmp_path: Path) -> None:
+    """Theme: the grounds on screen are the ones the named theme defines."""
+    p = PALETTES[mode]
+    async with survey(tmp_path / "out", mode=mode) as (app, _):
+        assert app.theme == THEMES[mode].name
+        assert app.screen.styles.background.hex6.lower() == p["screen"]
+        header = app.screen.query_one("#app-header")
+        assert header.styles.background.hex6.lower() == p["chrome"]
+        assert rows(app)[-1].styles.background.hex6.lower() == p["row"]
 
 
 def test_no_new_glyph_the_tui_prints_has_an_ambiguous_width() -> None:
@@ -754,21 +940,23 @@ async def test_the_bar_breathes_on_every_kind_of_row(tmp_path: Path) -> None:
             assert len(seen) > 1, f"the bar is frozen on {id} ({' '.join(classes) or 'plain'})"
 
 
-def test_the_breathing_bar_stays_visible_at_every_phase() -> None:
-    """The bar is a graphical indicator, so its dimmest shade still clears 3:1 on its ground.
+@pytest.mark.parametrize("mode", MODES)
+def test_the_breathing_bar_stays_visible_at_every_phase(mode: str) -> None:
+    """The bar is a graphical indicator, so its weakest shade still clears 3:1 on its ground.
 
     The ramp used to reach `#12648b`: 2.50:1 on the focused ground and 2.34:1 on a conditional
     one. Four shades of seventeen fell under the floor, and the cosine spacing dwells at the
     ends, so the only thing saying which row the cursor is on spent about a fifth of every
     cycle below it. The docstring claimed the opposite, which is why this is asserted.
     """
-    for ground in (ROW_FOCUS_BG, ROW_COND_FOCUS_BG):
-        worst = min(contrast(shade, ground) for shade in PULSE_SHADES)
-        assert worst >= 3.0, f"the bar drops to {worst:.2f}:1 on {ground}"
+    p = PALETTES[mode]
+    for ground in CURRENT:
+        worst = min(contrast(shade, p[ground]) for shade in pulse_shades(mode))
+        assert worst >= 3.0, f"{mode}: the bar drops to {worst:.2f}:1 on {ground}"
 
 
 @pytest.mark.skipif(
-    not Path("/home/lab/workspace/private/copier-data-science").is_dir(),
+    not Path("/home/lab/workspace/private/copier-projects/copier-data-science").is_dir(),
     reason="the reference template is not checked out",
 )
 @pytest.mark.parametrize("width", [60, 70, 80, 100, 120])
@@ -826,9 +1014,9 @@ async def test_the_header_leads_with_the_project_and_ends_with_the_tool(tmp_path
             for segment in title.render_line(0):
                 if segment.text.strip() and segment.style and segment.style.color:
                     ink[segment.text] = segment.style.color.triplet.hex.lower()
-            assert ink["orders-api"] == CYAN_BRIGHT.lower()
-            assert ink["1 of 3"] == CYAN_BRIGHT.lower()
-            assert ink["tui_flow questionnaire"] != CYAN_BRIGHT.lower()
+            assert ink["orders-api"] == P["cyan-bright"].lower()
+            assert ink["1 of 3"] == P["cyan-bright"].lower()
+            assert ink["tui_flow questionnaire"] != P["cyan-bright"].lower()
 
 
 async def test_a_bool_row_names_no_key_it_does_not_need(tmp_path: Path) -> None:

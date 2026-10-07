@@ -21,7 +21,7 @@ from copier_tui.widgets import FieldRow
 from copier_ui import TemplateUI
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
-REFERENCE = Path("/home/lab/workspace/private/copier-data-science")
+REFERENCE = Path("/home/lab/workspace/private/copier-projects/copier-data-science")
 
 
 @asynccontextmanager
@@ -112,6 +112,52 @@ async def test_going_back_from_the_review_returns_to_the_survey(tmp_path: Path) 
         await pilot.pause()
         assert isinstance(app.screen, SurveyScreen)
         assert not dst.exists()
+
+
+async def test_a_survey_confirmed_twice_before_the_review_is_up_opens_one_review(
+    tmp_path: Path,
+) -> None:
+    """Hand-over: two confirmations from the survey put one review on the stack.
+
+    Validating a large template takes long enough for a double press of enter. Both keys
+    reach the survey before the first has put the review on top, and each one posts its
+    confirmation. The second pushed a second review with the same id, and the app ended
+    with `DuplicateIds`. Left with back, the review opens again on the next confirmation.
+    """
+    async with running(tmp_path / "out") as (app, pilot):
+        survey = app.screen
+        survey.post_message(SurveyScreen.Confirmed())
+        survey.post_message(SurveyScreen.Confirmed())
+        assert await wait_until(pilot, lambda: isinstance(app.screen, ReviewScreen))
+        await pilot.pause()
+        assert sum(isinstance(screen, ReviewScreen) for screen in app.screen_stack) == 1
+
+        await pilot.press("escape")
+        await pilot.pause()
+        await pilot.press("enter")
+        assert await wait_until(pilot, lambda: isinstance(app.screen, ReviewScreen))
+
+
+async def test_a_confirmation_from_the_survey_under_a_render_opens_no_review(
+    tmp_path: Path,
+) -> None:
+    """Hand-over: once the review is confirmed, the survey beneath opens no review again.
+
+    The survey is the screen on top for a moment each time a screen above it closes, so a
+    second enter on the review, or on the finished render, can land on it. A review opened
+    from there would cover the render.
+    """
+    async with running(tmp_path / "out") as (app, pilot):
+        survey = app.screen
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.press("enter")
+        assert await wait_until(pilot, lambda: isinstance(app.screen, ExecutionScreen))
+        survey.post_message(SurveyScreen.Confirmed())
+        await pilot.pause()
+        await pilot.pause()
+        assert not any(isinstance(screen, ReviewScreen) for screen in app.screen_stack)
+        assert isinstance(app.screen, ExecutionScreen)
 
 
 async def test_cancelling_leaves_the_destination_untouched(tmp_path: Path) -> None:
@@ -261,6 +307,96 @@ async def test_a_template_with_no_questions_goes_straight_to_review(tmp_path: Pa
         assert await wait_until(pilot, lambda: not app.is_running)
         assert app.return_value == EXIT_OK
         assert (dst / "README.md").exists()
+
+
+@pytest.mark.parametrize(("key", "left"), [("y", "nothing to ask\n"), ("n", "mine\n")])
+async def test_a_file_that_differs_is_asked_about_on_the_render_screen(
+    tmp_path: Path, key: str, left: str
+) -> None:
+    """copier's `Overwrite <path>?` is asked in the box over the log; `y` and `n` answer it.
+
+    copier asked it on the terminal the app was drawing on. Nothing showed, the status line
+    said `rendering the template` for ever, and on Python 3.14 no key left the screen. Enter
+    is not an answer: it is the key that confirmed the review a moment before.
+    """
+    dst = tmp_path / "out"
+    dst.mkdir()
+    (dst / "README.md").write_text("mine\n")
+    async with running(dst, template="tui_empty") as (app, pilot):
+        await pilot.press("enter")
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ExecutionScreen)
+        banner = screen.query_one("#exec-banner", Static)
+        assert await wait_until(pilot, lambda: banner.display)
+        shown = str(banner.visual)
+        assert "Overwrite README.md?" in shown
+        assert "y overwrites" in shown and "n keeps" in shown
+
+        await pilot.press("enter")
+        await pilot.pause(0.2)
+        assert banner.display and not screen.finished, "enter answered the question"
+        assert (dst / "README.md").read_text() == "mine\n"
+
+        await pilot.press(key)
+        assert await wait_until(pilot, lambda: screen.finished)
+        assert (dst / "README.md").read_text() == left
+        assert "done" in str(banner.visual)
+
+        # the question does not say it is the last one, so one more of the key that answered
+        # it arrives with the verdict already in the same box - and must not close it
+        await pilot.press(key)
+        await pilot.pause(0.2)
+        assert app.is_running and banner.display, "an answer key closed the verdict"
+        # so the hint names a key that closes in every state, not `any key`
+        verdict = screen.query_one("#exec-verdict", Static)
+        assert "enter closes" in str(banner.visual) and "enter closes" in str(verdict.visual)
+
+        await pilot.press("enter")
+        assert await wait_until(pilot, lambda: not app.is_running)
+        assert app.return_value == EXIT_OK
+
+
+async def test_the_file_list_keeps_its_ground_while_the_render_runs(tmp_path: Path) -> None:
+    """The written paths are read on the surface ground for the whole render.
+
+    The list holds the focus until the verdict, and Textual tints a focused log with 5% of
+    the foreground: in the dark theme that put the paths at 4.39:1, under the 4.5:1 text floor.
+    """
+    dst = tmp_path / "out"
+    dst.mkdir()
+    (dst / "README.md").write_text("mine\n")
+    async with running(dst, template="tui_empty") as (app, pilot):
+        await pilot.press("enter")
+        await pilot.pause()
+        banner = app.screen.query_one("#exec-banner", Static)
+        assert await wait_until(pilot, lambda: banner.display), "the render is not waiting"
+        files = app.screen.query_one("#exec-files", RichLog)
+        assert files.has_focus
+        assert files.styles.background_tint.a == 0
+        await pilot.press("n")
+
+
+async def test_a_render_waiting_for_an_answer_can_still_be_left(tmp_path: Path) -> None:
+    """ctrl+x leaves a render that is waiting on its question, and the file is kept.
+
+    The render thread waits on the answer. Leaving has to release it, or the app closes its
+    screen and then waits on that thread for ever; the test of the same name on a pty holds
+    the process to exiting.
+    """
+    dst = tmp_path / "out"
+    dst.mkdir()
+    (dst / "README.md").write_text("mine\n")
+    async with running(dst, template="tui_empty") as (app, pilot):
+        await pilot.press("enter")
+        await pilot.pause()
+        banner = app.screen.query_one("#exec-banner", Static)
+        assert await wait_until(pilot, lambda: banner.display)
+
+        await pilot.press("ctrl+x")
+        assert await wait_until(pilot, lambda: not app.is_running)
+        assert app.return_value == EXIT_FAILURE
+    assert (dst / "README.md").read_text() == "mine\n"
 
 
 async def test_a_non_empty_destination_warns_before_confirmation(tmp_path: Path) -> None:

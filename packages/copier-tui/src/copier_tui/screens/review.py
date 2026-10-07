@@ -13,15 +13,7 @@ from textual.screen import Screen
 from textual.widgets import Footer, Static
 
 from copier_tui.paths import fit_path, project_name
-from copier_tui.theme import (
-    AMBER,
-    CYAN_BRIGHT,
-    LABEL_WIDTH,
-    ROW_ALT_BG,
-    ROW_BG,
-    TEXT,
-    TEXT_SUBTLE,
-)
+from copier_tui.theme import LABEL_WIDTH
 from copier_tui.widgets import HEADER_PATH_FLOOR, HeaderBar, display_value
 from copier_ui import TemplateUI
 
@@ -43,17 +35,17 @@ class ReviewScreen(Screen[bool]):
         height: 1;
         width: 100%;
         padding: 0 1;
-        color: {AMBER};
+        color: $st-amber;
         text-wrap: nowrap;
         text-overflow: ellipsis;
     }}
     .review-answer {{
         height: auto;
         width: 100%;
-        background: {ROW_BG};
+        background: $st-row;
     }}
     .review-answer.row-alt {{
-        background: {ROW_ALT_BG};
+        background: $st-row-alt;
     }}
     .review-caption {{
         /* a share of the row capped at the old fixed width, as the form's gutter is. Flat at
@@ -68,13 +60,19 @@ class ReviewScreen(Screen[bool]):
            written, and a caption cut here removes exactly the words being checked. The row
            grows instead - which is what the compose docstring below has always claimed. */
         padding: 0 2 0 1;
+        color: $st-cyan-bright;
+        text-style: bold;
     }}
     .review-value {{
         width: 1fr;
         height: auto;
+        color: $st-text;
+    }}
+    .review-value.unset {{
+        color: $st-subtle;
     }}
     #review-empty {{
-        color: {TEXT_SUBTLE};
+        color: $st-subtle;
     }}
     """
 
@@ -142,18 +140,12 @@ class ReviewScreen(Screen[bool]):
             lines.append(
                 Horizontal(
                     Static(
-                        Text(
-                            self.ui.schema().by_id(field_id).label,
-                            style=f"bold {CYAN_BRIGHT}",
-                            overflow="fold",
-                        ),
+                        Text(self.ui.schema().by_id(field_id).label, overflow="fold"),
                         classes="review-caption",
                     ),
                     Static(
-                        Text(value, style=TEXT, overflow="fold")
-                        if value
-                        else Text(UNSET, style=TEXT_SUBTLE),
-                        classes="review-value",
+                        Text(value, overflow="fold") if value else Text(UNSET),
+                        classes="review-value" if value else "review-value unset",
                     ),
                     classes="review-answer row-alt" if position % 2 else "review-answer",
                     id=f"review-{field_id}",

@@ -1,0 +1,29 @@
+_subdirectory: template
+
+# every question after `count` reads it as a number, and `onflag` reads `flag` as a boolean
+count:
+    type: int
+    default: 3
+
+exact:
+    type: str
+    default: exact
+    when: "{{ count == 3 }}"
+
+double:
+    type: int
+    default: "{{ count * 2 }}"
+
+limit:
+    type: int
+    default: 10
+    validator: "{% if limit < count %}limit is under count{% endif %}"
+
+flag:
+    type: bool
+    default: true
+
+onflag:
+    type: str
+    default: shown
+    when: "{% if flag %}true{% endif %}"

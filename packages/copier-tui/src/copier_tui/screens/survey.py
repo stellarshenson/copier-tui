@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
 from typing import ClassVar
@@ -19,7 +20,7 @@ from textual.widget import Widget
 from textual.widgets import Footer, Static, TextArea
 
 from copier_tui.paths import fit_path, project_name, shown_path
-from copier_tui.theme import ROSE, TEXT_MUTED, TEXT_SUBTLE
+from copier_tui.theme import color
 from copier_tui.widgets import BRANCH_LAST, BRANCH_MORE, HEADER_PATH_FLOOR, FieldRow, HeaderBar
 from copier_ui import State, TemplateUI
 
@@ -77,39 +78,39 @@ class SurveyScreen(Screen[None]):
     class Cancelled(Message):
         """The user confirmed the second escape and wants out."""
 
-    DEFAULT_CSS = f"""
-    #survey-form {{
+    DEFAULT_CSS = """
+    #survey-form {
         width: 100%;
         height: 1fr;
         padding: 1 2 0 0;
         scrollbar-size-vertical: 1;
-    }}
-    #survey-status {{
+    }
+    #survey-status {
         height: 1;
         width: 100%;
-    }}
-    #survey-hint {{
+    }
+    #survey-hint {
         /* as wide as what it says and no wider, on the right, so an empty hint leaves
            the whole row to the destination on its left */
         width: auto;
         padding: 0 1;
-        color: {TEXT_MUTED};
+        color: $st-muted;
         /* the third of the three one-row lines, and the last to get the rule. Wrapping, its
            second line was clipped, so at 60 columns the cancel warning read `press escape
            again to` - the app's only destructive keystroke, announced half-said. */
         text-wrap: nowrap;
         text-overflow: ellipsis;
-    }}
-    #survey-where {{
+    }
+    #survey-where {
         /* leads the row, and takes what the hint leaves rather than a fixed share: the hint
            is empty most of the time, and a fixed 60% left a path cropped beside a blank */
         width: 1fr;
         height: 1;
         padding: 0 1;
-        color: {TEXT_SUBTLE};
+        color: $st-subtle;
         text-wrap: nowrap;
         text-overflow: ellipsis;
-    }}
+    }
     """
 
     BINDINGS: ClassVar[list[Binding]] = [
@@ -285,7 +286,7 @@ class SurveyScreen(Screen[None]):
             answers = "answer needs" if left == 1 else "answers need"
             self._touched |= set(errors)
             self._counting = True
-            self._blocked = Text(f"{left} {answers} attention", style=ROSE)
+            self._blocked = Text(f"{left} {answers} attention", style=color(self.app, "rose"))
             await self._refresh_rows()
             self._focus_field(field_id)
             self._hint.update(self._blocked)
@@ -335,7 +336,7 @@ class SurveyScreen(Screen[None]):
         # throws away every answer. The destination is on the review screen and in the header;
         # this sentence has nowhere else to be, and it is up for three seconds
         self.query_one("#survey-where", Static).display = False
-        self._hint.update(Text(CANCEL_HINT, style=ROSE))
+        self._hint.update(Text(CANCEL_HINT, style=color(self.app, "rose")))
         # the previous timer is stopped, not left to run. Each arming used to start a fresh
         # one and keep no handle, so an earlier timer fired inside a later arming's window and
         # disarmed it - the reader saw the warning, pressed escape well within the three
@@ -359,14 +360,14 @@ class SurveyScreen(Screen[None]):
         self._clear_hint()
 
     async def _refresh_rows(self) -> None:
-        """Add, remove and update rows so they match the state's visible, non-preset fields.
+        """Add, remove and update rows so they match the fields the user is asked for.
 
         Mounting is awaited so a caller may act on the controls straight afterwards.
         """
         state = self.ui.state()
         schema = self.ui.schema()
         errors = self.ui.validate()
-        wanted = askable_ids(state)
+        wanted = askable_ids(state, errors)
         # an answer invalidated by a change to a DIFFERENT answer speaks, because that is
         # news the reader caused - but a question that has only just appeared because of a
         # `when` has not been asked yet, and is exactly what the gate is for. On the first
@@ -379,7 +380,9 @@ class SurveyScreen(Screen[None]):
             self._counting = bool(errors)
             answers = "answer needs" if len(errors) == 1 else "answers need"
             self._blocked = (
-                Text(f"{len(errors)} {answers} attention", style=ROSE) if errors else None
+                Text(f"{len(errors)} {answers} attention", style=color(self.app, "rose"))
+                if errors
+                else None
             )
         form = self.query_one("#survey-form", VerticalScroll)
         rows = {row.question.id: row for row in form.query(FieldRow)}
@@ -503,34 +506,47 @@ def _where_text(dst: Path, room: int) -> Text:
     resize - and the path goes out whole for the stylesheet to crop until `on_resize` arrives.
     """
     if room <= 0:
-        return Text(f"destination: {shown_path(dst)}", style=TEXT_SUBTLE)
-    return Text(f"destination: {fit_path(dst, room)}", style=TEXT_SUBTLE)
+        return Text(f"destination: {shown_path(dst)}")
+    return Text(f"destination: {fit_path(dst, room)}")
 
 
 def _branch(ui: TemplateUI, order: list[str], position: int) -> tuple[str, bool]:
-    """The connector the row prints, and whether the run comes down into it from above.
+    """The connector the row prints, and whether the tree runs on into the row below it.
+
+    The connector is the through one while a sibling follows and the closing one on the last
+    child. The tree runs on below a row when the next row is its sibling or its first child.
 
     `condition_ids` is what a question's `when` reads, so the renderer never has to know what
     the rule says to know there is one, or which answer it hangs from.
     """
     schema = ui.schema()
+    below = position + 1
+    lower = schema.by_id(order[below]).condition_ids if below < len(order) else ()
     parents = schema.by_id(order[position]).condition_ids
-    if not parents or not any(parent in order for parent in parents):
-        # an answer supplied with --data is never asked for, so its children would otherwise
-        # hang off a row that is not on the form
-        return "", False
+    # the run this row is in starts at the first of the rows straight above it that the same
+    # answers decide
+    top = position
+    while top > 0 and schema.by_id(order[top - 1]).condition_ids == parents:
+        top -= 1
+    glyph = ""
+    # a connector joins the row to the one its run starts under, so that row has to be one
+    # that decides it. A child asked for further down the form would hang off whichever
+    # question happens to be above it; and an answer supplied with --data is never asked
+    # for, so it is not a row to hang off at all
+    if top > 0 and order[top - 1] in parents:
+        glyph = BRANCH_MORE if lower == parents else BRANCH_LAST
+    return glyph, glyph == BRANCH_MORE or order[position] in lower
 
-    def shares(index: int) -> bool:
-        return 0 <= index < len(order) and schema.by_id(order[index]).condition_ids == parents
 
-    # the row above continues the run when it is a sibling, and equally when it is the
-    # question this one hangs from - the first child of an answer otherwise showed a gap
-    # between that answer and its own connector
-    above = position - 1
-    parent_above = above >= 0 and order[above] in parents
-    return (BRANCH_MORE if shares(position + 1) else BRANCH_LAST), shares(above) or parent_above
+def askable_ids(state: State, errors: Mapping[str, object]) -> list[str]:
+    """The visible fields the user is asked for.
 
-
-def askable_ids(state: State) -> list[str]:
-    """The visible fields the user is asked for: presets came in with --data."""
-    return [field_id for field_id in state.visible_ids if not state.fields[field_id].preset]
+    An answer that came in with --data is not asked for - unless the template refuses it.
+    `errors` is `TemplateUI.validate()`: a refused answer with no row left enter refused and
+    nothing on the form to put right.
+    """
+    return [
+        field_id
+        for field_id in state.visible_ids
+        if not state.fields[field_id].preset or field_id in errors
+    ]

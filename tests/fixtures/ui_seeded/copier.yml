@@ -1,0 +1,11 @@
+_subdirectory: template
+
+# its default reads `seed`, which is not a question: only a value given as data supplies it,
+# and with no such value the default is nothing
+conf:
+    type: yaml
+    default: "{{ seed }}"
+
+note:
+    type: str
+    default: x

@@ -1,0 +1,39 @@
+_subdirectory: template
+
+storage:
+    type: str
+    default: s3
+    choices:
+        Amazon S3 object storage in the cloud: s3
+        Azure Blob storage in the cloud: azure
+        Google Cloud Storage buckets: gcs
+        A directory on the local disk: local
+
+bucket:
+    type: str
+    default: demo-bucket
+    when: "{{ storage == 's3' }}"
+
+mode:
+    type: str
+    default: fast
+    when: "{{ storage == 's3' }}"
+    choices:
+        Fast and without any checksum verification: fast
+        Slow and with a checksum of every object: slow
+        Slow and with a checksum plus a second read: paranoid
+
+region:
+    type: str
+    default: eu-west-1
+    when: "{{ storage == 's3' }}"
+
+owner:
+    type: str
+    default: demo
+
+# decided by `storage`, and asked for after a question `storage` does not decide
+endpoint:
+    type: str
+    default: https://s3.example.com
+    when: "{{ storage == 's3' }}"

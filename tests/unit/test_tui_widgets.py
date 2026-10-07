@@ -18,6 +18,7 @@ from textual.widgets import Input, TextArea
 
 from copier_tui.app import SurveyApp
 from copier_tui.inline import FREE, TAKEN, InlineOptions
+from copier_tui.theme import DARK, apply
 from copier_tui.widgets import (
     WIDGET_BY_KIND,
     FieldRow,
@@ -230,6 +231,8 @@ class _OneRow(App[None]):
     def __init__(self, choices: list[Choice] | None = None) -> None:
         """Hold the options to mount, defaulting to a real template's five."""
         super().__init__()
+        # a chip reads its colours from the theme, so the app showing it has to carry one
+        apply(self, DARK)
         self._choices = choices or list(STORAGE)
 
     def compose(self) -> ComposeResult:

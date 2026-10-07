@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from functools import wraps
@@ -22,16 +23,7 @@ from textual.widgets import Footer, ProgressBar, RichLog, Static
 
 from copier_tui.changes import Changes, diff, snapshot
 from copier_tui.paths import fit_path, project_name
-from copier_tui.theme import (
-    CHROME_BG,
-    MINT,
-    ORANGE,
-    ROSE,
-    SURFACE_BG,
-    TEXT,
-    TEXT_MUTED,
-    TEXT_SUBTLE,
-)
+from copier_tui.theme import color
 from copier_tui.widgets import HEADER_PATH_FLOOR, HeaderBar
 from copier_ui import TemplateUI
 
@@ -58,70 +50,81 @@ bubbled unhandled all the way up, and this screen stops the event before that - 
 went from closing the screen to doing nothing at all, which is worse. Nothing on this screen
 holds the focus either, so even letting the event bubble would not have found the log."""
 
+_REPLIES = {"y": True, "n": False}
+"""The keys that answer copier's question. Enter is not one of them, although it accepts the
+default in copier's own prompt: here it is the key that confirmed the review a moment before,
+and a second press of it must not overwrite a file."""
+
 
 class ExecutionScreen(Screen[bool]):
     """Runs copier in a worker thread and reports success or failure."""
 
-    DEFAULT_CSS = f"""
-    ExecutionScreen {{
+    DEFAULT_CSS = """
+    ExecutionScreen {
         layers: base overlay;
         align: center middle;
-    }}
-    #exec-banner {{
+    }
+    #exec-banner {
         layer: overlay;
         display: none;
         width: auto;
         height: auto;
         max-width: 90%;
         padding: 1 3;
-        background: {CHROME_BG};
-        border: round {MINT};
-        color: {TEXT};
-    }}
-    #exec-banner.failed {{
-        border: round {ROSE};
-    }}
-    #exec-body {{
+        background: $st-chrome;
+        border: round $st-mint;
+        color: $st-text;
+    }
+    #exec-banner.failed {
+        border: round $st-rose;
+    }
+    #exec-banner.asking {
+        border: round $st-orange;
+    }
+    #exec-body {
         width: 100%;
         height: 1fr;
         padding: 1;
-    }}
-    #exec-status {{
+    }
+    #exec-status {
         height: 1;
-        color: {TEXT_MUTED};
+        color: $st-muted;
         text-wrap: nowrap;
         text-overflow: ellipsis;
-    }}
-    #exec-verdict {{
+    }
+    #exec-verdict {
         height: 1;
-        color: {TEXT_SUBTLE};
-    }}
-    #exec-files {{
+        color: $st-subtle;
+    }
+    #exec-files {
         width: 100%;
         height: 1fr;
         margin: 1 0 0 0;
-        background: {SURFACE_BG};
-        color: {TEXT_MUTED};
+        background: $st-surface;
+        /* the list holds the focus until the verdict, and Textual tints a focused log with 5%
+           of the foreground, which takes the paths under the text floor in the dark theme */
+        background-tint: $st-surface 0%;
+        color: $st-muted;
         scrollbar-size-vertical: 1;
-    }}
-    #exec-progress {{
+    }
+    #exec-progress {
         width: 100%;
-    }}
-    #exec-progress Bar {{
+    }
+    #exec-progress Bar {
         width: 1fr;
-    }}
-    #exec-progress Bar > .bar--bar {{
-        color: {ORANGE};
-        background: {SURFACE_BG};
-    }}
-    #exec-progress Bar > .bar--indeterminate {{
-        color: {ORANGE};
-        background: {SURFACE_BG};
-    }}
-    #exec-progress Bar > .bar--complete {{
-        color: {MINT};
-        background: {SURFACE_BG};
-    }}
+    }
+    #exec-progress Bar > .bar--bar {
+        color: $st-orange;
+        background: $st-surface;
+    }
+    #exec-progress Bar > .bar--indeterminate {
+        color: $st-orange;
+        background: $st-surface;
+    }
+    #exec-progress Bar > .bar--complete {
+        color: $st-mint;
+        background: $st-surface;
+    }
     """
 
     BINDINGS: ClassVar[list[Binding]] = [
@@ -158,6 +161,11 @@ class ExecutionScreen(Screen[bool]):
         # written on the UI thread by `abandon`, read on the render thread by `_note_child`
         # and `_terminal_mode_kept`. A plain bool on purpose: nothing here may block
         self._abandoned = False
+        # copier's question while it is on the screen. Made, answered and cancelled on the UI
+        # thread only; the render thread waits for it inside `call_from_thread`
+        self._answer: asyncio.Future[bool] | None = None
+        # whether this run asked a question at all, which decides what `y` and `n` do afterwards
+        self._asked = False
 
     def compose(self) -> ComposeResult:
         """Header, the status line and the progress bar, the verdict line, footer.
@@ -227,8 +235,23 @@ class ExecutionScreen(Screen[bool]):
         instead, so the first two thirds of what had just been written to the reader's disk
         were unreachable. The exemption is handled here rather than as bindings, because a
         binding runs inside an action dispatch and that is what hung this screen before.
+
+        While copier's question is up, `y` and `n` answer it and every other key does nothing.
+        On a run that asked one, `y` and `n` do not close the verdict either: the question
+        does not say it is the last, the verdict takes its place in the same box, and one
+        answer too many removed the verdict within a tenth of a second of its appearing.
         """
+        if self._answer is not None:
+            event.stop()
+            reply = _REPLIES.get(event.key.lower())
+            if reply is not None:
+                self._answer.set_result(reply)
+                self._answer = None
+            return
         if not self._done:
+            return
+        if self._asked and event.key.lower() in _REPLIES:
+            event.stop()
             return
         action = _SCROLL_KEYS.get(event.key)
         if action is not None:
@@ -273,6 +296,11 @@ class ExecutionScreen(Screen[bool]):
         their descendants are found by asking the kernel who their parents are.
         """
         self._abandoned = True
+        if self._answer is not None:
+            # the render thread is waiting on this, not on a child. Cancelled, the wait raises
+            # inside copier, which unwinds the same way it does for a task that failed
+            self._answer.cancel()
+            self._answer = None
         for child in self._children:
             self._end_tree(child)
 
@@ -311,10 +339,40 @@ class ExecutionScreen(Screen[bool]):
                 _children_without_stdin(self._note_child),
                 _terminal_mode_kept(keep=lambda: not self._abandoned),
             ):
-                self.ui.render(self.dst, **self.copier_kwargs)
+                self.ui.render(self.dst, confirm=self._ask, **self.copier_kwargs)
         except Exception as exc:  # noqa: BLE001 - any failure becomes the screen's verdict
             error = exc
         self.app.call_from_thread(self._finish, error)
+
+    def _ask(self, question: str) -> bool:
+        """Put copier's yes/no question on this screen; the render thread waits for the answer.
+
+        copier asks `Overwrite <path>?` for a file that differs from the one it rendered. Left
+        to ask on the terminal, it wrote the question behind this screen and read the same
+        keys the app reads: the render never ended, and on Python 3.14 no key left it.
+        """
+        return self.app.call_from_thread(self._answer_to, question)
+
+    async def _answer_to(self, question: str) -> bool:
+        """Show `question` in the box over the log until `y` or `n` answers it."""
+        if self._abandoned:
+            # asked after the user left: there is nobody to answer, and a wait here would
+            # hold the render thread while the app closes
+            raise asyncio.CancelledError
+        answer = self._answer = asyncio.get_running_loop().create_future()
+        self._asked = True
+        ink = {role: color(self.app, role) for role in BANNER_ROLES}
+        text = Text(question, style=f"bold {ink['orange']}")
+        text.append("\n\ny overwrites  -  n keeps the file", style=ink["subtle"])
+        banner = self.query_one("#exec-banner", Static)
+        banner.update(text)
+        banner.set_class(True, "asking")
+        banner.display = True
+        try:
+            return await answer
+        finally:
+            banner.set_class(False, "asking")
+            banner.display = False
 
     def _show_new_files(self) -> None:
         """List whatever has appeared under the destination since the last look.
@@ -392,15 +450,19 @@ class ExecutionScreen(Screen[bool]):
                 if self.pretend
                 else f"written to {fit_path(self.dst, max(room, HEADER_PATH_FLOOR))}"
             )
-            status.update(Text(done, style=MINT))
+            status.update(Text(done, style=color(self.app, "mint")))
         else:
             # the reason goes in the log, which wraps nothing and scrolls; the status row is
             # one line with an ellipsis, and copier's sentences - a Jinja error with a
             # template path, a clone failure - ran off its edge at every supported width
-            status.update(Text("failed - reason below", style=ROSE))
-            self.query_one("#exec-files", RichLog).write(Text(_message(error), style=ROSE))
+            status.update(Text("failed - reason below", style=color(self.app, "rose")))
+            # the reason is on the surface ground, where `rose` is under the text floor in the
+            # dark theme; the status line above is on the screen ground, where it is not
+            self.query_one("#exec-files", RichLog).write(
+                Text(_message(error), style=color(self.app, "error"))
+            )
         self.query_one("#exec-verdict", Static).update(
-            Text("arrows read the list  -  any other key closes")
+            Text("arrows read the list  -  enter closes")
         )
         self._show_banner(error)
         self.set_focus(None)
@@ -408,16 +470,17 @@ class ExecutionScreen(Screen[bool]):
     def _show_banner(self, error: BaseException | None) -> None:
         """Put the verdict and the four counts in a box over the log."""
         banner = self.query_one("#exec-banner", Static)
+        ink = {role: color(self.app, role) for role in BANNER_ROLES}
         if error is not None:
-            text = Text("failed", style=f"bold {ROSE}")
-            text.append("\n\n" + _message(error), style=TEXT)
+            text = Text("failed", style=f"bold {ink['error']}")
+            text.append("\n\n" + _message(error), style=ink["text"])
         elif self.pretend:
-            text = Text("dry run - nothing written", style=f"bold {MINT}")
+            text = Text("dry run - nothing written", style=f"bold {ink['mint']}")
         else:
-            text = Text("done", style=f"bold {MINT}")
+            text = Text("done", style=f"bold {ink['mint']}")
             text.append("\n\n")
-            text.append(_counts_line(diff(self._before, snapshot(self.dst))))
-        text.append("\n\nany key closes", style=TEXT_SUBTLE)
+            text.append(_counts_line(diff(self._before, snapshot(self.dst)), ink))
+        text.append("\n\nenter closes", style=ink["subtle"])
         banner.update(text)
         banner.set_class(error is not None, "failed")
         banner.display = True
@@ -426,29 +489,36 @@ class ExecutionScreen(Screen[bool]):
 CONFLICTS_LISTED = 8
 """Conflicted paths the banner names before it says how many more there are."""
 
+BANNER_ROLES = ("text", "muted", "subtle", "mint", "orange", "error")
+"""The palette roles the banner writes in, looked up once for the theme being shown."""
 
-def _counts_line(changes: Changes) -> Text:
+
+def _counts_line(changes: Changes, ink: dict[str, str]) -> Text:
     """`3 added · 2 changed · 1 deleted · 1 conflict`, and the conflicted paths under it.
 
     Zero counts are still printed: a person running `update` wants to see `0 conflicts`
-    written down, not infer it from an absence.
+    written down, not infer it from an absence. `ink` is the colour of each role in
+    `BANNER_ROLES`.
     """
     conflicts = len(changes.conflicted)
+    muted, error = ink["muted"], ink["error"]
     text = Text()
-    text.append(f"{len(changes.added)} added", style=MINT if changes.added else TEXT_MUTED)
-    text.append("  \u2e31  ", style=TEXT_MUTED)
-    text.append(f"{len(changes.changed)} changed", style=ORANGE if changes.changed else TEXT_MUTED)
-    text.append("  \u2e31  ", style=TEXT_MUTED)
-    text.append(f"{len(changes.deleted)} deleted", style=ROSE if changes.deleted else TEXT_MUTED)
-    text.append("  \u2e31  ", style=TEXT_MUTED)
+    text.append(f"{len(changes.added)} added", style=ink["mint"] if changes.added else muted)
+    text.append("  \u2e31  ", style=muted)
+    text.append(
+        f"{len(changes.changed)} changed", style=ink["orange"] if changes.changed else muted
+    )
+    text.append("  \u2e31  ", style=muted)
+    text.append(f"{len(changes.deleted)} deleted", style=error if changes.deleted else muted)
+    text.append("  \u2e31  ", style=muted)
     word = "conflict" if conflicts == 1 else "conflicts"
-    text.append(f"{conflicts} {word}", style=f"bold {ROSE}" if conflicts else TEXT_MUTED)
+    text.append(f"{conflicts} {word}", style=f"bold {error}" if conflicts else muted)
     if conflicts:
-        text.append("\n\nto resolve:", style=TEXT_SUBTLE)
+        text.append("\n\nto resolve:", style=ink["subtle"])
         for path in changes.conflicted[:CONFLICTS_LISTED]:
-            text.append(f"\n  {path}", style=ROSE)
+            text.append(f"\n  {path}", style=error)
         if conflicts > CONFLICTS_LISTED:
-            text.append(f"\n  and {conflicts - CONFLICTS_LISTED} more", style=TEXT_MUTED)
+            text.append(f"\n  and {conflicts - CONFLICTS_LISTED} more", style=muted)
     return text
 
 

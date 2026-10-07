@@ -131,6 +131,31 @@ def test_a_templated_help_string_never_reaches_the_ui_as_raw_jinja(tmp_path: Pat
         ui.close()
 
 
+def test_a_help_text_that_fails_before_the_answers_exist_is_left_out(tmp_path: Path) -> None:
+    """Help: a caption that cannot be rendered without answers costs the row its help, not the row.
+
+    The schema is normalised once, before any answer exists, so `{{ org.upper() }}` has no
+    `org` to call. That was a load error: the row was refused and nothing could be rendered.
+    copier prints no caption in a run it is handed the answers for, and renders.
+    """
+    template = tmp_path / "tpl"
+    template.mkdir()
+    (template / "copier.yml").write_text(
+        "org:\n  type: str\n  default: acme\n"
+        "name:\n  type: str\n  default: x\n"
+        "  help: Name of the project owned by {{ org.upper() }}\n"
+        '  placeholder: "{{ org.upper() }}-project"\n'
+    )
+    (template / "out.txt.jinja").write_text("{{ name }}|{{ org }}\n")
+    dst = tmp_path / "dst"
+    with TemplateUI.from_template(template, dst=dst) as ui:
+        name = ui.schema().by_id("name")
+        assert (name.load_error, name.label, name.help, name.placeholder) == (None, "name", "", "")
+        assert ui.validate() == {}
+        ui.render(quiet=True)
+    assert (dst / "out.txt").read_text() == "x|acme\n"
+
+
 @pytest.mark.parametrize(
     ("id", "expected"),
     [

@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from types import TracebackType
 from typing import Any, Self
 
 from copier_ui.adapter import TemplateAdapter
-from copier_ui.engine import compute_state, evaluation_order, validate_state, visible_answers
+from copier_ui.engine import (
+    answers_read_by,
+    compute_state,
+    evaluation_order,
+    supplied_answers,
+    validate_state,
+    visible_answers,
+)
 from copier_ui.errors import RenderRefusedError
 from copier_ui.model import Operation, Schema, State
 
@@ -30,8 +37,9 @@ class TemplateUI:
         self._dst = dst
         self._explicit: dict[str, Any] = {}
         self._preset: set[str] = set()
-        self._extra: dict[str, Any] = {}
-        self._state = compute_state(schema, order, {}, frozenset(), adapter.evaluate)
+        self._state = compute_state(
+            schema, order, {}, frozenset(), adapter.evaluate, adapter.parse
+        )
 
     @classmethod
     def from_template(
@@ -72,7 +80,7 @@ class TemplateUI:
                     ui._explicit[id] = value
                     ui._preset.add(id)
                 else:
-                    ui._extra[id] = value
+                    adapter.extra[id] = value
             ui._recompute()
         except Exception:
             adapter.close()
@@ -84,9 +92,13 @@ class TemplateUI:
         return self._schema
 
     def set(self, id: str, value: Any) -> None:
-        """Record an explicit answer and recompute; raises UnknownFieldError on an unknown id."""
+        """Record an explicit answer and recompute; raises UnknownFieldError on an unknown id.
+
+        An answer that came in as data stops being a preset: what replaced it was asked for.
+        """
         self._schema.by_id(id)
         self._explicit[id] = value
+        self._preset.discard(id)
         self._recompute()
 
     def state(self) -> State:
@@ -94,7 +106,7 @@ class TemplateUI:
         return self._state
 
     def answers(self) -> dict[str, Any]:
-        """Visible answers, JSON-compatible, ready to hand to copier as data."""
+        """The answer of every visible question, given or default: what a form shows."""
         return visible_answers(self._state)
 
     def validate(self) -> dict[str, list[str]]:
@@ -113,15 +125,32 @@ class TemplateUI:
         and it takes a value to produce one.
         """
         self._schema.by_id(id)
-        return self._adapter.validate(id, value, self.answers())
+        return self._adapter.validate(id, value, answers_read_by(self._schema, self._state, id))
 
-    def render(self, dst: str | Path | None = None, **copier_kwargs: Any) -> None:
-        """Run copier with the current answers; raises RenderRefusedError when invalid."""
+    def render(
+        self,
+        dst: str | Path | None = None,
+        confirm: Callable[[str], bool] | None = None,
+        **copier_kwargs: Any,
+    ) -> None:
+        """Run copier with the current answers; raises RenderRefusedError when invalid.
+
+        copier is handed the answers that were given - on a question that is asked, or as
+        data - and takes its own default for every other question. A default is worked out
+        once, by copier; handed back to it as an answer it would be parsed a second time.
+
+        copier asks `Overwrite <path>?` for a destination file that differs from the rendered
+        one. A frontend passes `confirm` to ask that itself: it is called with the question
+        and returns the answer. Without it copier asks on the terminal. With it nothing reads
+        the terminal: a template question copier would prompt for ends the run with a
+        `CopierUIError` naming it.
+        """
         errors = self.validate()
         if errors:
             raise RenderRefusedError(errors)
         target = self._dst if dst is None else Path(dst)
-        self._adapter.run(target, {**self._extra, **self.answers()}, **copier_kwargs)
+        data = {**self._adapter.extra, **supplied_answers(self._state)}
+        self._adapter.run(target, data, confirm, **{**copier_kwargs, "defaults": True})
 
     @property
     def template_name(self) -> str:
@@ -153,4 +182,5 @@ class TemplateUI:
             self._explicit,
             self._preset,
             self._adapter.evaluate,
+            self._adapter.parse,
         )

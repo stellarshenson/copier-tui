@@ -1,230 +1,253 @@
-"""Duoptimum palette, the Textual theme and shared CSS, per the text-user-interface skill."""
+"""Stellars-Tech palettes, the two Textual themes and the shared CSS, per the
+text-user-interface skill.
+
+There are two themes, `stellars-tech-dark` and `stellars-tech-light`. Textual switches its
+CSS between a light and a dark theme only on its own setting and never asks the terminal, so
+`background.pick_theme()` asks before the app starts and `apply()` registers both themes and
+selects one. Every stylesheet colour is a `$st-<role>` variable, so the same rules serve both.
+A Rich `Text` style is not CSS and cannot name a variable: it reads `color(app, role)`.
+
+A role is a job, not a colour. `PALETTES` gives every role one value per theme, and the tests
+hold each ink on each ground it is printed on to the same floor in both: 4.5:1 for text and
+3:1 for a mark that is not text.
+"""
 
 from __future__ import annotations
 
+import math
+from typing import TYPE_CHECKING
+
 from textual.theme import Theme
 
-CYAN = "#21a8e4"
-CYAN_BRIGHT = "#46bcf0"
-ORANGE = "#da8230"
-ORANGE_PALE = "#ffdcb0"
-AMBER = "#e6c660"
-MINT = "#3fb950"
-ROSE = "#f2554f"
-ERROR_FG = "#f6736d"
+if TYPE_CHECKING:
+    from textual.app import App
 
-"""The failure colour, and the lighter rose an error takes as body text.
+_BASE: dict[str, dict[str, str]] = {
+    "dark": {
+        # the brand roles
+        "screen": "#1a1f25",
+        "chrome": "#2a313a",
+        "surface": "#303841",
+        "border": "#5f6b76",
+        "text": "#c3c3c3",
+        "muted": "#a5a5a5",
+        "subtle": "#939da7",
+        "cyan": "#21a8e4",
+        "cyan-bright": "#46bcf0",
+        "orange": "#da8230",
+        "amber": "#e6c660",
+        "mint": "#3fb950",
+        "rose": "#f2554f",
+        # an error message printed on a row, and the failure text in the banner and file list
+        "error": "#f7847f",
+        # the two bands, and each again on a conditional row
+        "row": "#1a1f25",
+        "row-alt": "#22282f",
+        "row-cond": "#1a271f",
+        "row-alt-cond": "#223029",
+        # the ground under what the user types into, one per row ground
+        "field": "#39424d",
+        "field-alt": "#3f4854",
+        "field-cond": "#394a47",
+        "field-alt-cond": "#3f504e",
+        "answer": "#dcdcdc",
+        # an option passed over, and the option chosen
+        "option": "#363e49",
+        "option-ink": "#b8b8b8",
+        "picked": "#0b6591",
+        "picked-ink": "#ffffff",
+    },
+    "light": {
+        "screen": "#f5f7fa",
+        "chrome": "#eef1f5",
+        "surface": "#ffffff",
+        "border": "#7d8f9b",
+        "text": "#1a3540",
+        "muted": "#445d69",
+        "subtle": "#576c76",
+        "cyan": "#06709c",
+        "cyan-bright": "#05607f",
+        "orange": "#a45a18",
+        "amber": "#996600",
+        "mint": "#1a7d36",
+        "rose": "#c04048",
+        "error": "#9d343b",
+        "row": "#f5f7fa",
+        "row-alt": "#e8edf2",
+        "row-cond": "#ebf9ee",
+        "row-alt-cond": "#deefe6",
+        "field": "#e3e7eb",
+        "field-alt": "#d8dee4",
+        "field-cond": "#dae9e0",
+        "field-alt-cond": "#cee0d9",
+        "answer": "#0b1f27",
+        "option": "#dae1e9",
+        "option-ink": "#33505c",
+        "picked": "#4fb3e0",
+        "picked-ink": "#06202d",
+    },
+}
+"""Every role's colour in each theme, except the roles of the row under the cursor.
 
-`ROSE` is the theme's error token and the render's failure verdict, both of which sit on the
-screen ground. An error message sits on a ROW ground, and on the alternate band `ROSE` measures
-4.38:1 - under the floor this palette is asserted against, and it only started landing there
-when errors began printing on rows the cursor is not on. `ERROR_FG` clears 4.99:1 on all six
-row grounds and is still unmistakably rose."""
+The brand roles are the Stellars-Tech palette, with these values moved off the brand token
+because the token fails the floor where this app prints it as text. Dark: `subtle` is
+`#939da7`, not `#7d8791`, and `border` is `#5f6b76`. Light: `muted`, `subtle`, `orange`,
+`amber`, `mint` and `rose` are each a few parts darker than the token, and `border` is
+`#7d8f9b`.
 
-SCREEN_BG = "#1a1f25"
-BASE_BG = "#252b32"
-CHROME_BG = "#2a313a"
-SURFACE_BG = "#303841"
-BORDER = "#5f6b76"
+Rows. A form of thirty near-identical rows gives the eye nothing to count by, and a caption
+that wraps onto a second line is indistinguishable from the next question starting, so the
+form alternates two bands, `row` and `row-alt`. They are 1.12:1 apart in the dark theme and
+1.10:1 in the light one: enough to separate two adjacent rows, and little enough that the
+banding stays a rule under the questions.
 
-PULSE_SHADES = (
-    "#46bcf0",
-    "#46bbef",
-    "#44b9ed",
-    "#43b6e9",
-    "#40b2e4",
-    "#3dadde",
-    "#3aa7d8",
-    "#36a1d0",
-    "#329ac8",
-    "#2e93c1",
-    "#2a8db9",
-    "#2787b3",
-    "#2482ad",
-    "#217ea8",
-    "#207ba4",
-    "#1e79a2",
-    "#1e78a1",
-)
-MARK_SHADES = ("#ffffff", ORANGE_PALE)
-"""The cursor mark's blink: white and a pale orange a step off it, two blinks per breath of the bar.
+Conditional rows. A question another answer decides whether to ask leans its ground green:
+`row-cond` and `row-alt-cond`. A conditional ground is under 1.1:1 from the band it leans
+from, so the lean is a hue and not a lightness.
 
-The bar breathes in blues on a dark ground; a mark breathing in cyan washed out against it,
-and a ramp into orange still read as a fade. Two plain states, on the bar's own clock, read
-as a cursor."""
+Fields. Only what can be typed into has a field ground: an option row says "pick me" with
+its chips, and a typing ground there invites typing into a widget that ignores every letter.
+The ground carries the band and the green lean, because a control spans the row and a
+neutral ground would cut the row's own ground in half across its widest part. An answer
+already given is `answer`, a neutral a step stronger than the captions. In the dark theme a
+field is lighter than its row; in the light theme it is a well a step darker.
 
-PULSE_CYCLE = (
-    0,
-    1,
-    2,
-    3,
-    4,
-    5,
-    6,
-    7,
-    8,
-    9,
-    10,
-    11,
-    12,
-    13,
-    14,
-    15,
-    16,
-    15,
-    14,
-    13,
-    12,
-    11,
-    10,
-    9,
-    8,
-    7,
-    6,
-    5,
-    4,
-    3,
-    2,
-    1,
-)
-PULSE_INTERVAL = 0.06
-"""The bar beside the focused question breathes down this ramp and back.
+Options. Every option carries a ground, not just the answer: a bare label among chips reads
+as prose, and prose beside chips reads as another option. Hue says which option is chosen
+and the filled shape says it a second time.
 
-32 phases at 17 a second, so the cycle takes about two seconds and no step moves a channel
-more than 10 of 255 - a breath rather than a sequence of shades, which is what four shades a
-third of a second apart actually looked like. The phases are spaced on a cosine, so the bar
-eases through the turnarounds instead of reversing on the spot, and that easing is why the
-ramp holds fewer colours than phases - it dwells at the two ends. The dimmest shade still
-carries the bar against the row, so the mark never disappears mid-cycle - and that is now a
-measured claim rather than an assertion. The ramp used to reach `#12648b`, which is 2.50:1 on
-the focused ground and 2.34:1 on a conditional one: four shades of seventeen fell under the
-3:1 floor for a graphical indicator, and the cosine spacing dwells at the ends, so the mark
-spent about a fifth of every cycle below it. The dark end is `#1e78a1`, the darkest that
-clears 3:1 on both grounds - the cycle keeps its shape and loses a little amplitude."""
-
-ROW_BG = SCREEN_BG
-ROW_ALT_BG = "#22282f"
-ROW_FOCUS_BG = "#1a202d"
-"""The two bands the form alternates between, and the one ground under the cursor.
-
-The focused row leans about eight parts of blue away from the first band and nothing else. It
-is deliberately almost nothing: the row already carries a breathing bar, a blank line above
-and below, and a lit caption, so a fourth cue loud enough to notice on its own would be the
-fourth thing shouting. This one is only meant to be there when the reader looks for where
-they are, and it stays far enough from the other band that a focused row is never mistaken
-for a banded one.
-
-One ground, not one per band. The plate under the cursor used to inherit the banding, so
-walking the form with the arrows made the lifted row flicker between two shades - the one
-thing on screen the reader is watching, changing colour on every press for a reason that has
-nothing to do with the question they landed on. The row the cursor is on now looks the same
-wherever it is, and the banding goes on doing its counting job around it.
-
-A form of thirty near-identical rows gives the eye nothing to count by, and a caption that
-wraps onto a second line is indistinguishable from the next question starting. The step is
-8-10 per channel. It was 16-21, which read as two different surfaces rather than one form
-counted in twos - the banding stopped being a rule under the questions and became a thing to
-look at. Half of it still separates two adjacent rows at a glance, which is the whole job."""
-
-ROW_COND_BG = "#1a271f"
-ROW_ALT_COND_BG = "#223029"
-ROW_COND_FOCUS_BG = "#1a2827"
-"""Each band again, for a question another answer decides whether to ask, and the one ground
-such a question gets under the cursor.
-
-Green rather than more blue, because the cursor already owns the blue lean and two tints of
-the same hue a few parts apart are one tint the reader cannot place. Green is raised 8 and
-blue dropped 6, so the lean is a hue and not a brightness - the ground gains under half a
-percent of luminance, and a caption on it still measures 8.80:1 and 6.87:1.
-
-The same 8 and 6 lean the typing ground on a conditional row - `FIELD_COND_BG` and
-`FIELD_ALT_COND_BG` beside the grounds below - since a control spans the row and a ground
-that stayed neutral would cut the tint in half across the widest part of the question.
-
-A conditional row indents its caption as well, because a tint this small is not worth
-carrying a meaning on its own.
-
-The tint survives the cursor. `ROW_COND_FOCUS_BG` is the focused ground leaned by the same 8
-and 6, so a conditional question keeps saying it is conditional at the moment the reader is
-actually reading it - which is the moment the fact matters most, since that is when they are
-about to answer the thing that governs it. It is the only ground the cursor's plate takes,
-and the plate is otherwise the same on every row.
+Errors. `rose` is the failure verdict and prints on the screen ground; it is also the border
+of the failed banner, a mark. A message under a question prints on a row ground, and the
+failure reason, the deleted and conflict counts and the conflicted paths print on the chrome
+and surface grounds; `rose` fails the text floor on all of those, so they are `error`: at
+least 4.5:1 on each.
 """
 
-FIELD_BG = "#39424d"
-FIELD_ALT_BG = "#3f4854"
-FIELD_FOCUS_BG = "#495362"
-FIELD_COND_BG = "#394a47"
-FIELD_ALT_COND_BG = "#3f504e"
-FIELD_COND_FOCUS_BG = "#445658"
-ANSWER_FG = "#dcdcdc"
-ANSWER_FOCUS_FG = "#ffb866"
-"""The ground under anything the user types into, per band, and lifted again under focus.
+_CURRENT_ROW: dict[str, dict[str, str]] = {
+    "dark": {
+        "row-focus": "#303841",
+        "row-cond-focus": "#2e3e39",
+        "caption-focus": "#c3c3c3",
+        "help-focus": "#a5a5a5",
+        "error-focus": "#f7847f",
+        "rail-focus": "#939da7",
+        "bar": "#21a8e4",
+        "field-focus": "#495362",
+        "field-cond-focus": "#445658",
+        "answer-focus": "#ffb866",
+        "option-focus": "#444e5a",
+        "option-focus-ink": "#c3c3c3",
+        "picked-focus": "#0b6591",
+        "picked-focus-ink": "#ffffff",
+        "cursor": "#9aa4b0",
+        "cursor-ink": "#1a1f25",
+        "cursor-picked": "#5cc8f5",
+        "cursor-picked-ink": "#1a1f25",
+    },
+    "light": {
+        "row-focus": "#c8d4df",
+        "row-cond-focus": "#bed6d3",
+        "caption-focus": "#1a3540",
+        "help-focus": "#445d69",
+        "error-focus": "#9d343b",
+        "rail-focus": "#576c76",
+        "bar": "#06709c",
+        "field-focus": "#ffffff",
+        "field-cond-focus": "#ffffff",
+        "answer-focus": "#a85c16",
+        "option-focus": "#f5f7fa",
+        "option-focus-ink": "#1a3540",
+        "picked-focus": "#4fb3e0",
+        "picked-focus-ink": "#06202d",
+        "cursor": "#4f606d",
+        "cursor-ink": "#ffffff",
+        "cursor-picked": "#084d70",
+        "cursor-picked-ink": "#ffffff",
+    },
+}
+"""Everything drawn on the row under the cursor, as one dark row and one light row.
 
-Only typing surfaces get one: an option row says "pick me" with its chips, and a typing
-ground there invites the reader to type into a widget that ignores every letter. The ground
-carries the band as well, because a control spans the row and would otherwise paint over the
-stripe - five text questions in a row merged into one lit block.
+Each theme draws its current row from the OTHER set: the dark theme's current row is the
+light one and the light theme's is the dark one. The current row is therefore the reverse of
+the form around it - ground and ink both - and at least 9:1 from every band, where a row
+that only lifted its ground stood 1.40:1 from them. That is what says where the cursor is,
+because the row does not change size to say it.
 
-An answer already given is written in a plain grey brighter than the captions around it, and
-the answer being edited in orange: on a form this long the question text and the answers to
-it are the two things most worth telling apart at a glance, and only one cell is being typed
-into at a time. The grey stays neutral because a tint on thirty settled answers reads as a
-warning about all of them; the orange is as saturated as the focused ground allows, since a
-hue that far from yellow cannot go deeper and still clear the floor on it. 7.43:1 and
-4.56:1 on their grounds.
+One row, written once. Every ink in a set is measured on the grounds of the same set, so
+the pairs hold whichever theme borrows them.
 
-`FIELD_COND_FOCUS_BG` is the one ground that does not take the flat 8-green/6-blue lean the
-conditional rule states. That value is `#495b5c`, and the orange answer measures 4.19:1 on it -
-under the floor, on the single most important text in the app, on the row it is being typed
-into. This one is darkened instead, to 4.53:1, which costs about two percent of luminance and
-keeps the lean reading green. The contrast test asserts every one of these pairs, so the
-exception cannot quietly become the rule again."""
+`row-focus` is one ground on either band, so walking the form does not make the current row
+change shade. `row-cond-focus` is that ground leaned green, the same way and by about as
+little as a conditional band leans, since the moment the reader is on the row is the moment
+the fact matters most. The dark one is two parts darker than the flat lean `#30403b`, on
+which the help measures 4.44:1.
 
-OPTION_BG = "#363e49"
-OPTION_FG = "#b8b8b8"
-CURSOR_BG = "#9aa4b0"
-CURSOR_FG = SCREEN_BG
-CURSOR_PICKED_BG = "#5cc8f5"
-CURSOR_PICKED_FG = SCREEN_BG
-"""The three states an option can be in, each with its own ground and ink.
+The caption is `caption-focus`, the help under it `help-focus`, an error `error-focus` and
+the tree connector `rail-focus`: each is the ink the other theme uses for the same job.
 
-Every option carries a ground, not just the answer. A bare label among chips reads as prose,
-and prose beside chips reads as another option - the question's own caption ended up looking
-like one of its answers.
+`field-focus` is the ground being typed into and `answer-focus` its orange ink, the one
+hue-carrying text on the form. The dark `field-cond-focus` is darker than the flat lean
+`#495b5c`, on which the orange measures 4.19:1.
 
-Two questions are being answered at once and they are given separate channels, because they
-can hold at the same time and regularly do - the cursor starts on the answer every time. Hue
-says which option is chosen, cyan against neutral, and the shape says it a second time, filled
-against empty. Inversion says where the cursor is: under it the ground goes bright and the ink
-goes dark, on the answer and on an alternative alike.
+Options on the current row have chips of their own, because the resting chip belongs to the
+other polarity: `option-focus` for an option passed over and `picked-focus` for one chosen.
+Under the cursor the chip takes the strongest ground of the row and the ink turns over, on
+the answer (`cursor-picked`) and on an alternative (`cursor`) alike: dark with light ink on
+the light row, bright with dark ink on the dark row. `cursor` is at least 3:1 from
+`option-focus` and `cursor-picked` at least 3:1 from `picked-focus`, the floor for telling
+two surfaces apart, and nothing else marks the option the cursor is on.
+"""
 
-Inverting is what the earlier reading of this got wrong. A ground bright enough to read on its
-own cannot hold white text - true, and the conclusion drawn from it was to keep the ground
-dim, which left the cursor's chip one shade off the chosen chip at 1.32:1 and the reader
-unable to say where the cursor was. The conclusion that follows from it is to turn the ink
-over instead. These grounds clear 3:1 against the chips they must be told apart from - 3.36:1
-on the answer and 4.28:1 on an alternative - and carry dark ink at better than 6.5:1.
+_OTHER = {"dark": "light", "light": "dark"}
 
-The mark still sits outside the chip on the dark row rather than inside it, because a coloured
-mark inside has only the chip to contrast against, where amber managed 2.91:1.
+PALETTES: dict[str, dict[str, str]] = {
+    mode: {**_BASE[mode], **_CURRENT_ROW[_OTHER[mode]]} for mode in _BASE
+}
+"""Every role's colour in each theme: the theme's own, and the other theme's current row."""
 
-Nothing is dimmed to the point of hiding, and every state clears the 4.5:1 contrast floor -
-the options passed over are the alternatives the reader is deciding against, so they have to
-stay readable to be worth showing at all."""
+_PULSE_ENDS = {"dark": ("#46bcf0", "#2b8eba"), "light": ("#044a63", "#257e9d")}
+"""The two ends of the bar's breath on a dark current row and on a light one: the strong
+end, then the weak one.
 
-PICKED_BG = "#0b6591"
-PICKED_FG = "#ffffff"
-"""The chip under the option in force.
+The weak end is the one closest to the row's ground. It is the closest shade that still
+clears 3:1 on both grounds of its row, the floor for a mark that is not text: 3.21:1 and
+3.05:1 on the dark row, 3.06:1 and 3.02:1 on the light one. The cosine spacing dwells at
+the ends, so a weak end under the floor leaves the bar below it for about a fifth of every
+cycle."""
 
-Deeper than the brand cyan so the label can be light: white on `#21a8e4` measures 2.70:1 and
-white on this 6.39:1, and an answer written in dark ink on a bright chip reads as struck out
-rather than chosen. It is still the only hue on the row, so the answer is still the only
-option that is not a neutral."""
+PULSE_STEPS = 17
+"""Shades from one end of the breath to the other, both ends included."""
 
-TEXT = "#c3c3c3"
-TEXT_MUTED = "#a5a5a5"
-TEXT_SUBTLE = "#939da7"
+
+def _mix(start: str, end: str, share: float) -> str:
+    """The colour `share` of the way from `start` to `end`, channel by channel."""
+    pairs = ((int(start[i : i + 2], 16), int(end[i : i + 2], 16)) for i in (1, 3, 5))
+    return "#" + "".join(f"{round(a + (b - a) * share):02x}" for a, b in pairs)
+
+
+def pulse_shades(mode: str) -> tuple[str, ...]:
+    """The bar's ramp in the theme `mode`, strong end first, spaced on a cosine.
+
+    The cosine is why the bar eases through the turnarounds instead of reversing on the
+    spot. No step moves a channel more than 10 of 255, so it reads as a breath rather than
+    a sequence of shades.
+    """
+    # the bar is drawn on the current row, which is the other theme's
+    strong, weak = _PULSE_ENDS[_OTHER[mode]]
+    last = PULSE_STEPS - 1
+    return tuple(
+        _mix(strong, weak, (1 - math.cos(math.pi * step / last)) / 2)
+        for step in range(PULSE_STEPS)
+    )
+
+
+PULSE_CYCLE = (*range(PULSE_STEPS), *range(PULSE_STEPS - 2, 0, -1))
+"""The order the bar visits its shades in: down the ramp and back, each end once."""
+
+PULSE_INTERVAL = 0.06
+"""Seconds between two steps of the bar beside the current question.
+
+32 phases at 17 a second, so the cycle takes about two seconds."""
 
 MIN_WIDTH = 60
 MIN_HEIGHT = 18
@@ -248,122 +271,180 @@ them. Three covers every one of them at every supported width, and costs a row o
 captions that need it, since a row is `height: auto`."""
 
 HELP_LINES = 2
-"""Lines the focused row gives its help. Two holds about 90 characters at this gutter."""
+"""Lines the current row gives its help. Two holds about 90 characters at this gutter."""
 
-THEME = Theme(
-    name="copier-tui",
-    primary=CYAN,
-    secondary=CYAN_BRIGHT,
-    accent=ORANGE,
-    warning=AMBER,
-    error=ROSE,
-    success=MINT,
-    foreground=TEXT,
-    background=SCREEN_BG,
-    surface=SURFACE_BG,
-    panel=CHROME_BG,
-    dark=True,
-    variables={
-        "border": BORDER,
-        "border-blurred": BORDER,
-        "text-muted": TEXT_MUTED,
-        "text-disabled": TEXT_SUBTLE,
-        "footer-key-foreground": CYAN_BRIGHT,
-        "footer-description-foreground": TEXT_MUTED,
-        "input-selection-background": f"{CYAN} 35%",
-    },
-)
-"""Registered on the app so Textual's own chrome - overlays, footer, cursors - uses the palette."""
 
-HEADER_CSS = f"""
-#app-header {{
+def _theme(mode: str) -> Theme:
+    """The Textual theme for one palette, carrying every role as a `$st-<role>` variable."""
+    palette = PALETTES[mode]
+    pulse = {f"st-pulse-{step}": shade for step, shade in enumerate(pulse_shades(mode))}
+    return Theme(
+        name=f"stellars-tech-{mode}",
+        primary=palette["cyan"],
+        secondary=palette["cyan-bright"],
+        accent=palette["orange"],
+        warning=palette["amber"],
+        error=palette["rose"],
+        success=palette["mint"],
+        foreground=palette["text"],
+        background=palette["screen"],
+        surface=palette["surface"],
+        panel=palette["chrome"],
+        dark=mode == "dark",
+        variables={
+            # Textual's own chrome - overlays, footer, cursors - takes the palette too
+            "border": palette["border"],
+            "border-blurred": palette["border"],
+            "text-muted": palette["muted"],
+            "text-disabled": palette["subtle"],
+            "footer-key-foreground": palette["cyan-bright"],
+            "footer-description-foreground": palette["muted"],
+            # left to Textual, the thumb and its track are derived from the primary and the
+            # background and come out 2.06:1 dark and 1.72:1 light
+            "scrollbar": palette["subtle"],
+            "scrollbar-background": palette["chrome"],
+            # prefixed so that no role shadows a Textual built-in ($surface, $border, $text)
+            **{f"st-{role}": value for role, value in palette.items()},
+            **pulse,
+        },
+    )
+
+
+THEMES = {mode: _theme(mode) for mode in PALETTES}
+"""Both themes, by mode. `apply()` registers the pair and selects one."""
+
+DARK = THEMES["dark"].name
+LIGHT = THEMES["light"].name
+
+
+def apply(app: App, name: str) -> None:
+    """Register both themes on `app` and select `name`.
+
+    Call it in `__init__`, after `super().__init__()`. The stylesheet is parsed before
+    `on_mount`, and a `$st-*` variable that is not defined by then fails the parse.
+
+    Textual takes its starting theme from `TEXTUAL_THEME`, so with that variable naming one
+    of the two the app is already set to `name` before the theme by that name exists.
+    Assigning the same name again changes nothing, Textual does not recompute anything, and
+    the stylesheet has no `$st-*` variable at all. The other theme is selected first so that
+    selecting `name` is a change.
+    """
+    for theme in THEMES.values():
+        app.register_theme(theme)
+    if app.theme == name:
+        app.theme = LIGHT if name == DARK else DARK
+    app.theme = name
+
+
+def color(app: App, role: str) -> str:
+    """The hex a role has in the theme `app` is showing, for a Rich `Text` style."""
+    return app.theme_variables[f"st-{role}"]
+
+
+HEADER_CSS = """
+#app-header {
     height: 1;
-    background: {CHROME_BG};
-    color: {TEXT};
-}}
-#hdr-title {{
+    background: $st-chrome;
+    color: $st-text;
+}
+#hdr-title {
     width: 1fr;
     height: 1;
     padding: 0 1;
     /* the base ink only: the project and the field position carry the bright accent as
        segment styles, so a cell-wide colour here would flatten the two apart from the rest */
-    color: {TEXT};
+    color: $st-text;
     /* the bar is one row, so a title that wraps loses every line but the first - and the
        first ends at the last space it fitted, which took the whole destination off the
        review screen at 80 columns and left a dangling separator. Crop, never wrap. */
     text-wrap: nowrap;
     text-overflow: ellipsis;
-}}
-#hdr-version {{
+}
+#hdr-version {
     width: auto;
     padding: 0 1;
-    color: {TEXT_SUBTLE};
-}}
+    color: $st-subtle;
+}
 """
 """One-row header rules: #app-header, #hdr-title (width 1fr), #hdr-version (width auto)."""
 
-BASE_CSS = f"""
-Screen {{
-    background: {SCREEN_BG};
-    color: {TEXT};
+BASE_CSS = """
+Screen {
+    background: $st-screen;
+    color: $st-text;
     align: center middle;
-}}
-Footer {{
-    background: {CHROME_BG};
-    color: {TEXT_MUTED};
-}}
-Input, TextArea {{
-    background: {SURFACE_BG};
-    color: {TEXT};
+}
+Footer {
+    background: $st-chrome;
+    color: $st-muted;
+}
+Input, TextArea {
+    background: $st-surface;
+    color: $st-text;
     border: none;
     padding: 0 1;
-}}
+}
 /* the form's own typing grounds. These live here rather than in FieldRow.DEFAULT_CSS
    because Textual ranks app CSS above a widget's default sheet whatever the specificity,
    so the generic rule above silently won and the row never got the ground it asked for. */
 FieldRow > .field-head > Input,
-FieldRow > .field-head > TextArea {{
-    background: {FIELD_BG};
-    color: {ANSWER_FG};
-}}
+FieldRow > .field-head > TextArea {
+    background: $st-field;
+    color: $st-answer;
+}
 FieldRow.row-alt > .field-head > Input,
-FieldRow.row-alt > .field-head > TextArea {{
-    background: {FIELD_ALT_BG};
-}}
+FieldRow.row-alt > .field-head > TextArea {
+    background: $st-field-alt;
+}
 FieldRow.row-cond > .field-head > Input,
-FieldRow.row-cond > .field-head > TextArea {{
-    background: {FIELD_COND_BG};
-}}
+FieldRow.row-cond > .field-head > TextArea {
+    background: $st-field-cond;
+}
 FieldRow.row-alt.row-cond > .field-head > Input,
-FieldRow.row-alt.row-cond > .field-head > TextArea {{
-    background: {FIELD_ALT_COND_BG};
-}}
+FieldRow.row-alt.row-cond > .field-head > TextArea {
+    background: $st-field-alt-cond;
+}
 FieldRow:focus-within > .field-head > Input,
-FieldRow:focus-within > .field-head > TextArea {{
-    background: {FIELD_FOCUS_BG};
-    color: {ANSWER_FOCUS_FG};
-}}
-/* the typing ground follows the plate: one colour under the cursor whatever band the row is
+FieldRow:focus-within > .field-head > TextArea {
+    background: $st-field-focus;
+    color: $st-answer-focus;
+}
+/* the typing ground follows the row: one colour under the cursor whatever band the row is
    in, and the conditional lean carried through so a green row stays green while it is read.
    Only the conditional case needs restating - `.row-cond` matches as strongly as
    `:focus-within` and is written first, so it would otherwise keep its unfocused ground. The
    banded case falls through correctly on source order; the rule restating it was measured and
    found to change nothing. */
 FieldRow.row-cond:focus-within > .field-head > Input,
-FieldRow.row-cond:focus-within > .field-head > TextArea {{
-    background: {FIELD_COND_FOCUS_BG};
-}}
+FieldRow.row-cond:focus-within > .field-head > TextArea {
+    background: $st-field-cond-focus;
+}
+/* the caret and a selection are drawn on the field being typed into, and that field is on
+   the row under the cursor, whose colours are the other theme's. Textual colours both from
+   the theme's own foreground and background, which on that field is light on light in one
+   theme and dark on dark in the other. The caret is a block in the answer's own ink; a
+   selection is the pair the cursor's chip uses. */
+FieldRow > .field-head > TextArea > .text-area--cursor,
+FieldRow > .field-head > Input > .input--cursor {
+    background: $st-answer-focus;
+    color: $st-field-focus;
+}
+FieldRow > .field-head > TextArea > .text-area--selection,
+FieldRow > .field-head > Input > .input--selection {
+    background: $st-cursor;
+    color: $st-cursor-ink;
+}
 FieldRow > .field-head > Input:disabled,
-FieldRow > .field-head > TextArea:disabled {{
+FieldRow > .field-head > TextArea:disabled {
     background: transparent;
-    color: {TEXT_SUBTLE};
-}}
-Input:focus, TextArea:focus {{
-    background: {SURFACE_BG};
-    color: {CYAN_BRIGHT};
+    color: $st-subtle;
+}
+Input:focus, TextArea:focus {
+    background: $st-surface;
+    color: $st-cyan-bright;
     text-style: bold;
-}}
-#resize-prompt {{
+}
+#resize-prompt {
     /* a strip above the footer, not a box in the middle. Centred it covered six rows of the
        form to say the terminal was one row too short - at its most expensive in exactly the
        case that summoned it. It stays non-modal: the form above it still works. */
@@ -388,9 +469,9 @@ Input:focus, TextArea:focus {{
        border is inside the declared height, so `height: 1` with one left the content box zero
        rows and the message was never drawn at all. Two amber lines saying nothing, over the
        footer they covered. */
-    color: {AMBER};
+    color: $st-amber;
     text-wrap: nowrap;
     text-overflow: ellipsis;
-}}
+}
 """
 """Screen background, chrome panels and the flat compact controls, shared by every screen."""

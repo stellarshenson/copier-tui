@@ -11,7 +11,7 @@ import sys
 
 import pytest
 
-LOCAL_TEMPLATE = Path("/home/lab/workspace/private/copier-data-science")
+LOCAL_TEMPLATE = Path("/home/lab/workspace/private/copier-projects/copier-data-science")
 TEMPLATE_URL = "gh:stellarshenson/copier-data-science"
 TEMPLATE_TAG = "v1.3.18"
 

@@ -1,0 +1,41 @@
+_subdirectory: template
+
+name:
+    type: str
+    default: demo
+
+# never asked: the template computes it, and copier still takes a value given as data
+ver:
+    type: str
+    default: "1"
+    when: false
+
+use_db:
+    type: bool
+    default: true
+
+# asked only with a database, and `pg_schema` reads its answer
+db:
+    type: str
+    default: pg
+    choices: [pg, mysql]
+    when: "{{ use_db }}"
+
+pg_schema:
+    type: str
+    default: public
+    when: "{{ db == 'pg' }}"
+
+# asked, and its default is the text 3.10; read a second time it would be the number 3.1
+release:
+    type: yaml
+    default: "'3.10'"
+
+legacy:
+    type: str
+    default: old
+    when: "{{ release != '3.10' }}"
+
+# no type and no default: copier reads it as YAML, and a blank answer is the value "nothing"
+remark:
+    help: Anything to add

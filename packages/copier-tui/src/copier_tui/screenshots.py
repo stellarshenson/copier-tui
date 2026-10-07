@@ -19,7 +19,7 @@ from copier_ui import TemplateUI
 
 SIZE = (110, 40)
 OUT = Path("docs/assets")
-DEFAULT_TEMPLATE = "../../copier-data-science"
+DEFAULT_TEMPLATE = "../copier-data-science"
 DEMO_ANSWERS = {
     "author_name": "AcmeCo",
     "description": "A demo project rendered by copier-tui",

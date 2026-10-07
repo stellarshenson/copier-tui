@@ -19,24 +19,32 @@ Internals to use, all documented in docs/design-notes.md:
 - `copier._types.MISSING` - the "no default" sentinel returned by `Question.get_default()`
 - `copier._subproject.Subproject.last_answers` - the destination's answers file
 - `copier.Phase.use(Phase.PROMPT)` - wraps every evaluation
+- `copier._main.confirm` - the name copier asks `Overwrite <path>?` through; replaced for the
+  length of one run, because copier has no parameter for who answers
+- `copier._main.unsafe_prompt` - the name copier prompts for a question through; replaced for
+  the same run with one that raises for a question that would be asked and skips a hidden
+  one, because that prompt reads the terminal
 - `copier.run_copy` / `run_recopy` / `run_update` - the only public entry points
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from pathlib import Path
 import re
+from types import SimpleNamespace
 from typing import Any
 
 from copier import Phase, run_copy, run_recopy, run_update
+import copier._main as copier_main
 from copier._main import Worker
 from copier._types import MISSING
 from copier._user_data import AnswersMap
 from copier._user_data import Question as CopierQuestion
 from jinja2 import TemplateSyntaxError, meta
 
-from copier_ui.errors import TemplateLoadError
+from copier_ui.errors import CopierUIError, TemplateLoadError
 from copier_ui.model import Choice, Evaluation, Group, Kind, Operation, Question
 
 _KIND_BY_TYPE = {
@@ -58,6 +66,9 @@ class TemplateAdapter:
         self._worker = worker
         self._operation = operation
         self._questions: tuple[Question, ...] | None = None
+        # data given under a name that is no question: no row holds it; a default, a `when`,
+        # the choices and a validator read it
+        self.extra: dict[str, Any] = {}
 
     @classmethod
     def open(
@@ -161,6 +172,22 @@ class TemplateAdapter:
             visible=visible, default=default, has_default=True, choices=choices, error=None
         )
 
+    def parse(self, id: str, value: Any, answers: Mapping[str, Any]) -> Any:
+        """A supplied answer as copier hands it on to later questions: `Question.parse_answer`.
+
+        A control gives back text and `--data` gives command-line text. copier parses each
+        answer when its question's turn comes - the number out of `3`, the list out of
+        `[docs, ci]` - and the questions after it read the parsed value. An answer that does
+        not parse is given back as it is, and `validate` reports it on its own field.
+        """
+        if self._load_error(id) is not None:
+            return value
+        with Phase.use(Phase.PROMPT):
+            try:
+                return self._copier_question(id, answers).parse_answer(value)
+            except Exception:  # noqa: BLE001 - what does not parse is its own field's to report
+                return value
+
     def validate(self, id: str, value: Any, answers: Mapping[str, Any]) -> tuple[str, ...]:
         """Coerce and validate one value, returning messages instead of raising."""
         load_error = self._load_error(id)
@@ -174,19 +201,31 @@ class TemplateAdapter:
                 return (_plain_message(_redact(str(error), self.questions(), answers)),)
         return ()
 
-    def run(self, dst: Path, data: Mapping[str, Any], **copier_kwargs: Any) -> None:
-        """Dispatch to run_copy, run_recopy or run_update with the answers as data."""
+    def run(
+        self,
+        dst: Path,
+        data: Mapping[str, Any],
+        confirm: Callable[[str], bool] | None = None,
+        **copier_kwargs: Any,
+    ) -> None:
+        """Dispatch to run_copy, run_recopy or run_update with the answers as data.
+
+        `confirm` answers the yes/no question copier asks while it runs; without one copier
+        asks on the terminal, as it always has. With one, a template question copier would
+        prompt for ends the run with a `CopierUIError` naming it.
+        """
         kwargs: dict[str, Any] = {
             "vcs_ref": self._worker.vcs_ref,
             "answers_file": self._worker.answers_file,
             **copier_kwargs,
         }
-        if self._operation == "copy":
-            run_copy(str(self._worker.template.url), dst, dict(data), **kwargs)
-        elif self._operation == "recopy":
-            run_recopy(dst, dict(data), **kwargs)
-        else:
-            run_update(dst, dict(data), **kwargs)
+        with _questions_put_to(confirm):
+            if self._operation == "copy":
+                run_copy(str(self._worker.template.url), dst, dict(data), **kwargs)
+            elif self._operation == "recopy":
+                run_recopy(dst, dict(data), **kwargs)
+            else:
+                run_update(dst, dict(data), **kwargs)
 
     def close(self) -> None:
         """Drop the template's temporary clone."""
@@ -198,10 +237,29 @@ class TemplateAdapter:
         answers: Mapping[str, Any],
         details: Mapping[str, Any] | None = None,
     ) -> CopierQuestion:
-        """Build a fresh copier Question bound to a render context for these answers."""
+        """Build a fresh copier Question bound to a render context for these answers.
+
+        A default, a `when`, the choices and a validator read the sources copier's own `_ask`
+        gives an expression: the answers, the data that is no question's answer, the keys of
+        the answers file that are no question's name, the template's metadata (`_src_path`,
+        `_commit`) and its external data. A default reads `init` and `last` under its own
+        question's name, and neither holds a question's name here, so every default stays the
+        template's own: an answers-file key that is a question's name reaches the form as an
+        answer, on `update` and `recopy`. `from_template` takes no user defaults.
+        """
         if details is None:
             details = self._worker.template.questions_data[id]
-        self._worker.answers = AnswersMap(user=dict(answers))
+        self._worker.answers = AnswersMap(
+            user=dict(answers),
+            init=self.extra,
+            last={
+                key: value
+                for key, value in self._worker.subproject.last_answers.items()
+                if key not in self._worker.template.questions_data
+            },
+            metadata=self._worker.template.metadata,
+            external=self._worker._external_data(),
+        )
         return CopierQuestion(
             var_name=id,
             answers=self._worker.answers,
@@ -230,12 +288,12 @@ class TemplateAdapter:
                     secret=question.secret,
                 )
                 multiline = question.get_multiline()
-                placeholder = question.get_placeholder()
+                placeholder = _or_blank(question.get_placeholder)
                 validator_source = str(details.get("validator", ""))
                 # copier's own prompt caption: the rendered help, or `var_name (type)`
                 # when the template declares none. A drop-in must not show less than copier.
-                label = _one_line(question.get_message()) or id
-                help = _one_line(question.render_value(details.get("help", "")))
+                label = _one_line(_or_blank(question.get_message)) or id
+                help = _one_line(_or_blank(lambda: question.render_value(details.get("help", ""))))
         except Exception as error:  # noqa: BLE001 - a broken question is reported, not raised
             return Question(
                 id=id,
@@ -309,14 +367,62 @@ def _redact(message: str, questions: tuple[Question, ...], answers: Mapping[str,
     return message
 
 
-def _check_updatable(worker: Worker, operation: Operation) -> None:
-    """Refuse an update on the two grounds that matter most, before a question is asked.
+@contextmanager
+def _questions_put_to(confirm: Callable[[str], bool] | None) -> Iterator[None]:
+    """Hand the yes/no question copier asks mid-run to `confirm` instead of the terminal.
 
-    Not a git repository, and a repository with uncommitted work. copier makes five further
-    checks - a missing template ref, a template that is not git-tracked, a version it cannot
-    detect either side of, a downgrade - and those still fire at render. Two is the stopping
-    point on purpose: each one copied here is another verbatim copy of a copier string with
-    nothing keeping the two in step, and the dirty-repository case is the overwhelming one.
+    copier asks `Overwrite <path>?` whenever a file it rendered differs from the one already
+    in the destination and `overwrite` is off, and it asks through questionary, which reads
+    the terminal itself. A frontend drawing its own interface on that terminal is already
+    reading it: the question is written where nobody sees it and the run waits for an answer
+    that cannot arrive. copier decides everything else about the conflict - the skip patterns,
+    `overwrite`, the answers file - and only the asking is replaced, with copier's own wording.
+
+    copier's other prompt, the one that asks a question of the template, waits the same way and
+    has no yes or no to hand over: the answers were the caller's to supply. It ends the run
+    with the question's name, which is a failure the caller can show. A run told to take
+    copier's defaults, which is every run `TemplateUI.render` starts, reaches that prompt only
+    for a question named by `ask`. Without that, copier sends its hidden questions through
+    the prompt as well and relies on it to skip one whose `when` is false and give back the
+    default it was handed, so that much of the prompt is kept.
+    """
+    if confirm is None:
+        yield
+        return
+    original = copier_main.confirm, copier_main.unsafe_prompt
+
+    def ask(message: str, **_: Any) -> SimpleNamespace:
+        return SimpleNamespace(unsafe_ask=lambda: confirm(message.strip()))
+
+    def refuse(
+        questions: list[dict[str, Any]], answers: Mapping[str, Any] | None = None, **_: Any
+    ) -> dict[str, Any]:
+        for question in questions:
+            if question["when"](answers):
+                raise CopierUIError(
+                    f"copier asked for `{question['name']}` during the render, a question it "
+                    "was given no answer to; the render was stopped because nothing there can "
+                    "answer it"
+                )
+        return dict(answers or {})
+
+    copier_main.confirm, copier_main.unsafe_prompt = ask, refuse
+    try:
+        yield
+    finally:
+        copier_main.confirm, copier_main.unsafe_prompt = original
+
+
+def _check_updatable(worker: Worker, operation: Operation) -> None:
+    """Refuse an update on the three grounds copier checks first, before a question is asked.
+
+    Not a git repository, a repository with uncommitted work, and a destination that does not
+    record which template and version it was rendered from. copier makes four further checks -
+    a template that is not git-tracked, a version it cannot detect either side of, a
+    downgrade - and those still fire at render: each one copied here is another verbatim copy
+    of a copier string with nothing keeping the two in step. The third earns its copy because
+    without it the loader goes on to fetch a template the destination never named, and the
+    reader of an `update`, which takes no template, is told `Template not found`.
 
     copier makes them itself, but not until it runs - which for this front end is
     after the survey. A user who is told to commit their work only once they have answered
@@ -333,6 +439,11 @@ def _check_updatable(worker: Worker, operation: Operation) -> None:
         raise TemplateLoadError(
             "Destination repository is dirty; cannot continue. "
             "Please commit or stash your local changes and retry."
+        )
+    if subproject.template is None or subproject.template.ref is None:
+        raise TemplateLoadError(
+            "Cannot update because cannot obtain old template references "
+            f"from `{subproject.answers_relpath}`."
         )
 
 
@@ -445,6 +556,20 @@ def _constraints_of(kind: Kind) -> tuple[str, ...]:
 def _one_line(text: Any) -> str:
     """Collapse a rendered template string to the single line a label or hint can hold."""
     return " ".join(str(text or "").split())
+
+
+def _or_blank(caption: Callable[[], str]) -> str:
+    """What `caption` renders, or nothing when it cannot be rendered yet.
+
+    A help text and a placeholder are rendered once, at load, before any answer exists. One
+    that calls a method on an answer, or does arithmetic on it, fails there. The row is then
+    shown without it. Refused, it kept a project from being made that copier renders: copier
+    prints no caption in a run it is handed the answers for.
+    """
+    try:
+        return caption()
+    except Exception:  # noqa: BLE001 - whatever a template's expression raises
+        return ""
 
 
 def _kind_of(type_name: str, *, choices: bool, multiselect: bool, secret: bool) -> Kind:

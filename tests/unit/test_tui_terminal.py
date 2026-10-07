@@ -37,10 +37,11 @@ from copier_tui.screens.execution import (
     _descendants,
     _terminal_mode_kept,
 )
+from copier_tui.theme import DARK, LIGHT, PALETTES
 from copier_ui import TemplateUI
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
-REFERENCE = Path("/home/lab/workspace/private/copier-data-science")
+REFERENCE = Path("/home/lab/workspace/private/copier-projects/copier-data-science")
 
 SET_ANY_EVENT_MOUSE = b"\x1b[?1003h"
 """What a terminal is told with to report every movement of the pointer, not just its clicks."""
@@ -129,7 +130,7 @@ def test_a_template_that_grabs_the_terminal_still_leaves_a_key_that_closes(tmp_p
     try:
         assert _wait_for(master, b"this template asks nothing", seen, 60), _screen(seen)
         os.write(master, b"\r")
-        assert _wait_for(master, b"any other key closes", seen, 60), _screen(seen)
+        assert _wait_for(master, b"enter closes", seen, 60), _screen(seen)
         os.write(master, b"x")
         assert _wait_for_exit(child, master, seen, 20) == 0, _screen(seen)
     finally:
@@ -245,6 +246,53 @@ def test_a_render_that_never_finishes_can_still_be_left(tmp_path: Path) -> None:
         _reap(child, master)
 
 
+def test_a_file_that_differs_is_asked_about_and_the_render_ends(tmp_path: Path) -> None:
+    """Render: `Overwrite <path>?` is asked on the screen, and its answer lets the run finish.
+
+    A destination that already holds a file the template writes - the README of a repository
+    just created - made copier ask on the terminal the app was holding. The question was
+    written behind the screen and both read the same keys, so the render never ended.
+    """
+    dst = tmp_path / "proj"
+    dst.mkdir()
+    (dst / "README.md").write_text("mine\n")
+    child, master = _spawn("copy", str(FIXTURES / "tui_empty"), str(dst))
+    seen = bytearray()
+    try:
+        assert _wait_for(master, b"review", seen, 60), _screen(seen)
+        os.write(master, b"\r")
+        assert _wait_for(master, b"Overwrite README.md?", seen, 60), _screen(seen)
+        os.write(master, b"y")
+        assert _wait_for(master, b"enter closes", seen, 60), _screen(seen)
+        assert (dst / "README.md").read_text() == "nothing to ask\n"
+        os.write(master, b" ")
+        assert _wait_for_exit(child, master, seen, 20) == EXIT_OK, _screen(seen)
+    finally:
+        _reap(child, master)
+
+
+def test_a_render_waiting_for_an_answer_can_still_be_left(tmp_path: Path) -> None:
+    """Exit: ctrl+x ends a render that is waiting on its question, and the process goes.
+
+    Before the question was asked on the screen, nothing left this state on Python 3.14 -
+    not ctrl+x, not ctrl+c - and the terminal had to be closed.
+    """
+    dst = tmp_path / "proj"
+    dst.mkdir()
+    (dst / "README.md").write_text("mine\n")
+    child, master = _spawn("copy", str(FIXTURES / "tui_empty"), str(dst))
+    seen = bytearray()
+    try:
+        assert _wait_for(master, b"review", seen, 60), _screen(seen)
+        os.write(master, b"\r")
+        assert _wait_for(master, b"Overwrite README.md?", seen, 60), _screen(seen)
+        os.write(master, b"\x18")
+        assert _wait_for_exit(child, master, seen, 20) == EXIT_FAILURE, _screen(seen)
+        assert (dst / "README.md").read_text() == "mine\n"
+    finally:
+        _reap(child, master)
+
+
 def _alive(pid: int) -> bool:
     """Whether `pid` is still running, counting a zombie as gone.
 
@@ -259,17 +307,25 @@ def _alive(pid: int) -> bool:
     return stat[stat.rindex(")") + 1 :].split()[0] != "Z"
 
 
-def _spawn(*args: str) -> tuple[int, int]:
+def _spawn(*args: str, theme: str | None = DARK) -> tuple[int, int]:
     """Run the CLI on a pty of its own, and return the child's pid and the master descriptor.
 
     `pty.fork` rather than a plain Popen on an openpty pair: the child has to be a session
     leader whose controlling terminal is the new pty, or the fixture's `/dev/tty` reaches the
     terminal running the suite instead of the one under test.
+
+    The theme is named in the environment, so the app does not ask the terminal for its
+    background: the terminal here is a test that answers nothing, and the app would wait for
+    it. `theme=None` leaves the question to the app, for the test that answers it.
     """
     child, master = pty.fork()
     if child == 0:  # pragma: no cover - a forked child, and it execs on the next line
         try:
             env = dict(os.environ, TERM="xterm-256color", COLUMNS=str(COLS), LINES=str(ROWS))
+            env.pop("TEXTUAL_THEME", None)
+            env.pop("COLORFGBG", None)
+            if theme is not None:
+                env["TEXTUAL_THEME"] = theme
             os.execve(sys.executable, [sys.executable, "-c", LAUNCH, *args], env)
         finally:
             os._exit(127)
@@ -393,6 +449,7 @@ def test_abandoning_a_render_ends_a_task_and_not_just_its_shell(tmp_path: Path) 
     screen = ExecutionScreen.__new__(ExecutionScreen)
     screen._children = []
     screen._abandoned = False
+    screen._answer = None
     marker = tmp_path / "task.pid"
     with _children_without_stdin(screen._note_child):
         subprocess.Popen(  # a shell is the case under test
@@ -435,9 +492,11 @@ def test_every_key_closes_a_finished_render(key: bytes, name: str, tmp_path: Pat
     try:
         assert _wait_for(master, b"questionnaire", seen, 60), _screen(seen)
         os.write(master, b"\r")  # survey hands over to review
-        _read(master, seen, 1.0)
+        # the review's own footer, not a pause: a single read returns on the first painted
+        # byte, so the second enter used to go out while the survey still held the screen
+        assert _wait_for(master, b"Create", seen, 60), _screen(seen)
         os.write(master, b"\r")  # review confirms, the render starts
-        assert _wait_for(master, b"any other key closes", seen, 60), _screen(seen)
+        assert _wait_for(master, b"enter closes", seen, 60), _screen(seen)
         # let the paint finish before the key goes out. A single read returns on the first
         # byte, which during a paint is immediately, so it settled nothing - both the escape
         # case and ctrl+x were seen to flake under a loaded full-suite run. This reads until
@@ -446,6 +505,32 @@ def test_every_key_closes_a_finished_render(key: bytes, name: str, tmp_path: Pat
         _settle(master, seen)
         os.write(master, key)
         assert _wait_for_exit(child, master, seen, 15) == 0, f"{name} did not close the run"
+    finally:
+        _reap(child, master)
+
+
+def test_a_double_press_of_enter_on_the_survey_leaves_the_app_running(tmp_path: Path) -> None:
+    """Hand-over: two enters that arrive in one read do not end the app.
+
+    When both are queued before the first has put the review on top, both reach the survey:
+    the app pushed a review for each and ended with `DuplicateIds`, exit 2 and nothing
+    written. When the review is up in time, the second enter is the review's and starts the
+    render. Which of the two happens is a matter of timing, so the run is walked to its end
+    with single enters from whichever screen is left: one that a running render ignores.
+    """
+    child, master = _spawn("copy", "--trust", str(FIXTURES / "tui_flow"), str(tmp_path / "out"))
+    seen = bytearray()
+    try:
+        assert _wait_for(master, b"questionnaire", seen, 60), _screen(seen)
+        os.write(master, b"\r\r")
+        code = None
+        for _ in range(5):
+            code = _wait_for_exit(child, master, seen, 5)
+            if code is not None:
+                break
+            os.write(master, b"\r")
+        assert code == 0, _screen(seen)
+        assert (tmp_path / "out" / "name.txt").exists()
     finally:
         _reap(child, master)
 
@@ -610,3 +695,86 @@ def test_a_piped_run_writes_no_escape_sequence(
         app_module.run_survey(ui, tmp_path / "out", {})
 
     assert written == []
+
+
+def test_the_survey_opens_in_the_theme_the_terminal_calls_for(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Startup: the theme is picked before the app starts, and the app is built with it.
+
+    Textual never asks the terminal whether its background is light or dark, and it owns the
+    terminal from `run` on, so the question has one place it can be asked.
+    """
+    opened: list[str] = []
+    monkeypatch.setattr(app_module, "pick_theme", lambda: LIGHT)
+    monkeypatch.setattr(
+        app_module.SurveyApp, "run", lambda self, **kwargs: opened.append(self.theme) or EXIT_OK
+    )
+
+    with TemplateUI.from_template(str(FIXTURES / "tui_flow"), dst=tmp_path / "out") as ui:
+        app_module.run_survey(ui, tmp_path / "out", {})
+
+    assert opened == [LIGHT]
+
+
+@pytest.mark.parametrize("mode", ["dark", "light"])
+def test_a_theme_named_in_the_environment_is_the_theme_on_screen(
+    mode: str, tmp_path: Path
+) -> None:
+    """Startup: `TEXTUAL_THEME` naming one of the two themes opens the survey in it.
+
+    A real process, because the variable is read when Textual is imported. Textual starts
+    the app on the theme the variable names before that theme is registered, so selecting it
+    afterwards was no change: nothing was recomputed, the stylesheet had none of the palette's
+    variables, and the app stopped on its first line with an undefined variable.
+    """
+    name = {"dark": DARK, "light": LIGHT}[mode]
+    screen = PALETTES[mode]["screen"]
+    ground = ";".join(str(int(screen[i : i + 2], 16)) for i in (1, 3, 5)).encode()
+    child, master = _spawn("copy", str(FIXTURES / "tui_flow"), str(tmp_path / "proj"), theme=name)
+    seen = bytearray()
+    try:
+        assert _wait_for(master, b"questionnaire", seen, 60), _screen(seen)
+        _settle(master, seen)
+        assert b"48;2;" + ground in seen, _screen(seen)
+        assert b"\x1b]11;?" not in seen, "the theme was named, so the terminal is not asked"
+        os.write(master, b"\x1b\x1b")
+        assert _wait_for_exit(child, master, seen, 20) == EXIT_CANCELLED, _screen(seen)
+    finally:
+        _reap(child, master)
+
+
+def test_the_terminals_answer_is_not_typed_into_the_form(tmp_path: Path) -> None:
+    """Startup: what the terminal answers about its background never reaches the survey.
+
+    The test is the terminal. It waits for the question, answers that its background is
+    light, and answers the device-attributes question after it. The survey then opens light,
+    and none of the answer's bytes are in the first field - which is where they were written
+    when the app stopped listening after a fixed wait and the answer arrived later.
+    """
+    light = PALETTES["light"]["screen"]
+    ground = ";".join(str(int(light[i : i + 2], 16)) for i in (1, 3, 5)).encode()
+    child, master = _spawn("copy", str(FIXTURES / "tui_flow"), str(tmp_path / "proj"), theme=None)
+    seen = bytearray()
+    try:
+        deadline = time.monotonic() + 60
+        while b"\x1b[c" not in seen and time.monotonic() < deadline:
+            _read(master, seen, 0.2)
+        assert b"\x1b]11;?" in seen, "the app never asked for the background colour"
+        # late, as a slow link delivers it: past the fifth of a second a fixed wait gave it,
+        # and inside the second the app allows for the last answer
+        time.sleep(0.3)
+        os.write(master, b"\x1b]11;rgb:f5f5/f7f7/fafa\x1b\\")
+        os.write(master, b"\x1b[?62;22c")
+
+        assert _wait_for(master, b"questionnaire", seen, 60), _screen(seen)
+        _settle(master, seen)
+        assert b"48;2;" + ground in seen, "the survey did not open on the light ground"
+        painted = _plain(seen)
+        assert b"rgb:" not in painted and b"]11;" not in painted, _screen(seen)
+        assert b"62;22c" not in painted, _screen(seen)
+
+        os.write(master, b"\x1b\x1b")
+        assert _wait_for_exit(child, master, seen, 20) == EXIT_CANCELLED, _screen(seen)
+    finally:
+        _reap(child, master)

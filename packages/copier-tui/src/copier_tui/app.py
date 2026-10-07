@@ -14,17 +14,19 @@ from textual.geometry import Size
 from textual.screen import Screen
 from textual.widgets import Footer, Static
 
+from copier_tui.background import pick_theme
 from copier_tui.errors import EXIT_CANCELLED, EXIT_FAILURE, EXIT_OK
 from copier_tui.paths import shown_path
 from copier_tui.screens import ExecutionScreen, ReviewScreen, SurveyScreen
 from copier_tui.screens.survey import askable_ids
 from copier_tui.theme import (
-    AMBER,
     BASE_CSS,
+    DARK,
     HEADER_CSS,
     MIN_HEIGHT,
     MIN_WIDTH,
-    THEME,
+    apply,
+    color,
 )
 from copier_ui import TemplateUI
 
@@ -68,17 +70,24 @@ class SurveyApp(App[int]):
         # quietly did nothing at all.
     ]
 
-    def __init__(self, ui: TemplateUI, dst: Path, copier_kwargs: dict[str, Any]) -> None:
-        """Hold the loaded template UI, the destination and copier's own flags."""
+    def __init__(
+        self, ui: TemplateUI, dst: Path, copier_kwargs: dict[str, Any], theme: str = DARK
+    ) -> None:
+        """Hold the loaded template UI, the destination and copier's own flags.
+
+        `theme` is one of the two brand themes. It is selected here and not in `on_mount`:
+        the stylesheet is parsed before `on_mount`, and it is written on the theme's own
+        variables.
+        """
         super().__init__()
+        apply(self, theme)
         self.ui = ui
         self.dst = dst
         self.copier_kwargs = copier_kwargs
+        self._handed_over = False
 
     def on_mount(self) -> None:
-        """Register the palette, then open the survey - or review when nothing is asked."""
-        self.register_theme(THEME)
-        self.theme = THEME.name
+        """Open the survey - or review when nothing is asked."""
         if self._has_questions():
             self._push(SurveyScreen(self.ui, self.dst))
         else:
@@ -153,7 +162,8 @@ class SurveyApp(App[int]):
                 if screen.leaves_files_behind
                 else f"nothing was left in {shown_path(self.dst)}"
             )
-            self.exit(EXIT_FAILURE, message=Text(f"abandoned mid-render - {left}", style=AMBER))
+            amber = color(self, "amber")
+            self.exit(EXIT_FAILURE, message=Text(f"abandoned mid-render - {left}", style=amber))
             return
         self.exit(EXIT_CANCELLED)
 
@@ -161,8 +171,8 @@ class SurveyApp(App[int]):
         """Absorb a key the app has no business acting on, so the terminal keeps it."""
 
     def _has_questions(self) -> bool:
-        """True when at least one field is visible and not already answered by --data."""
-        return bool(askable_ids(self.ui.state()))
+        """True when the survey has at least one field to ask for."""
+        return bool(askable_ids(self.ui.state(), self.ui.validate()))
 
     def _push(self, screen: Screen[Any], callback: Any = None) -> None:
         """Push a screen and re-check the terminal size once it has laid out."""
@@ -170,7 +180,18 @@ class SurveyApp(App[int]):
         self.call_after_refresh(self._check_size)
 
     def _open_review(self) -> None:
-        """Stack the review screen over whatever is showing."""
+        """Stack the review screen over whatever is showing, once per hand-over.
+
+        Two enters can reach the survey before the first has put the review on top:
+        validating a large template takes long enough for a double press. Each posts its
+        confirmation, and the second pushed a second review with the same id, which ended
+        the app with `DuplicateIds`. The mark stays set once the review is confirmed. The
+        survey is the screen on top for a moment each time a screen above it closes, and a
+        key that lands on it then must not open a review over the render.
+        """
+        if self._handed_over:
+            return
+        self._handed_over = True
         self._push(ReviewScreen(self.ui, self.dst), self._after_review)
 
     def _after_review(self, confirmed: bool | None) -> None:
@@ -182,6 +203,7 @@ class SurveyApp(App[int]):
         elif not self._has_questions():
             self.exit(EXIT_CANCELLED)
         else:
+            self._handed_over = False
             self.call_after_refresh(self._check_size)
 
     def _after_execution(self, ok: bool | None) -> None:
@@ -241,8 +263,11 @@ def run_survey(ui: TemplateUI, dst: Path, copier_kwargs: dict[str, Any]) -> int:
     a report per pointer twitch pays for nothing, and asking for none leaves the terminal its
     own selection and copy.
     """
+    # asked before the app starts: Textual owns the terminal from `run` on, and never asks
+    # it whether its background is light or dark
+    theme = pick_theme()
     if sys.stdout.isatty():
         sys.stdout.write(TERMINAL_RESET)
         sys.stdout.flush()
-    exit_code = SurveyApp(ui, dst, copier_kwargs).run(mouse=False)
+    exit_code = SurveyApp(ui, dst, copier_kwargs, theme).run(mouse=False)
     return EXIT_CANCELLED if exit_code is None else exit_code

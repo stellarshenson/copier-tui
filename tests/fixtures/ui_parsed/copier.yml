@@ -1,0 +1,33 @@
+_subdirectory: template
+
+# asked before the number it reads: copier hands a later answer on as it was given
+early:
+    type: str
+    default: x
+    when: "{{ later != 3 }}"
+
+later:
+    type: int
+    default: 3
+
+# never asked, and its default is the text 1.0 once copier has read it; read a second time
+# it would be the number
+release:
+    type: yaml
+    default: "'1.0'"
+    when: false
+
+notes:
+    type: str
+    default: for one-point-oh
+    when: "{{ release == '1.0' }}"
+
+extras:
+    type: str
+    multiselect: true
+    choices: [docs, ci, docker]
+    default: [docs]
+
+count_line:
+    type: str
+    default: "{{ extras | length }} extras: {{ extras | join('+') }}"

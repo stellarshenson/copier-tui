@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from copier_tui.changes import diff, snapshot
+from copier_tui.changes import Changes, diff, snapshot
+from copier_tui.screens.execution import BANNER_ROLES, _counts_line
 
 
 def test_the_four_counts_come_from_the_directory_alone(tmp_path: Path) -> None:
@@ -39,3 +40,18 @@ def test_git_is_not_part_of_the_account(tmp_path: Path) -> None:
 def test_a_missing_destination_is_an_empty_snapshot(tmp_path: Path) -> None:
     """`copy` into a directory that does not exist yet starts from nothing."""
     assert snapshot(tmp_path / "absent") == {}
+
+
+def test_what_went_wrong_is_printed_in_the_error_ink() -> None:
+    """Banner: deleted files, conflicts and the conflicted paths are text, so they take `error`.
+
+    They were printed in `rose`, the failure colour. In the dark theme it is 3.87:1 on the
+    banner and 3.50:1 on the file list, under the 4.5:1 floor every other text ink is held to.
+    """
+    assert "error" in BANNER_ROLES and "rose" not in BANNER_ROLES
+    ink = {role: f"ink-{role}" for role in BANNER_ROLES}
+    text = _counts_line(Changes(deleted=("gone.txt",), conflicted=("merge.txt",)), ink)
+    styles = {text.plain[span.start : span.end].strip(): str(span.style) for span in text.spans}
+    assert styles["1 deleted"] == "ink-error"
+    assert styles["1 conflict"] == "bold ink-error"
+    assert styles["merge.txt"] == "ink-error"

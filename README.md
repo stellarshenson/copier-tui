@@ -20,6 +20,7 @@ A drop-in wrapper for [copier](https://copier.readthedocs.io) with a terminal UI
 - **Every template works unchanged** - copier stays the engine, answers go in through its Python API
 - **Conditional fields nest** - a `when` field appears under the answer that governs it
 - **The run is accounted for** - the survey names where the template will land, and the render lists the files as they are written, and a banner at the end counts what was added, changed, deleted and left with a conflict to resolve
+- **Dark and light** - the theme follows the terminal's background; `TEXTUAL_THEME=stellars-tech-dark` or `TEXTUAL_THEME=stellars-tech-light` sets it
 - **Reusable core** - `copier-ui` needs no terminal or event loop, so a web or HTTP frontend reuses it
 
 ## Installation
@@ -52,7 +53,7 @@ The review screen lists every answer, and is the last step before anything is wr
 
 ![the review screen](docs/assets/review.svg)
 
-The render names each file as copier writes it, and closes on a banner counting what it did:
+The render names each file as copier writes it, asks copier's `Overwrite <path>?` on screen for a file that already exists and differs, and closes on a banner counting what it did:
 
 ![the execution screen](docs/assets/execution.svg)
 
@@ -64,6 +65,7 @@ The render names each file as copier writes it, and closes on a banner counting 
 | `left` / `right` | move along a question's options, taking the one they land on |
 | `space` | cycle a choice forward, or tick the option under the cursor in a multiselect; a switch is left to the arrows |
 | `enter` | confirm the screen; inside a multiline editor it breaks the line |
+| `y` / `n` | answer copier's `Overwrite <path>?` on the render screen |
 | `esc` | go back, or cancel - on the survey it arms first and quits on a second press |
 | `ctrl+x` | quit from any screen; on a render still running it ends the run's tasks and leaves |
 | `ctrl+q` | the same as `ctrl+x` |

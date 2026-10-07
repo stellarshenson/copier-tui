@@ -17,7 +17,7 @@ from typing import Any
 from rich.cells import cell_len, set_cell_size
 from rich.text import Text
 from textual import events
-from textual.app import ComposeResult
+from textual.app import ComposeResult, RenderResult
 from textual.containers import Horizontal, Vertical
 from textual.geometry import Offset
 from textual.message import Message
@@ -29,26 +29,13 @@ from copier_tui import __version__
 from copier_tui.inline import BOOL_CHOICES, InlineOptions
 from copier_tui.paths import fit_name
 from copier_tui.theme import (
-    AMBER,
-    CYAN,
-    CYAN_BRIGHT,
-    ERROR_FG,
     HELP_LINES,
     LABEL_LINES,
     LABEL_WIDTH,
-    MARK_SHADES,
     PULSE_CYCLE,
     PULSE_INTERVAL,
-    PULSE_SHADES,
-    ROW_ALT_BG,
-    ROW_ALT_COND_BG,
-    ROW_BG,
-    ROW_COND_BG,
-    ROW_COND_FOCUS_BG,
-    ROW_FOCUS_BG,
-    TEXT,
-    TEXT_MUTED,
-    TEXT_SUBTLE,
+    PULSE_STEPS,
+    color,
 )
 from copier_tui.wrapping import install as install_wrapping
 from copier_ui import FieldState, Kind, Question
@@ -87,10 +74,6 @@ characters wide gives it two cells where `rich.cells.cell_len` counts one."""
 _BRAND_TEXT = f"copier-tui v{__version__}"
 """The right-hand cell: the tool and the version, the two facts that never change between
 screens - so they sit where the eye is not reading the run's own state."""
-
-HEADER_LEAD = f"bold {CYAN_BRIGHT}"
-"""Ink for the project and the field position - the two parts of the title nothing else on
-the screen says."""
 
 HEADER_PATH_FLOOR = 12
 """The least the path is ever cropped to. Below about 45 columns the stylesheet's own ellipsis
@@ -338,23 +321,26 @@ class HeaderBar(Horizontal):
         its head, since `questionnaire` is worth less than the template it names.
         """
         title = Text(no_wrap=True, overflow="ellipsis")
+        # the project and the field position are the two parts of the title nothing else on
+        # the screen says, so they take the bright accent
+        lead = f"bold {color(self.app, 'cyan-bright')}"
         # what the row has for the title: everything the right-hand cell and the padding
         # are not using
         room = self.size.width - cell_len(_BRAND_TEXT) - HEADER_FIXED
         parts: list[tuple[str, str]] = []
         if self._project:
             spare = room - _spent(self._label_context, self._position)
-            parts.append((fit_name(self._project, max(spare, HEADER_PATH_FLOOR)), HEADER_LEAD))
+            parts.append((fit_name(self._project, max(spare, HEADER_PATH_FLOOR)), lead))
         if self._label_context:
             spare = room - _spent(*(part for part, _ in parts), self._position)
-            parts.append((_crop(self._label_context, max(spare, 0)), TEXT))
+            parts.append((_crop(self._label_context, max(spare, 0)), color(self.app, "text")))
         if self._position:
-            parts.append((self._position, HEADER_LEAD))
+            parts.append((self._position, lead))
         for part, style in parts:
             if not part:
                 continue
             if title.plain:
-                title.append(HEADER_SEP, style=TEXT_SUBTLE)
+                title.append(HEADER_SEP, style=color(self.app, "subtle"))
             title.append(part, style=style)
         return title
 
@@ -373,9 +359,41 @@ def _crop(text: str, limit: int) -> str:
     return set_cell_size(text, limit - len("...")) + "..."
 
 
+class _Head(Horizontal):
+    """The caption with its control, and the tree's line down the caption column.
+
+    A row is as tall as its tallest part, so a caption of one line beside five stacked options
+    leaves four empty lines under it. Where the tree runs on below the row - the next row is
+    its first child, or its sibling - those lines carry the tree's vertical line, so the
+    connector column is unbroken from a question to what hangs from it.
+
+    The container draws the line itself, on every one of its lines, and the caption and the
+    control are drawn over it. It shows in exactly the cells neither covers, and it costs no
+    layout: written into the caption instead, it would make the caption as tall as the control
+    and hold the row at that height after the control had shrunk.
+    """
+
+    def __init__(self) -> None:
+        """Start with no line to draw."""
+        super().__init__(classes="field-head")
+        self._rail = ""
+
+    def set_rail(self, ink: str) -> None:
+        """Draw the line in `ink`, or stop drawing it when `ink` is empty."""
+        if ink != self._rail:
+            self._rail = ink
+            self.refresh()
+
+    def render(self) -> RenderResult:
+        """The line, in the caption's first column, where every connector is drawn."""
+        if not self._rail:
+            return super().render()
+        return Text("\n".join([f" {RAIL}"] * self.size.height), style=self._rail)
+
+
 _PULSE_CSS = "\n    ".join(
-    f"FieldRow.pulse-{index}:focus-within {{ border-left: thick {shade}; }}"
-    for index, shade in enumerate(PULSE_SHADES)
+    f"FieldRow.pulse-{step}:focus-within {{ border-left: thick $st-pulse-{step}; }}"
+    for step in range(PULSE_STEPS)
 )
 """One rule per shade, keyed by a class the focused row cycles through."""
 
@@ -386,45 +404,38 @@ class FieldRow(Vertical):
     DEFAULT_CSS = f"""
     FieldRow {{
         height: auto;
-        background: {ROW_BG};
-        border-left: thick {ROW_BG};
+        background: $st-row;
+        border-left: thick $st-row;
     }}
     FieldRow.row-alt {{
-        background: {ROW_ALT_BG};
-        border-left: thick {ROW_ALT_BG};
+        background: $st-row-alt;
+        border-left: thick $st-row-alt;
     }}
     FieldRow.row-cond {{
-        background: {ROW_COND_BG};
-        border-left: thick {ROW_COND_BG};
+        background: $st-row-cond;
+        border-left: thick $st-row-cond;
     }}
     FieldRow.row-alt.row-cond {{
-        background: {ROW_ALT_COND_BG};
-        border-left: thick {ROW_ALT_COND_BG};
+        background: $st-row-alt-cond;
+        border-left: thick $st-row-alt-cond;
     }}
     FieldRow:focus-within {{
-        background: {ROW_FOCUS_BG};
-        border-left: thick {CYAN};
+        background: $st-row-focus;
+        border-left: thick $st-bar;
     }}
-    FieldRow > .field-rail {{
-        display: none;
-        height: 1;
-        padding: 0 0 0 1;
-        color: {TEXT_SUBTLE};
-    }}
-    FieldRow:focus-within > .field-rail {{
-        display: block;
-    }}
-    /* the plate under the cursor is one ground on every row, so walking the form does not make
-       the lifted row flicker between the two bands. The banded rules are restated here rather
-       than left to fall through: a row matching two classes outranks a bare `:focus-within`,
-       and would keep its own band colour under the cursor.
+    /* the row under the cursor is drawn in the other theme's colours, ground and ink both:
+       light with dark ink in the dark theme, dark with light ink in the light one. It is one
+       ground on every row, so walking the form does not make the current row change shade
+       between the two bands.
+
+       The row is the same height under the cursor as away from it, apart from the help it
+       prints. It used to open a blank line above and below itself, so every row under the
+       cursor moved on each press of an arrow; the ground says where the cursor is now.
 
        Background only. These carry no `border-left`, because that is the breathing bar's and
        the bar is set by `_PULSE_CSS` below, whose rules match one class and a pseudo-class.
        A restated rule naming two classes and a pseudo-class outranks every one of them, so
-       the bar stopped where it stood on any row that was banded AND conditional - while the
-       option mark beside it, coloured in code rather than in CSS, went on breathing. Two
-       halves of one signal, visibly out of step, on precisely one row in four. */
+       the bar stopped where it stood on any row that was banded AND conditional. */
     /* the one exception the user reads a meaning off: a question another answer decides
        whether to ask keeps its green lean while it is the row being read. This one IS needed -
        `FieldRow.row-cond` matches as strongly as `FieldRow:focus-within` and comes first, so
@@ -432,7 +443,7 @@ class FieldRow(Vertical):
        cases need no such restatement: `FieldRow:focus-within` is written after both bands and
        wins the tie on source order, which was measured rather than assumed. */
     FieldRow.row-cond:focus-within {{
-        background: {ROW_COND_FOCUS_BG};
+        background: $st-row-cond-focus;
     }}
     {_PULSE_CSS}
     FieldRow > .field-head {{
@@ -451,14 +462,14 @@ class FieldRow(Vertical):
         padding: 0 2 0 1;
         text-align: left;
         text-wrap: wrap;
-        color: {TEXT};
+        color: $st-text;
     }}
     FieldRow:focus-within .field-label {{
-        color: {CYAN_BRIGHT};
+        color: $st-caption-focus;
         text-style: bold;
     }}
     FieldRow.row-off .field-label {{
-        color: {TEXT_SUBTLE};
+        color: $st-subtle;
     }}
     FieldRow .field-flag {{
         width: 2;
@@ -471,7 +482,7 @@ class FieldRow(Vertical):
         width: 1fr;
     }}
     FieldRow > .field-head > InlineOptions:disabled {{
-        color: {TEXT_SUBTLE};
+        color: $st-subtle;
     }}
     FieldRow > .field-head > TextArea {{
         /* every editor is as tall as what it holds: an answer that wraps onto five lines
@@ -491,7 +502,7 @@ class FieldRow(Vertical):
         display: none;
         height: auto;
         padding: 0 2 0 {LABEL_WIDTH};
-        color: {TEXT_MUTED};
+        color: $st-muted;
     }}
     FieldRow:focus-within > .field-help.has-help {{
         display: block;
@@ -501,9 +512,37 @@ class FieldRow(Vertical):
            it is read; capped, a long validator sentence lost half its words with nothing on
            screen marking the cut, ending on a clause that reads as finished. */
         max-height: {HELP_LINES};
+        color: $st-help-focus;
     }}
     FieldRow > .field-help.has-error {{
         display: block;
+        color: $st-error;
+    }}
+    FieldRow .field-flag.flag-error {{
+        color: $st-error;
+        text-style: bold;
+    }}
+    FieldRow .field-flag.flag-off {{
+        color: $st-amber;
+    }}
+    /* the tree's line crosses the help as well, where the tree runs on below the row: the
+       help sits between this row's caption and the row below, so it would otherwise cut the
+       connector column for as long as the cursor is on a parent or on a child with a
+       sibling. A left border one cell in is the same glyph in the same column as the line
+       the head draws above it. */
+    FieldRow > .field-help.has-rail {{
+        margin: 0 0 0 1;
+        border-left: solid $st-subtle;
+    }}
+    FieldRow:focus-within > .field-help.has-rail {{
+        border-left: solid $st-rail-focus;
+    }}
+    /* an error on the row under the cursor is on that row's ground, which is the other
+       theme's, so it takes the other theme's error ink. Written after the two rules above
+       and with the pseudo-class on top of their selectors, so it outranks both. */
+    FieldRow:focus-within > .field-help.has-error,
+    FieldRow:focus-within .field-flag.flag-error {{
+        color: $st-error-focus;
     }}
     """
 
@@ -532,31 +571,25 @@ class FieldRow(Vertical):
         self.spoken = spoken
         self.question = question
         self._field = field
+        self._head = _Head()
         self._label = Static(classes="field-label")
         self._branch = ""
-        self._rail_above = Static(classes="field-rail")
-        self._rail_below = Static(classes="field-rail")
+        self._run_below = False
         self._control = control_for(question, field)
         self._flag = Static(classes="field-flag", id=f"flag-{question.id}")
         self._help = Static(classes="field-help", id=f"help-{question.id}")
         self._last_value: Any = None
         self._pulse: Timer | None = None
         self._beat = 0
+        self._current = False
 
     def compose(self) -> ComposeResult:
-        """A spacer line, the caption line with its control, the help, and a spacer again.
-
-        The spacers are the blank line the focused row keeps either side of itself. They are
-        widgets rather than padding because a run of children has to cross them: padding is
-        empty by definition, so the tree broke wherever the cursor landed inside a run.
-        """
-        yield self._rail_above
-        with Horizontal(classes="field-head"):
+        """The caption line with its control, and the help under it."""
+        with self._head:
             yield self._label
             yield self._control
             yield self._flag
         yield self._help
-        yield self._rail_below
 
     def on_mount(self) -> None:
         """Show the caption, the help and the glyph; the control holds its own value."""
@@ -586,7 +619,19 @@ class FieldRow(Vertical):
         measured rather than declared.
         """
         self._indent()
-        self._label.update(_label_text(self.question, self._branch, self._caption_width()))
+        self._label.update(self._caption())
+
+    def _caption(self) -> Text:
+        """The caption as it is drawn now: wrapped to the gutter, behind its connector."""
+        return _label_text(self.question, self._branch, self._caption_width(), self._rail_ink())
+
+    def _rail_ink(self) -> str:
+        """The tree's ink on this row's ground.
+
+        The row under the cursor has the other theme's ground, so the tree has an ink of its
+        own there.
+        """
+        return color(self.app, "rail-focus" if self._current else "subtle")
 
     def _indent(self) -> None:
         """Set the help's left padding to the column it belongs under.
@@ -605,7 +650,11 @@ class FieldRow(Vertical):
         behind.
         """
         spoken = bool(self._field.errors) and self.spoken
-        self._help.styles.padding = (0, 2, 0, 1 if spoken else self._label.outer_size.width)
+        left = 1 if spoken else self._label.outer_size.width
+        # where the tree's line crosses the help it takes two cells of its own, a margin and
+        # the border that draws it, and the words keep the column they had
+        taken = 2 if self._run_below else 0
+        self._help.styles.padding = (0, 2, 0, max(left - taken, 0))
 
     def on_descendant_focus(self) -> None:
         """Start the bar breathing, and let the row explain itself.
@@ -620,6 +669,7 @@ class FieldRow(Vertical):
         stylesheet already draws, which is the same cue without the movement.
         """
         self._beat = 0
+        self._set_current(True)
         if self.app.animation_level == "none":
             return
         self._breathe()
@@ -631,21 +681,29 @@ class FieldRow(Vertical):
         if self._pulse is not None:
             self._pulse.stop()
             self._pulse = None
-        for index in range(len(PULSE_SHADES)):
-            self.remove_class(f"pulse-{index}")
-        if isinstance(self._control, InlineOptions):
-            self._control.set_mark_shade(MARK_SHADES[0])
+        for step in range(PULSE_STEPS):
+            self.remove_class(f"pulse-{step}")
+        self._set_current(False)
+
+    def _set_current(self, current: bool) -> None:
+        """Redraw the caption for the ground it is now on: the cursor's row, or a band.
+
+        The stylesheet recolours everything else when the focus moves. The tree connector is
+        a span inside the caption with an ink of its own, which a stylesheet cannot reach.
+        """
+        if current == self._current:
+            return
+        self._current = current
+        if self._branch:
+            self._label.update(self._caption())
+        self._head.set_rail(self._rail_ink() if self._run_below else "")
 
     def _breathe(self) -> None:
-        """Move the bar one step round the cycle, and blink the cursor mark on the same clock."""
-        phase = self._beat % len(PULSE_CYCLE)
-        shade = PULSE_CYCLE[phase]
+        """Move the bar one step round the cycle."""
+        shade = PULSE_CYCLE[self._beat % len(PULSE_CYCLE)]
         self._beat += 1
-        for index in range(len(PULSE_SHADES)):
-            self.set_class(index == shade, f"pulse-{index}")
-        if isinstance(self._control, InlineOptions):
-            # four states per cycle: two blinks per breath of the bar
-            self._control.set_mark_shade(MARK_SHADES[(phase * 4 // len(PULSE_CYCLE)) % 2])
+        for step in range(PULSE_STEPS):
+            self.set_class(step == shade, f"pulse-{step}")
 
     @property
     def field(self) -> FieldState:
@@ -667,8 +725,10 @@ class FieldRow(Vertical):
     def _chrome(self, field: FieldState) -> None:
         """Everything about a row that is not the control's value."""
         self._field = field
-        self._label.update(_label_text(self.question, self._branch, self._caption_width()))
+        self._label.update(self._caption())
         self._flag.update(_flag_text(field))
+        self._flag.set_class(bool(field.errors), "flag-error")
+        self._flag.set_class(not field.errors and not field.enabled, "flag-off")
         help = _help_text(self.question, field if self.spoken else replace(field, errors=()))
         self._help.update(help)
         # a class, not `display`: an inline display overrides the stylesheet, and the rule it
@@ -687,24 +747,21 @@ class FieldRow(Vertical):
         # control looked like
         self.set_class(not field.enabled, "row-off")
 
-    def set_branch(self, glyph: str, run_above: bool = False) -> None:
-        """Print a tree connector before the caption, and carry the run over the spacers.
+    def set_branch(self, glyph: str, run_below: bool = False) -> None:
+        """Print a tree connector before the caption, and carry the tree on below it.
 
         The form owns both because only the form knows what sits around this row, and a
-        connector is a statement about its neighbours rather than about this question. A
-        spacer carries the run only where the run actually crosses it - under a row with a
-        sibling below, over a row the run comes down into - so a rail never points at nothing.
-        The row above is either a sibling or the question this one hangs from; both continue
-        the run, and leaving the parent's case out opened a gap directly under the answer the
-        connector points at.
+        connector is a statement about its neighbours rather than about this question.
+        `run_below` is whether the tree goes on into the next row: the lines of this row
+        under its caption then carry the tree's vertical line.
         """
-        rail = Text(RAIL, style=TEXT_SUBTLE)
-        self._rail_above.update(rail if run_above else Text(""))
-        self._rail_below.update(rail if glyph == BRANCH_MORE else Text(""))
-        if glyph == self._branch:
+        if (glyph, run_below) == (self._branch, self._run_below):
             return
-        self._branch = glyph
-        self._label.update(_label_text(self.question, self._branch, self._caption_width()))
+        self._branch, self._run_below = glyph, run_below
+        self._label.update(self._caption())
+        self._head.set_rail(self._rail_ink() if run_below else "")
+        self._help.set_class(run_below, "has-rail")
+        self._indent()
 
     def _write_value(self, field: FieldState) -> None:
         """Push the state's value into the control."""
@@ -714,8 +771,15 @@ class FieldRow(Vertical):
             control.set_options(choices, field.value)
         elif isinstance(control, TextArea):
             control.text = _as_text(field.value)
+            if isinstance(control, WrapInput):
+                # a rewritten editor starts at the top left, the same as a new one, so the
+                # cursor is put back where `WrapInput.on_mount` puts it
+                control.move_cursor(control.document.end)
         else:
             control.value = _as_text(field.value)
+            # an `Input` moves its cursor to the end for its first value only; rewritten, it
+            # keeps the old position, which is inside the new value
+            control.cursor_position = len(control.value)
 
     @property
     def value(self) -> Any:
@@ -746,10 +810,12 @@ class FieldRow(Vertical):
         self._emit()
 
 
-def _label_text(question: Question, branch: str = "", width: int = _CAPTION_WIDTH) -> Text:
+def _label_text(
+    question: Question, branch: str = "", width: int = _CAPTION_WIDTH, rail: str = ""
+) -> Text:
     """The question caption behind its tree connector, wrapped rather than cut.
 
-    The connector keeps a colour of its own, muted, because it is structure rather than
+    The connector keeps a colour of its own, `rail`, because it is structure rather than
     words - it must not brighten with the caption when the cursor arrives on the row.
 
     Hue on a caption used to mean "you have changed this", which read as a state of the
@@ -765,7 +831,7 @@ def _label_text(question: Question, branch: str = "", width: int = _CAPTION_WIDT
     for index, line in enumerate(wrap(question.label, max(width - len(branch), 8)) or [""]):
         if index:
             caption.append("\n")
-        caption.append(branch if index == 0 else _BRANCH_TAIL[branch], style=TEXT_SUBTLE)
+        caption.append(branch if index == 0 else _BRANCH_TAIL[branch], style=rail)
         caption.append(line)
     return caption
 
@@ -773,12 +839,14 @@ def _label_text(question: Question, branch: str = "", width: int = _CAPTION_WIDT
 def _help_text(question: Question, field: FieldState) -> Text:
     """What the focused row says under itself: the problem, else the question's own help.
 
+    The words only. The stylesheet colours them, by whether the line is help or an error.
+
     Help that only repeats the caption is dropped. copier falls back to the help string for
     the prompt caption, so a template whose question carries help and nothing else ends up
     with the same sentence twice, one line above the other, saying nothing the second time.
     """
     if field.errors:
-        return Text(field.errors[0], style=ERROR_FG, overflow="fold")
+        return Text(field.errors[0], overflow="fold")
     help = "" if question.help == question.label else question.help
     # the same precedence `control_for` uses - secret, then multiline, then kind - because it
     # is the same decision. Tested kind-first, a `type: str` question with `choices` and
@@ -805,13 +873,16 @@ def _help_text(question: Question, field: FieldState) -> Text:
         # here it is plainly guidance, and the field stays visibly empty until it is answered
         hint = f"for example: {question.placeholder}"
         help = hint
-    return Text(help, style=TEXT_MUTED, overflow="fold")
+    return Text(help, overflow="fold")
 
 
 def _flag_text(field: FieldState) -> Text:
-    """One glyph for the row's standing: a problem, or a field this answer set rules out."""
+    """One glyph for the row's standing: a problem, or a field this answer set rules out.
+
+    The colour is the stylesheet's, by the class the row puts on the flag for each standing.
+    """
     if field.errors:
-        return Text("!", style=f"bold {ERROR_FG}")
+        return Text("!")
     if not field.enabled:
-        return Text("-", style=AMBER)
+        return Text("-")
     return Text(" ")

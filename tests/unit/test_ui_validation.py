@@ -107,6 +107,21 @@ def test_check_reports_what_a_field_would_say_without_accepting_the_value(
         assert ui.validate() == {}
 
 
+def test_check_and_validate_read_an_earlier_typed_number_the_same_way(tmp_path: Path) -> None:
+    """Discoverable validation: `check` judges a value against the answers `validate` reads.
+
+    `validate` read an earlier typed number as copier parses it and `check` read it as text,
+    so one said the answer was fine and the other said `'<' not supported between 'int' and
+    'str'` about the same value.
+    """
+    with load("ui_typed", tmp_path / "dst") as ui:
+        ui.set("count", "4")
+        ui.set("limit", "7")
+        assert ui.validate() == {}
+        assert ui.check("limit", "7") == ()
+        assert ui.check("limit", "2") == ("limit is under count",)
+
+
 def test_check_on_an_unknown_field_is_an_error_not_a_silent_pass(tmp_path: Path) -> None:
     """Discoverable validation: a typo in a field id must not read as "this value is fine"."""
     from copier_ui import UnknownFieldError

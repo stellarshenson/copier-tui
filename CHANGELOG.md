@@ -2,6 +2,21 @@
 
 `copier-ui` and `copier-tui` share one version and are published to PyPI in lockstep, so every entry below covers both packages.
 
+## v1.0.25 (2026-10-07) - Two themes, and the project standard copier writes
+
+- Two themes, `stellars-tech-dark` and `stellars-tech-light`, chosen from the terminal's background before the survey opens: `TEXTUAL_THEME` naming one of them, then the terminal's answer to an OSC 11 query, then `COLORFGBG`, then dark. Every colour is a `$st-<role>` theme variable, and every text ink holds 4.5:1 on its ground in both themes
+- The current row is told by its ground: it is drawn in the other theme's colours, at least 9:1 against every band. The blank lines that opened around the focused row are gone, so no row moves when the cursor does, and the mark beside the cursor's option is removed
+- The tree line runs down a parent row taller than its caption, and a connector is drawn only under the row that decides the child
+- copier's `Overwrite <path>?` is asked on the render screen and answered with `y` or `n`. It used to be asked on the terminal the survey holds, where it could be neither read nor answered, so a render into a directory that already held a differing file never ended - which is how the JupyterLab extension template failed
+- copier is handed only the answers that were given - on a question that is asked, or as `--data` - and works out every other value itself, so the project is what standard copier writes from the same answers. `-d ver=9` for a question the template never asks is written, a quoted default such as `'3.10'` is no longer read a second time into `3.1`, and a question that has left the form counts as its default for the questions after it
+- A typed answer is parsed once, by copier's own parser, before a later `when`, default or validator reads it, so a typed `3` is the number 3 there
+- A default, a `when`, the choices and a validator read what copier gives them to read: `--data` values under a name that is no question, answers-file keys the template no longer asks, the template's `_src_path` and `_commit`, and `_external_data`
+- A help text or placeholder that cannot be rendered before the answers exist is left out instead of refusing its row
+- Two presses of `enter` that reach the survey together no longer end the app with `DuplicateIds` and nothing written: the review is opened once per hand-over
+- A `--data` value the template refuses is shown as a row to correct
+- `update` is refused with copier's own message when the answers file holds no template reference
+- The caret lands after a rewritten one-line answer, failure text on the render screen is drawn in an ink that holds 4.5:1, the file list keeps its ground while the render runs, and scrollbars take the theme's colours
+
 ## v1.0.24 (2026-08-30) - Answer boxes as tall as their answers
 
 - An answer box now shows every line its answer wraps onto instead of stopping at three; the six-line cap survives only on the multiline and structured editors, which carry a scrollbar of their own

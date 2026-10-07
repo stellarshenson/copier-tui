@@ -162,14 +162,18 @@ UI-neutral core. Three layers - copier adapter (parses `copier.yml`), UI model (
   - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_validation.py
   - log: 2026-08-29T13:27:29Z @kj edited importance
   - log: 2026-08-29T13:28:29Z @kj edited test (added) and test-tags (added) and evidence (added)
-- [x] `ACC-CORE-20` **Hidden excluded** - CRITICAL; hidden questions are excluded from validation and from the answers handed to copier
-  - evidence: built - tests/unit/test_ui_state.py and test_ui_validation.py
+- [x] `ACC-CORE-20` **Hidden excluded** - CRITICAL; hidden questions are excluded from validation and from the answers handed to copier, except an answer given as data, which copier takes for a question it never asks; a later question reads a hidden question's default, not what was typed before it was hidden
+  - related: DEF-STATE-72
+  - evidence: tests/unit/test_ui_state.py and test_ui_validation.py; test_ui_render.py::test_a_value_given_as_data_for_a_question_never_asked_reaches_copier; make test 470 passed
   - test-tags: UNIT
-  - test: run tests/unit/test_ui_state.py
+  - test: load ui_supplied; give ver as data and render; set db, hide it with use_db, read visible_ids and the stored value
   - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
   - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_state.py and test_ui_validation.py
   - log: 2026-08-29T13:27:30Z @kj edited importance
   - log: 2026-08-29T13:28:29Z @kj edited test (added) and test-tags (added) and evidence (added)
+  - log: 2026-10-07T08:10:21Z @kj amended text "hidden questions are excluded from validation and from the answers handed to copier" -> "hidden questions are excluded from validation and from the answers handed to copier, except an answer given as data, which copier takes for a question it never asks; a later question reads a hidden question's default, not what was typed before it was hidden"; reason: owner's decision 2026-10-07 on DEF-STATE-72
+  - log: 2026-10-07T08:10:21Z @kj edited test "run tests/unit/test_ui_state.py" -> "load ui_supplied; give ver as data and render; set db, hide it with use_db, read visible_ids and the stored value"
+  - log: 2026-10-07T08:15:00Z @kj edited evidence "built - tests/unit/test_ui_state.py and test_ui_validation.py" -> "tests/unit/test_ui_state.py and test_ui_validation.py; test_ui_render.py::test_a_value_given_as_data_for_a_question_never_asked_reaches_copier; make test 470 passed"
 - [x] `ACC-CORE-21` **Secrets excluded from dump** - CRITICAL; `schema()` and any serialised state carry secret question metadata but never secret values
   - evidence: built - tests/unit/test_ui_state.py
   - test-tags: UNIT
@@ -195,14 +199,23 @@ UI-neutral core. Three layers - copier adapter (parses `copier.yml`), UI model (
   - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_state.py
   - log: 2026-08-29T13:27:30Z @kj edited importance
   - log: 2026-08-29T13:28:29Z @kj edited test (added) and test-tags (added) and evidence (added)
-- [x] `ACC-CORE-24` **Render** - CRITICAL; `ui.render(dst)` calls `copier.run_copy` with `data=answers`, so no question is prompted interactively
-  - evidence: built - tests/unit/test_ui_render.py
+- [x] `ACC-CORE-24` **Render** - CRITICAL; `ui.render(dst)` hands copier the answers that were given as `data` and sets `defaults=True`: copier works out every default itself, once; an asked question that has no default and was left blank is handed over as no value; no question is prompted interactively
+  - related: DEF-STATE-73
+  - evidence: tests/unit/test_ui_render.py, 12 tests; copier-data-science and the JupyterLab template render trees identical to standard copier from the same given answers; make test 472 passed
   - test-tags: UNIT
-  - test: run tests/unit/test_ui_render.py
+  - test: load ui_supplied; render with no answer, then with name and release set; read out.txt
   - log: 2026-08-22T00:00:00Z @kj criterion added (v0.1.0)
   - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_render.py
   - log: 2026-08-29T13:27:30Z @kj edited importance
   - log: 2026-08-29T13:28:29Z @kj edited test (added) and test-tags (added) and evidence (added)
+  - log: 2026-10-07T08:10:21Z @kj amended text "`ui.render(dst)` calls `copier.run_copy` with `data=answers`, so no question is prompted interactively" -> "`ui.render(dst)` hands copier the answers that were given as `data` and sets `defaults=True`: copier works out every default itself, once, and no question is prompted interactively"; reason: owner's decision 2026-10-07 on DEF-STATE-73
+  - log: 2026-10-07T08:10:21Z @kj edited test "run tests/unit/test_ui_render.py" -> "load ui_supplied; render with no answer, then with name and release set; read out.txt"
+  - log: 2026-10-07T08:15:00Z @kj edited evidence "built - tests/unit/test_ui_render.py" -> "tests/unit/test_ui_render.py, 13 tests; copier-data-science and the JupyterLab template render trees identical to plain copier with the same given answers"
+  - log: 2026-10-07T09:19:17Z @kj amended text "`ui.render(dst)` hands copier the answers that were given as `data` and sets `defaults=True`: copier works out every default itself, once, and no question is prompted interactively" -> "`ui.render(dst)` hands copier the answers that were given as `data` and sets `defaults=True`: copier works out every default itself, once; a blank on an asked question with no default is handed over as no value; no question is prompted interactively"; reason: owner's rule 2026-10-07: the same thing as standard copier; review round 4 found the blank case
+  - log: 2026-10-07T09:23:34Z @kj edited evidence "tests/unit/test_ui_render.py, 13 tests; copier-data-science and the JupyterLab template render trees identical to plain copier with the same given answers" -> "tests/unit/test_ui_render.py, 14 tests, the blank answer among them; copier-data-science and the JupyterLab template render trees identical to standard copier from the same given answers; make test 471 passed"
+  - log: 2026-10-07T09:53:25Z @kj amended text "`ui.render(dst)` hands copier the answers that were given as `data` and sets `defaults=True`: copier works out every default itself, once; a blank on an asked question with no default is handed over as no value; no question is prompted interactively" -> "`ui.render(dst)` hands copier the answers that were given as `data` and sets `defaults=True`: copier works out every default itself, once; an asked question that has no default and was left blank is handed over as no value; no question is prompted interactively"; reason: review round 5: the case is having no default, not having the value None
+  - log: 2026-10-07T09:58:09Z @kj edited evidence "tests/unit/test_ui_render.py, 14 tests, the blank answer among them; copier-data-science and the JupyterLab template render trees identical to standard copier from the same given answers; make test 471 passed" -> "tests/unit/test_ui_render.py, 15 tests; copier-data-science and the JupyterLab template render trees identical to standard copier from the same given answers; make test 472 passed"
+  - log: 2026-10-07T10:12:58Z @kj edited evidence "tests/unit/test_ui_render.py, 15 tests; copier-data-science and the JupyterLab template render trees identical to standard copier from the same given answers; make test 472 passed" -> "tests/unit/test_ui_render.py, 12 tests; copier-data-science and the JupyterLab template render trees identical to standard copier from the same given answers; make test 472 passed"
 - [x] `ACC-CORE-25` **Determinism** - MEDIUM; identical template and identical answers produce byte-identical `schema()` output and identical field state
   - evidence: built - tests/unit/test_ui_state.py
   - test-tags: UNIT
@@ -275,6 +288,7 @@ UI-neutral core. Three layers - copier adapter (parses `copier.yml`), UI model (
   - log: 2026-08-22T00:00:00Z @kj closed: built - tests/unit/test_ui_edges.py
   - log: 2026-08-29T13:27:30Z @kj edited importance
   - log: 2026-08-29T13:28:30Z @kj edited test (added) and test-tags (added) and evidence (added)
+  - log: 2026-10-07T08:10:21Z @kj owner's decision 2026-10-07: the value of a hidden field is still kept and returns with the field; while hidden, later questions read the field's default
 - [x] `ACC-CORE-34` **Edge: render with invalid state** - HIGH; `render` refuses when `validate()` reports errors, and names the offending fields
   - evidence: built - tests/unit/test_ui_render.py
   - test-tags: UNIT
@@ -340,6 +354,70 @@ UI-neutral core. Three layers - copier adapter (parses `copier.yml`), UI model (
   - log: 2026-08-23T00:00:00Z @kj closed: built - tests/unit/test_ui_groups.py (v0.6.9)
   - log: 2026-08-29T13:27:31Z @kj edited importance
   - log: 2026-08-29T13:28:30Z @kj edited test (added) and test-tags (added) and evidence (added)
+- [x] `ACC-CORE-145` **Render question goes to the frontend** - HIGH; `ui.render(confirm=fn)` hands copier's mid-run `Overwrite <path>?` to `fn(question) -> bool`; its answer is copier's; copier's own asking is back in place after the run, a failed run included; without `confirm` copier asks on the terminal
+  - evidence: test_ui_render.py: the two confirm tests pass; tests/functional/test_reference_template.py::test_a_file_already_in_the_destination_is_asked_about passes against the built wheels; make test 448 passed, make test-functional 9 passed
+  - related: ACC-CORE-24
+  - test: render ui_deps into a destination holding a different out.txt with a confirm that records and answers; read the question and the file
+  - test-tags: UNIT, FUNCTIONAL
+  - mechanism: 2026-10-06T22:02:47Z @kj adapter replaces `copier._main.confirm` for the length of one run; copier keeps deciding skip patterns, `overwrite` and the answers file
+  - log: 2026-10-06T22:02:47Z @kj added
+  - log: 2026-10-06T22:10:29Z @kj edited test-tags "UNIT" -> "UNIT, FUNCTIONAL"
+  - log: 2026-10-06T22:19:44Z @kj closed
+- [x] `ACC-CORE-150` **Set clears the preset mark** - LOW; `ui.set(id, value)` on an id that came in as `data` leaves `fields[id].preset` false: the answer that replaced the supplied one was asked for
+  - evidence: test_ui_state.py::test_an_answer_the_caller_sets_is_no_longer_a_preset passes
+  - test: load ui_deps with data project=given; set project; read fields['project'].preset
+  - test-tags: UNIT
+  - log: 2026-10-06T22:10:03Z @kj added
+  - log: 2026-10-06T22:14:38Z @kj closed
+- [x] `ACC-CORE-151` **Edge: update with no template reference** - LOW; `update` on a clean git destination whose answers file is missing, or names no template version, is refused at load with copier's sentence: `Cannot update because cannot obtain old template references from `<answers file>`.`
+  - evidence: test_ui_edges.py::test_edge_update_with_no_answers_file_names_the_answers_file passes
+  - related: ACC-TUI-130, DEF-SRVY-59
+  - test: update a committed repository holding no .copier-answers.yml; read the message
+  - test-tags: UNIT
+  - log: 2026-10-06T22:10:03Z @kj added
+  - log: 2026-10-06T22:14:39Z @kj closed
+- [x] `ACC-CORE-153` **Answers are parsed before later questions read them** - HIGH; a supplied answer reaches the questions declared after its own as copier parses it: a typed `3` is 3, `false` as text is false, `[docs, ci]` is a list; a question declared before it reads it as given; a default is not parsed twice; the stored value stays as typed
+  - evidence: test_ui_state.py: the four typed-answer tests and the three ui_parsed tests pass; make test 465 passed
+  - related: DEF-STATE-64
+  - test: load ui_typed and ui_parsed; set a number as text, give a list as text, leave a quoted YAML default; read visible_ids and dependent defaults, then render
+  - test-tags: UNIT
+  - mechanism: 2026-10-07T00:42:43Z @kj `compute_state` parses each explicit answer once through `TemplateAdapter.parse` (copier's `Question.parse_answer`) and builds every question's context by declaration order; `State.parsed` carries the result to `validate_state`
+  - mechanism: 2026-10-06T23:58:42Z @kj the adapter casts every answer with copier's `CAST_STR_TO_NATIVE` for its question type when it builds a question's context
+  - log: 2026-10-06T23:58:42Z @kj added
+  - log: 2026-10-07T00:03:05Z @kj closed
+  - log: 2026-10-07T00:42:43Z @kj amended title "Answers are cast before later questions read them" -> "Answers are parsed before later questions read them"; text "an answer reaches a later question's `when`, default, choices and validator cast to its own question's type, as copier does: a typed `3` equals 3, `false` given as text is false; the stored value stays as typed; an answer that does not cast is passed on as typed" -> "a supplied answer reaches the questions declared after its own as copier parses it: a typed `3` is 3, `false` as text is false, `[docs, ci]` is a list; a question declared before it reads it as given; a default is not parsed twice; the stored value stays as typed"
+  - log: 2026-10-07T00:42:43Z @kj mechanism overridden; reason: review round 2 found three shapes the per-type cast in the adapter got wrong; the cast is removed
+  - log: 2026-10-07T00:42:44Z @kj edited test "load ui_typed; set count to the text 3 and 4; read visible_ids, the value of double and validate()" -> "load ui_typed and ui_parsed; set a number as text, give a list as text, leave a quoted YAML default; read visible_ids and dependent defaults, then render"
+  - log: 2026-10-07T00:47:14Z @kj edited evidence "test_ui_state.py: the four typed-answer tests pass; make test 462 passed" -> "test_ui_state.py: the four typed-answer tests and the three ui_parsed tests pass; make test 465 passed"
+- [x] `ACC-CORE-154` **A question copier asks mid-run ends the render by name** - HIGH; with `confirm` given, copier's own question prompt does not read the terminal: a question that would be asked raises `CopierUIError` naming it; a hidden question is skipped and keeps its default, as the prompt itself does; the prompt is back in place after the run
+  - evidence: test_ui_render.py::test_a_question_copier_asks_mid_run_stops_the_render_and_is_named passes; the three confirm tests still pass with hidden questions in ui_deps
+  - related: ACC-CORE-145, DEF-EXEC-65
+  - test: render ui_deps with confirm and ask=('project',); read the error and copier._main.unsafe_prompt
+  - test-tags: UNIT
+  - mechanism: 2026-10-06T23:58:42Z @kj the adapter replaces `copier._main.unsafe_prompt` beside `confirm` for the length of one run
+  - log: 2026-10-06T23:58:42Z @kj added
+  - log: 2026-10-07T00:03:05Z @kj closed
+- [x] `ACC-CORE-156` **Expressions read what copier gives them to read** - MEDIUM; a default, `when`, `choices` or validator reads data given under a name that is no question, the template's `_src_path` and `_commit`, and `_external_data`, as in copier; `-d seed=5` with default `{{ seed }}` shows 5 and renders 5
+  - evidence: the three tests named in the test line pass; copier-data-science and the JupyterLab template render trees identical to standard copier in four answer sets; make test 475 passed
+  - test: pytest tests/unit/test_ui_state.py tests/unit/test_ui_render.py -k 'no_questions_answer or template_reference'
+  - test-tags: UNIT
+  - mechanism: 2026-10-07T10:52:37Z @kj `TemplateAdapter._copier_question` builds `AnswersMap(user=answers, init=TemplateAdapter.extra, metadata=template.metadata, external=_external_data())`; `from_template` fills `extra`
+  - log: 2026-10-07T10:52:37Z @kj added
+  - log: 2026-10-07T10:52:42Z @kj closed
+- [x] `ACC-CORE-157` **A help text or placeholder that fails at load is left out** - MEDIUM; help and placeholder are rendered once at load; one that fails there (`{{ org.upper() }}`, `org` an earlier question) is left blank, the label is the question id, the row is asked and the project renders; a `type` or `multiline` that fails is still a load error
+  - evidence: test_ui_schema.py::test_a_help_text_that_fails_before_the_answers_exist_is_left_out passes: load_error None, label name, help and placeholder blank, out.txt holds x|acme; make test 477 passed
+  - test: pytest tests/unit/test_ui_schema.py -k help_text_that_fails
+  - test-tags: UNIT
+  - mechanism: 2026-10-07T13:05:47Z @kj `_or_blank` in `copier_ui/adapter.py` wraps `get_placeholder`, `get_message` and the help render inside `TemplateAdapter._normalise`
+  - log: 2026-10-07T13:05:47Z @kj added
+  - log: 2026-10-07T13:05:54Z @kj closed
+- [x] `ACC-CORE-158` **Expressions read answers-file keys that are no question** - MEDIUM; on `recopy` and `update` a default, `when`, `choices` or validator reads an answers-file key the template no longer asks, as in copier; `old_count: 7` in the answers file with default `{{ old_count }}` shows 7 and renders 7
+  - evidence: test_ui_state.py::test_an_answers_file_key_that_is_no_question_is_read_by_an_expression passes: value 7, validate empty, out.txt holds 7; make test 477 passed
+  - test: pytest tests/unit/test_ui_state.py -k answers_file_key_that_is_no_question
+  - test-tags: UNIT
+  - mechanism: 2026-10-07T13:05:47Z @kj `TemplateAdapter._copier_question` passes `last=` the keys of `subproject.last_answers` that are not in `questions_data`
+  - log: 2026-10-07T13:05:47Z @kj added
+  - log: 2026-10-07T13:05:54Z @kj closed
 
 ### API
 
@@ -934,6 +1012,7 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
   - log: 2026-08-29T13:27:35Z @kj edited importance
   - log: 2026-08-29T13:28:34Z @kj edited test (added) and test-tags (added) and evidence (added)
 - [x] `ACC-TUI-108` **Focused row is spaced** - LOW; the focused question keeps a blank line above and below it, both carrying its own ground, so the row being answered reads as one plate rather than a strip with the form showing through
+  - overridden-by: ACC-TUI-136
   - evidence: built - tests/unit/test_tui_appearance.py
   - test-tags: UNIT
   - test: run tests/unit/test_tui_appearance.py
@@ -959,6 +1038,7 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
   - log: 2026-08-29T13:27:36Z @kj edited importance
   - log: 2026-08-29T13:28:35Z @kj edited test (added) and test-tags (added) and evidence (added)
 - [x] `ACC-TUI-111` **Cursor on the answer** - MEDIUM; the cursor mark shows even when the cursor sits on the chosen option, since where you are and what is chosen are two facts that must both read
+  - overridden-by: ACC-TUI-144
   - evidence: built - tests/unit/test_tui_appearance.py
   - test-tags: UNIT
   - test: run tests/unit/test_tui_appearance.py
@@ -1083,6 +1163,7 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
   - log: 2026-08-29T13:27:36Z @kj edited importance
   - log: 2026-08-29T13:28:36Z @kj edited test (added) and test-tags (added) and evidence (added)
 - [x] `ACC-TUI-125` **Run crosses the cursor's gap** - LOW; the blank line the focused row keeps either side of itself carries the run down when the row above is a sibling or the question the child hangs from, so landing the cursor inside a run of children never breaks the connector column and a first child is not cut off from its own parent
+  - overridden-by: ACC-TUI-136
   - evidence: built - tests/unit/test_tui_appearance.py; the spacing became two widgets of the row's own, since padding cannot carry a glyph (v1.0.10)
   - test-tags: UNIT
   - test: run tests/unit/test_tui_appearance.py::test_the_run_crosses_the_blank_line_the_cursor_opens
@@ -1093,6 +1174,7 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
   - log: 2026-08-29T13:46:16Z @kj edited text and test (replaced)
   - log: 2026-08-29T13:46:23Z @kj extended: the rail above was drawn only for a sibling, so the first child of an answer showed a gap between that answer and its own connector; the parent directly above now carries the run too
 - [x] `ACC-TUI-126` **Cursor mark breathes with the bar** - LOW; the mark on an option row takes each shade from the row's own beat, so mark and focus bar are never out of phase
+  - overridden-by: ACC-TUI-144
   - evidence: built - tests/unit/test_tui_appearance.py (v1.0.10)
   - test-tags: UNIT
   - test: run tests/unit/test_tui_appearance.py
@@ -1159,19 +1241,152 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
   - log: 2026-08-29T13:27:37Z @kj edited importance
   - log: 2026-08-29T13:46:16Z @kj edited title and text and test (replaced)
   - log: 2026-08-29T13:46:23Z @kj closed
-- [ ] `ACC-TUI-133` **the finished run shows a banner with what it did** - MEDIUM; when the render ends, a content-sized box over the file log says done or failed; on success it counts files added, changed, deleted and conflicted - a conflict being a `.rej` beside a file or an inline `<<<<<<<` marker - and lists the conflicted paths; on failure it carries copier's reason; any key closes it and the screen; `packages/copier-tui/src/copier_tui/screens/execution.py`, `packages/copier-tui/src/copier_tui/changes.py`
+- [x] `ACC-TUI-133` **the finished run shows a banner with what it did** - MEDIUM; when the render ends, a content-sized box over the file log says done or failed; on success it counts files added, changed, deleted and conflicted - a conflict being a `.rej` beside a file or an inline `<<<<<<<` marker - and lists the conflicted paths; on failure it carries copier's reason; any key closes it and the screen; `packages/copier-tui/src/copier_tui/screens/execution.py`, `packages/copier-tui/src/copier_tui/changes.py`
+  - evidence: test_the_finish_banner_counts_what_the_render_did and test_a_failed_render_shows_the_message_and_keeps_partial_output pass; tests/unit/test_tui_changes.py covers the .rej and marker conflicts; 428 unit tests green
   - test: render over a directory holding a stale file, a file to delete and a conflict marker; read #exec-banner
   - test-tags: UNIT
   - log: 2026-08-27T14:02:54Z @kj added
   - log: 2026-08-29T13:27:37Z @kj edited importance
+  - log: 2026-10-06T21:25:18Z @kj closed: verified
 - [x] `ACC-TUI-134` **a switch names no key it does not need** - LOW; two options are read off the row itself, so the focused row of a bool question names no key; a multiselect still names `space` because ticking is not visible in its options, and a choice still says the key cycles them
   - evidence: the bool branch is gone from _help_text and tests/unit/test_tui_appearance.py asserts a focused switch names no key; 366 unit tests green
   - test: focus a bool row and read its help line
   - test-tags: UNIT
   - log: 2026-08-29T13:46:16Z @kj added
   - log: 2026-08-29T13:46:23Z @kj closed
-- [ ] `ACC-TUI-135` **an answer box is as tall as its answer needs** - MEDIUM; a free-text answer shows every line it wraps onto - five where it wraps to five, ten where it wraps to ten - rather than a fixed three with the rest scrolled out of sight; the row grows with the answer and the form scrolls; the structured editor keeps a cap of its own, being multiline by nature and holding a document rather than a sentence; `packages/copier-tui/src/copier_tui/widgets.py`, `packages/copier-tui/src/copier_tui/theme.py`
+- [x] `ACC-TUI-135` **an answer box is as tall as its answer needs** - MEDIUM; a free-text answer shows every line it wraps onto - five where it wraps to five, ten where it wraps to ten - rather than a fixed three with the rest scrolled out of sight; the row grows with the answer and the form scrolls; the structured editor keeps a cap of its own, being multiline by nature and holding a document rather than a sentence; `packages/copier-tui/src/copier_tui/widgets.py`, `packages/copier-tui/src/copier_tui/theme.py`
+  - evidence: test_the_answer_box_is_as_tall_as_the_answer_needs and test_a_document_answer_keeps_its_cap pass; released in 1.0.24
   - related: ACC-TUI-94 - the criterion whose three-line limit this replaces
   - test: put a value that wraps to five lines into a string question and compare the control's height with the number of lines it wraps onto
   - test-tags: UNIT
   - log: 2026-08-29T16:14:53Z @kj added
+  - log: 2026-10-06T21:25:18Z @kj closed: verified
+- [x] `ACC-TUI-136` **No blank line around the current row** - MEDIUM; the row under the cursor opens no blank line above or below itself; a row that prints no help is the same height with the cursor on it as without, and no other row moves when the cursor moves
+  - evidence: test_no_row_moves_when_the_cursor_moves and test_the_cursor_opens_no_gap_inside_a_run pass in both themes; 426 unit tests green
+  - overrides: ACC-TUI-108 - the blank line above and below the focused row is removed
+  - overrides: ACC-TUI-125 - no blank line opens inside a run, so there is no gap to carry a rail across
+  - test: focus each row of the tui_flow fixture in turn; assert its height is 1 and every row keeps its y
+  - test-tags: UNIT
+  - log: 2026-10-06T21:00:12Z @kj added
+  - log: 2026-10-06T21:06:36Z @kj amended title "Current row keeps its height" -> "No blank line around the current row"
+  - log: 2026-10-06T21:09:40Z @kj closed: built
+- [x] `ACC-TUI-137` **Current row is told by its ground** - MEDIUM; the row under the cursor has a ground of its own, at least 1.2:1 against each band and further from each band than the two bands are from each other, in both themes
+  - evidence: test_the_row_under_the_cursor_is_not_either_band passes: 1.40:1 and 1.25:1 against the bands in dark, 1.40:1 and 1.28:1 in light
+  - related: ACC-TUI-120 - one ground on either band still holds; this sets how far that ground is from the bands
+  - test: focus a row in each theme; assert its background is the row-focus role and measure it against row and row-alt
+  - test-tags: UNIT
+  - log: 2026-10-06T21:00:12Z @kj added
+  - log: 2026-10-06T21:09:40Z @kj closed: built
+- [x] `ACC-TUI-138` **Two brand themes** - MEDIUM; the app has two themes, stellars-tech-dark and stellars-tech-light; every stylesheet colour is a $st-<role> variable and no hex colour is written outside theme.py
+  - evidence: test_the_survey_opens_in_the_theme_it_is_given and test_no_colour_is_written_outside_the_palette pass; frames of both themes rendered
+  - related: ACC-TUI-53 - the palette follows the text-user-interface skill, which now defines two themes
+  - test: open the survey in each theme and compare screen, header and row grounds with the palette; scan the package for hex colours outside theme.py
+  - test-tags: UNIT
+  - log: 2026-10-06T21:00:12Z @kj added
+  - log: 2026-10-06T21:09:40Z @kj closed: built
+- [x] `ACC-TUI-139` **Theme follows the terminal** - MEDIUM; the starting theme is picked before the app starts: TEXTUAL_THEME naming one of the two themes, else the terminal's answer to the OSC 11 background question, else COLORFGBG, else dark
+  - evidence: tests/unit/test_tui_theme.py passes: named theme, terminal answer, COLORFGBG, dark; a real process opens in each named theme
+  - test: set TEXTUAL_THEME, a fake terminal answer and COLORFGBG in turn; assert pick_theme returns the theme each one calls for
+  - test-tags: UNIT
+  - log: 2026-10-06T21:00:12Z @kj added
+  - log: 2026-10-06T21:09:40Z @kj closed: built
+- [x] `ACC-TUI-140` **Edge: terminal answers late** - MEDIUM; the terminal's answer to the background question is read whole before the app starts, so none of it is typed into the form, also when it arrives 0.5 s after the question
+  - evidence: test_an_answer_that_arrives_late_is_still_read_whole passes with the answer 0.5 s late; on a pty with the answer 0.3 s late the survey opens light and no answer bytes are painted
+  - mechanism: 2026-10-06T21:00:19Z @kj two questions are written, OSC 11 then device attributes; reading stops at the device-attributes answer, which every terminal sends and sends last
+  - test: on a pty, answer OSC 11 and DA1 0.5 s after the question; assert the survey opens light and the painted screen holds no answer bytes
+  - test-tags: UNIT
+  - log: 2026-10-06T21:00:12Z @kj added
+  - log: 2026-10-06T21:09:41Z @kj closed: built
+  - log: 2026-10-06T21:09:48Z @kj edited evidence "test_the_terminals_answer_is_not_typed_into_the_form passes on a pty: answer sent 0.3 s late, survey opens light, no answer bytes painted" -> "test_an_answer_that_arrives_late_is_still_read_whole passes with the answer 0.5 s late; on a pty with the answer 0.3 s late the survey opens light and no answer bytes are painted"
+- [x] `ACC-TUI-141` **Both themes hold the contrast floors** - MEDIUM; in each theme every ink is at least 4.5:1 on every ground it is written on as text, and every mark that is not text is at least 3:1 on its ground
+  - evidence: test_every_ink_clears_the_floor_on_every_ground_it_lands_on passes for dark and for light
+  - test: run test_every_ink_clears_the_floor_on_every_ground_it_lands_on for dark and for light
+  - test-tags: UNIT
+  - log: 2026-10-06T21:00:12Z @kj added
+  - log: 2026-10-06T21:09:41Z @kj closed: built
+  - log: 2026-10-06T23:58:53Z @kj review round 1: failure reason, counts and conflicted paths moved from rose to error (DEF-APPR-67); focus tint removed from the render's file list (DEF-APPR-70); both pairs now in the 4.5:1 table
+- [x] `ACC-TUI-142` **Cursor chip inverts in each theme** - LOW; under the cursor an option chip takes the theme's strongest ground with the opposite ink: bright with dark ink in the dark theme, dark with light ink in the light theme; it is at least 3:1 from the chip it must be told apart from
+  - evidence: test_the_three_option_states_each_have_their_own_ground and test_the_cursor_is_told_apart_from_the_option_it_sits_on pass in both themes
+  - related: ACC-TUI-114 - light ink on the chosen chip holds in the dark theme; in the light theme the chosen chip carries dark ink
+  - overridden-by: ACC-TUI-144
+  - test: focus an option row in each theme; assert the chip grounds are cursor-picked and option-focus; measure cursor against option and cursor-picked against picked
+  - test-tags: UNIT
+  - log: 2026-10-06T21:00:12Z @kj added
+  - log: 2026-10-06T21:09:41Z @kj closed: built
+- [x] `ACC-TUI-143` **Current row is drawn in reversed colours** - MEDIUM; the row under the cursor has the opposite polarity to the form around it: a light ground with dark ink in the dark theme, a dark ground with light ink in the light theme; its ground is at least 7:1 from every band
+  - evidence: test_the_row_under_the_cursor_is_the_reverse_of_the_form passes in both themes: every current-row ground is at least 9.03:1 from every band; 428 unit tests green
+  - related: ACC-TUI-137 - still holds; 1.2:1 against the bands was not enough to see, so the row is now reversed
+  - test: focus a row in each theme; assert its background is the row-focus role, measure both current-row grounds against the four resting row grounds, compare the polarity of the row with the form
+  - test-tags: UNIT
+  - mechanism: 2026-10-06T21:21:06Z @kj each theme takes its current-row roles from the other theme: one dark row and one light row are defined once in theme.py and swapped
+  - log: 2026-10-06T21:21:06Z @kj added
+  - log: 2026-10-06T21:25:17Z @kj closed: built
+- [x] `ACC-TUI-144` **No mark beside the cursor's option** - MEDIUM; no glyph is drawn beside the option under the cursor; its chip takes the strongest ground of the current row with the opposite ink, on the answer and on an alternative alike, and is at least 3:1 from the chip of the same kind beside it
+  - evidence: test_the_cursor_shows_even_when_it_sits_on_the_answer and test_the_cursor_is_told_apart_from_the_option_it_sits_on pass in both themes; U+25FC is not painted
+  - overrides: ACC-TUI-111 - the cursor's chip says where the cursor is, with no mark
+  - overrides: ACC-TUI-126 - there is no mark left to breathe
+  - overrides: ACC-TUI-142 - the current row is reversed, so the cursor's chip is dark in the dark theme and bright in the light one
+  - test: focus a multiselect row in each theme, tick and move; assert the chip grounds are cursor, cursor-picked, option-focus and picked-focus and that U+25FC is not painted
+  - test-tags: UNIT
+  - log: 2026-10-06T21:21:06Z @kj added
+  - log: 2026-10-06T21:25:17Z @kj closed: built
+- [x] `ACC-TUI-146` **Overwrite question is asked on the render screen** - CRITICAL; a destination file that differs from the rendered one puts copier's `Overwrite <path>?` in the box over the file list, orange border; `y` overwrites, `n` keeps, every other key does nothing, Enter included; ctrl+x leaves, file kept; after a question, `y` and `n` do not close the verdict
+  - evidence: test_tui_flow.py::test_a_file_that_differs_is_asked_about_on_the_render_screen (y, n) and ::test_a_render_waiting_for_an_answer_can_still_be_left pass; the same two on a pty in test_tui_terminal.py pass; make test 448 passed
+  - related: ACC-CORE-145, ACC-TUI-81, DEF-EXEC-62
+  - related: DEF-EXEC-66
+  - test: copy tui_empty into a directory holding a different README.md on a pty; answer y, then n; then ctrl+x while asked
+  - test-tags: UNIT
+  - mechanism: 2026-10-06T22:02:47Z @kj render thread waits inside `call_from_thread` on a future the UI thread resolves on `y`/`n` and cancels on abandon
+  - log: 2026-10-06T22:02:47Z @kj added
+  - log: 2026-10-06T22:10:29Z @kj edited test-tags "UNIT, FUNCTIONAL" -> "UNIT"
+  - log: 2026-10-06T22:14:38Z @kj closed
+  - log: 2026-10-06T23:58:57Z @kj amended text "a destination file that differs from the rendered one puts copier's `Overwrite <path>?` in the box over the file list, orange border; `y` overwrites, `n` keeps, every other key does nothing, Enter included; ctrl+x leaves and the file is kept" -> "a destination file that differs from the rendered one puts copier's `Overwrite <path>?` in the box over the file list, orange border; `y` overwrites, `n` keeps, every other key does nothing, Enter included; ctrl+x leaves, file kept; after a question, `y` and `n` do not close the verdict"
+  - log: 2026-10-07T00:42:44Z @kj review round 2: both closing hints read enter closes, because any key was false for y and n after a question
+- [x] `ACC-TUI-147` **Edge: child apart from its answer** - MEDIUM; a conditional question draws a connector only when its run of rows starts directly under a question that decides it; asked for further down the form it draws none and keeps the conditional ground
+  - evidence: test_tui_appearance.py::test_a_child_apart_from_its_answer_draws_no_connector passes; make test 448 passed
+  - related: ACC-TUI-122, ACC-TUI-123, DEF-SRVY-63
+  - test: open tui_tree_tall; read the caption of endpoint, asked after owner and decided by storage
+  - test-tags: UNIT
+  - log: 2026-10-06T22:02:47Z @kj added
+  - log: 2026-10-06T22:14:38Z @kj closed
+- [x] `ACC-TUI-148` **Tree runs down a row taller than its caption** - LOW; while the tree continues below a row, the tree's line is drawn on every line of that row under its caption and across its help line, in the row's own ink; the help text keeps its column
+  - evidence: test_tui_appearance.py::test_the_tree_runs_down_a_row_taller_than_its_caption passes; make test 448 passed
+  - related: ACC-TUI-122, ACC-TUI-124
+  - test: open tui_tree_tall; read the caption column on the lines under the captions of storage and mode, with the cursor on storage and off it
+  - test-tags: UNIT
+  - mechanism: 2026-10-06T22:02:47Z @kj the head container paints the line itself, so it shows wherever no child covers it; the help line carries it as a left border
+  - log: 2026-10-06T22:02:47Z @kj added
+  - log: 2026-10-06T22:14:38Z @kj closed
+- [x] `ACC-TUI-149` **Edge: refused --data answer is asked for** - MEDIUM; a `--data` answer the template's own rule refuses gets a row with its message, at load or once a later answer makes it visible; the row stays after the user types into it; a form with only such answers opens the survey, not the review
+  - evidence: test_tui_survey.py: the three preset-answer tests pass; make test 448 passed
+  - related: ACC-TUI-44, ACC-TUI-65, ACC-CORE-150, DEF-SRVY-52
+  - test: open tui_flow with --data name=''; read the rows, press enter, type a name, press enter
+  - test-tags: UNIT
+  - mechanism: 2026-10-06T22:10:03Z @kj `askable_ids` keeps a preset that `validate()` refuses; `TemplateUI.set` clears the preset mark
+  - log: 2026-10-06T22:10:03Z @kj added
+  - log: 2026-10-06T22:14:38Z @kj closed
+  - log: 2026-10-06T23:58:53Z @kj review round 1: a refused multiselect value that is no list opens its row with nothing ticked (DEF-SRVY-69)
+- [x] `ACC-TUI-152` **Typing adds to the end of a prefilled answer** - MEDIUM; a key typed on arriving at a one-line answer lands after the answer on every row: text, path, integer, float and secret; also when another answer has just recomputed that answer
+  - evidence: test_tui_survey.py::test_typing_on_a_prefilled_answer_adds_to_its_end passes on 5 rows; make test 448 passed
+  - related: DEF-SRVY-61
+  - test: open tui_kinds; arrow to each one-line answer, type one character, read the answer
+  - test-tags: UNIT
+  - mechanism: 2026-10-06T22:10:04Z @kj `FieldRow._write_value` moves the cursor of a rewritten `WrapInput` to the end of its text
+  - log: 2026-10-06T22:10:04Z @kj added
+  - log: 2026-10-06T22:14:38Z @kj closed
+  - log: 2026-10-06T23:58:52Z @kj amended text "a key typed on arriving at a one-line answer lands after the answer on every row: text, path, integer, float and secret" -> "a key typed on arriving at a one-line answer lands after the answer on every row: text, path, integer, float and secret; also when another answer has just recomputed that answer"
+- [x] `ACC-TUI-155` **Scrollbar thumb stands out from its track** - LOW; the thumb of every scrollbar is the `subtle` role on a `chrome` track, at least 3:1 in both themes
+  - evidence: test_tui_appearance.py::test_the_scrollbar_thumb_stands_out_from_its_track passes in both themes
+  - related: ACC-TUI-141, DEF-APPR-68
+  - test: open tui_kinds in each theme; read scrollbar_color and scrollbar_background of the form and their contrast
+  - test-tags: UNIT
+  - log: 2026-10-06T23:58:43Z @kj added
+  - log: 2026-10-07T00:03:05Z @kj closed
+- [x] `ACC-TUI-159` **The survey hands over to the review once** - HIGH; a second `Confirmed` from the survey before the review is on top, or while the render runs, opens no second review; left with back, the review opens again on the next enter; two enters in one read leave the app running and the run ends with exit 0
+  - evidence: the three tests named in the test line pass; five key-timing cases on a pty end with exit 0 and the project written; make test 480 passed
+  - test: pytest tests/unit/test_tui_flow.py -k 'confirmed_twice or under_a_render'; pytest tests/unit/test_tui_terminal.py -k double_press
+  - test-tags: UNIT
+  - mechanism: 2026-10-07T15:23:49Z @kj `SurveyApp._handed_over` is set in `_open_review` and cleared in `_after_review` only when the review is left with back
+  - log: 2026-10-07T15:23:49Z @kj added
+  - log: 2026-10-07T15:28:52Z @kj closed
+  - log: 2026-10-07T15:38:03Z @kj edited text "a second `Confirmed` from the survey before the review is on top, or while the render runs, opens no second review; left with back, the review opens again on the next enter; two enters in one read leave the app running on the review" -> "a second `Confirmed` from the survey before the review is on top, or while the render runs, opens no second review; left with back, the review opens again on the next enter; two enters in one read leave the app running and the run ends with exit 0"

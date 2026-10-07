@@ -111,13 +111,16 @@ the questionnaire form: rows, captions, controls, the status line and the destin
   - log: 2026-08-29T13:28:37Z @kj edited evidence (added)
   - log: 2026-08-29T13:29:58Z @kj edited repro (added)
   - log: 2026-08-29T15:28:52Z @kj edited test-tags (added)
-- [ ] `DEF-SRVY-52` **an answer supplied with --data that fails validation deadlocks the survey** - MEDIUM; `--data` answers become presets, which are validated but never given a row, so a preset that fails validation refuses every enter with no row on screen to fix - the run can only be abandoned; found during review and NOT caused by the current work; `packages/copier-tui/src/copier_tui/screens/survey.py`
+- [x] `DEF-SRVY-52` **an answer supplied with --data that fails validation deadlocks the survey** - MEDIUM; `--data` answers become presets, which are validated but never given a row, so a preset that fails validation refuses every enter with no row on screen to fix - the run can only be abandoned; found during review and NOT caused by the current work; `packages/copier-tui/src/copier_tui/screens/survey.py`
+  - evidence: test_a_preset_answer_the_template_refuses_is_asked_for, test_a_preset_answer_another_answer_makes_wrong_is_asked_for and test_a_form_of_preset_answers_still_opens_for_the_one_refused pass; make test 448 passed
+  - root-cause: 2026-10-06T22:10:04Z @kj `validate()` checks a preset but `askable_ids` drops every preset from the form, and the app skips the survey when nothing is askable
   - test-tags: UNIT
   - repro: pass --data a value the question's validator refuses, then try to reach the review
   - log: 2026-08-27T00:00:00Z @kj added
   - log: 2026-08-27T00:00:00Z @kj left open deliberately: it predates this batch, the fix is a design question - refuse at launch the way a dirty repository is refused, or give a failing preset a row - and it is not this change's to answer
   - log: 2026-08-29T13:29:58Z @kj edited repro (added)
   - log: 2026-08-29T15:28:52Z @kj edited test-tags (added)
+  - log: 2026-10-06T22:14:30Z @kj closed
 - [x] `DEF-SRVY-54` **arriving on a failing row was recorded as engagement but nothing spoke until a later keystroke** - MEDIUM; focus added the row to the touched set with no re-render, so its error sentence unfolded on the next unrelated keystroke and moved the form under a cursor that was elsewhere; fix: a focus no longer promotes - a row speaks once it is edited or once enter is refused; `packages/copier-tui/src/copier_tui/screens/survey.py`
   - test-tags: UNIT
   - evidence: fixed in round 10 of the adversarial review, fingerprint e9b10437650a; unit suite 357 green
@@ -142,12 +145,38 @@ the questionnaire form: rows, captions, controls, the status line and the destin
   - log: 2026-08-27T00:00:00Z @kj closed: fixed in round 10 of the adversarial review, fingerprint e9b10437650a; unit suite 357 green
   - log: 2026-08-29T13:28:37Z @kj edited evidence (added)
   - log: 2026-08-29T15:28:54Z @kj edited test-tags (added)
-- [ ] `DEF-SRVY-59` **update on a clean repository with no answers file is told Template not found** - MINOR; the updatable check passes and the missing template reference then surfaces as copier's `Template not found`, where copier itself says it cannot obtain old template references and points at the answers file; deferred: a third copied string, which the check's docstring declined; `packages/copier-ui/src/copier_ui/adapter.py`
+- [x] `DEF-SRVY-59` **update on a clean repository with no answers file is told Template not found** - MINOR; the updatable check passes and the missing template reference then surfaces as copier's `Template not found`, where copier itself says it cannot obtain old template references and points at the answers file; deferred: a third copied string, which the check's docstring declined; `packages/copier-ui/src/copier_ui/adapter.py`
+  - evidence: test_edge_update_with_no_answers_file_names_the_answers_file passes: the message is copier's sentence naming .copier-answers.yml; make test 448 passed
+  - root-cause: 2026-10-06T22:10:04Z @kj `_check_updatable` stopped after two of copier's update checks; the loader then read `Worker.template`, which raises `TypeError('Template not found')` when the destination names no template
   - test-tags: UNIT
   - repro: copier-tui update in a fresh committed repo with no .copier-answers.yml
   - log: 2026-08-27T00:00:00Z @kj added
   - log: 2026-08-27T00:00:00Z @kj deferred by adjudication - a third copier string, declined by the check's own docstring
   - log: 2026-08-29T15:28:52Z @kj edited test-tags (added)
+  - log: 2026-10-06T22:14:31Z @kj closed
+- [x] `DEF-SRVY-61` **typing into a prefilled answer writes in front of it** - MAJOR; arriving by arrow on a text answer that has a default puts the caret at column 0, on every row but the first; X typed on `demo-bucket` gives `Xdemo-bucket`; present in the released 1.0.24; `widgets.py`
+  - evidence: test_typing_on_a_prefilled_answer_adds_to_its_end passes on 5 rows; test_typing_on_an_answer_another_answer_rewrote_adds_to_its_end passes for a number and a secret; make test 462 passed
+  - repro: open tests/fixtures/tui_tree, press down to bucket, type X, read the answer
+  - test-tags: UNIT
+  - root-cause: 2026-10-06T21:08:26Z @kj FieldRow.update rewrites every unfocused control through _write_value; assigning TextArea.text puts the caret at (0, 0), and WrapInput.on_mount is the only code that moves it to the end
+  - log: 2026-10-06T21:08:26Z @kj added
+  - log: 2026-10-06T22:10:29Z @kj edited test-tags "MANUAL" -> "UNIT"
+  - log: 2026-10-06T22:14:30Z @kj closed
+  - log: 2026-10-07T00:03:05Z @kj edited evidence "test_typing_on_a_prefilled_answer_adds_to_its_end passes for text, path, integer, float and secret rows; make test 448 passed" -> "test_typing_on_a_prefilled_answer_adds_to_its_end passes on 5 rows; test_typing_on_an_answer_another_answer_rewrote_adds_to_its_end passes for a number and a secret; make test 462 passed"
+- [x] `DEF-SRVY-63` **tree connector hangs a child under a row that does not decide it** - MEDIUM; a conditional question placed further down the form than its answer prints its connector under whichever row is above it; JupyterLab extension template: the five MIME questions, decided by `kind`, are drawn as children of `repository`, and `has_settings` as a child of `project_short_description`
+  - evidence: test_a_child_apart_from_its_answer_draws_no_connector passes; JupyterLab template shows 0 connectors under a row that does not decide them, of 19 rows; reference template keeps every connector in each single-answer state
+  - repro: copier-tui copy --trust https://github.com/jupyterlab/extension-template d; set kind to mimerenderer; read the rows under Git remote repository URL
+  - test-tags: UNIT
+  - root-cause: 2026-10-06T21:57:58Z @kj `survey._branch` draws a connector when the deciding question is anywhere on the form, not when the row's run starts directly under it
+  - log: 2026-10-06T21:57:58Z @kj added
+  - log: 2026-10-06T22:14:30Z @kj closed
+- [x] `DEF-SRVY-69` **a multiselect given a value that is no list ends the app in a traceback** - MINOR; `--data-file` with a number, boolean or mapping for a multiselect question: the refused answer gets a row and the option control subscripts the raw value; TypeError or KeyError, exit 2; introduced with the row for a refused answer; found by review, bug-hunter
+  - evidence: test_tui_survey.py::test_a_refused_multiselect_answer_of_the_wrong_shape_opens_its_row passes for 5, True and a mapping
+  - repro: copier-tui copy --data-file d.yml tests/fixtures/tui_kinds dst, with d.yml holding extras: 5
+  - test-tags: UNIT
+  - root-cause: 2026-10-06T23:58:42Z @kj `InlineOptions.set_options` kept a multiselect value that is not a list as it was, and `_initial_cursor` indexes it
+  - log: 2026-10-06T23:58:42Z @kj added
+  - log: 2026-10-07T00:03:05Z @kj closed
 
 ## Key handling `KEYS`
 
@@ -237,6 +266,14 @@ key bindings and how a keystroke reaches or misses its handler
   - log: 2026-08-29T13:28:37Z @kj edited evidence (added)
   - log: 2026-08-29T13:29:58Z @kj edited repro (added)
   - log: 2026-08-29T13:30:45Z @kj edited test-tags (added)
+- [x] `DEF-KEYS-81` **two enters that reach the survey together end the app** - MAJOR; survey, two presses of enter queued before the review is on top (a double press while a large template validates): each posts `Confirmed`, a second `ReviewScreen` with id `review-screen` is pushed, the app ends with `DuplicateIds`, exit 2, nothing written; same at 529714e; found by the release test gate
+  - evidence: test_tui_flow.py::test_a_survey_confirmed_twice_before_the_review_is_up_opens_one_review and ::test_a_confirmation_from_the_survey_under_a_render_opens_no_review pass; test_tui_terminal.py::test_a_double_press_of_enter_on_the_survey_leaves_the_app_running ends with exit 0 and the project written
+  - repro: pty: write two carriage returns in one write once the survey is up
+  - test-tags: UNIT
+  - root-cause: 2026-10-07T15:23:42Z @kj `SurveyApp._open_review` pushed a `ReviewScreen` for every `SurveyScreen.Confirmed`; nothing recorded that the hand-over had happened
+  - log: 2026-10-07T15:23:42Z @kj added
+  - log: 2026-10-07T15:28:52Z @kj closed
+  - log: 2026-10-07T15:38:03Z @kj edited evidence "test_tui_flow.py::test_a_survey_confirmed_twice_before_the_review_is_up_opens_one_review and ::test_a_confirmation_from_the_survey_under_a_render_opens_no_review pass; test_tui_terminal.py::test_a_double_press_of_enter_on_the_survey_opens_the_review_once passes with exit 0; make test 480 passed" -> "test_tui_flow.py::test_a_survey_confirmed_twice_before_the_review_is_up_opens_one_review and ::test_a_confirmation_from_the_survey_under_a_render_opens_no_review pass; test_tui_terminal.py::test_a_double_press_of_enter_on_the_survey_leaves_the_app_running ends with exit 0 and the project written"
 
 ## Execution screen `EXEC`
 
@@ -349,6 +386,27 @@ the render run: progress, the file log, the verdict, abandoning and closing
   - log: 2026-08-27T00:00:00Z @kj closed: fixed in round 10 of the adversarial review, fingerprint e9b10437650a; unit suite 357 green
   - log: 2026-08-29T13:28:38Z @kj edited evidence (added)
   - log: 2026-08-29T15:28:53Z @kj edited test-tags (added)
+- [x] `DEF-EXEC-62` **render never ends when a destination file differs** - CRITICAL; copier asks `Overwrite <path>?` on the terminal Textual holds; question never shown, status stays `rendering the template`, files partly written; on Python 3.14 no key leaves, ctrl+x and ctrl+c included; hits `copy` into a non-empty directory and `recopy` without `--overwrite`
+  - evidence: pty tests test_a_file_that_differs_is_asked_about_and_the_render_ends and test_a_render_waiting_for_an_answer_can_still_be_left pass; JupyterLab template v4.6.5 into a directory holding README.md, LICENSE, .gitignore asked 3 questions, exit 0; make test 448 passed
+  - repro: mkdir d; echo x > d/README.md; copier-tui copy --trust https://github.com/jupyterlab/extension-template d; answer author and repository; Create
+  - test-tags: UNIT, FUNCTIONAL
+  - root-cause: 2026-10-06T21:49:41Z @kj render thread blocks in copier `_main._solve_render_conflict` -> `questionary.confirm().unsafe_ask()`; prompt_toolkit and Textual's input thread both read descriptor 0, and the prompt is written behind the alternate screen
+  - log: 2026-10-06T21:49:41Z @kj added
+  - log: 2026-10-06T22:14:30Z @kj closed
+- [x] `DEF-EXEC-65` **copier's own question prompt waits on the terminal mid-render** - MAJOR; when copier finds a question visible and unanswered it prompts on the terminal Textual holds; render never ends, ctrl+x does not exit; reached with a typed number that changes a later `when`; found by review, bug-hunter
+  - evidence: test_ui_render.py::test_a_question_copier_asks_mid_run_stops_the_render_and_is_named passes; on a pty the case showed a failure verdict naming exact and exit 1 before the root cause was fixed
+  - repro: template: count (int), exact (when count == 3); copier-tui copy -d count=3; Create
+  - test-tags: UNIT
+  - root-cause: 2026-10-06T23:58:31Z @kj only `copier._main.confirm` was replaced for the run; `copier._main.unsafe_prompt`, the prompt `Worker._ask` uses, still read the terminal
+  - log: 2026-10-06T23:58:31Z @kj added
+  - log: 2026-10-07T00:03:05Z @kj closed
+- [x] `DEF-EXEC-66` **a surplus y or n closes the verdict** - MAJOR; the key that answers the last `Overwrite <path>?` pressed once more closes the finished run; verdict on screen 0.09 s at a held key; a failed render then leaves only exit code 1; found by review, bug-hunter and ux-designer
+  - evidence: test_tui_flow.py::test_a_file_that_differs_is_asked_about_on_the_render_screen passes for y and n with the surplus key; make test 462 passed
+  - repro: copy a template with three differing files; answer y three times, press y again
+  - test-tags: UNIT
+  - root-cause: 2026-10-06T23:58:31Z @kj `ExecutionScreen.on_key` closes a finished run on any key, and the verdict replaces the question in the same box
+  - log: 2026-10-06T23:58:31Z @kj added
+  - log: 2026-10-07T00:03:05Z @kj closed
 
 ## Appearance `APPR`
 
@@ -525,6 +583,27 @@ palette, contrast, glyphs, pulse and the width of what is painted
   - log: 2026-08-29T15:03:15Z @kj added
   - log: 2026-08-29T15:03:40Z @kj edited text
   - log: 2026-08-29T15:22:58Z @kj closed
+- [x] `DEF-APPR-67` **failure text under the text floor in the dark theme** - MAJOR; the failure reason, `failed`, the deleted and conflict counts and the conflicted paths print in `rose`: 3.50:1 on surface and 3.87:1 on chrome, floor 4.5:1; the contrast test held them as marks; found by review, three lenses
+  - evidence: test_tui_changes.py::test_what_went_wrong_is_printed_in_the_error_ink passes; error on chrome and surface is in the 4.5:1 table of test_tui_appearance.py, both themes
+  - repro: render a template whose task exits 3 in the dark theme; measure the reason in the file list
+  - test-tags: UNIT
+  - root-cause: 2026-10-06T23:58:31Z @kj five text spans in `execution.py` read the `rose` role, and `MARKS_ON` listed their two pairs at the 3:1 floor
+  - log: 2026-10-06T23:58:31Z @kj added
+  - log: 2026-10-07T00:03:05Z @kj closed
+- [x] `DEF-APPR-68` **scrollbar thumb barely differs from its track** - MAJOR; thumb on track is 2.06:1 in the dark theme and 1.72:1 in the light one, floor 3:1 for a mark; it is the one mark that says the form continues below the screen; found by review, ux-designer and bug-hunter
+  - evidence: test_tui_appearance.py::test_the_scrollbar_thumb_stands_out_from_its_track passes in both themes: subtle on chrome, 4.77:1 dark and 4.86:1 light
+  - repro: open the reference template at 100x24; measure the thumb against the track of the form
+  - test-tags: UNIT
+  - root-cause: 2026-10-06T23:58:31Z @kj the themes named neither `scrollbar` nor `scrollbar-background`, so Textual derived both from the primary and the background
+  - log: 2026-10-06T23:58:31Z @kj added
+  - log: 2026-10-07T00:03:05Z @kj closed
+- [x] `DEF-APPR-70` **file list under the text floor while the render runs** - MINOR; the written paths are 4.39:1 in the dark theme for the length of the render, floor 4.5:1; found by review, ux-designer
+  - evidence: test_tui_flow.py::test_the_file_list_keeps_its_ground_while_the_render_runs passes: the focused list carries no tint
+  - repro: start a render in the dark theme; measure a path in the file list before the verdict
+  - test-tags: UNIT
+  - root-cause: 2026-10-06T23:58:42Z @kj the list holds the focus until the verdict and Textual's `RichLog:focus` rule tints it with 5% of the foreground
+  - log: 2026-10-06T23:58:42Z @kj added
+  - log: 2026-10-07T00:03:05Z @kj closed
 
 ## Review screen `RVW`
 
@@ -582,3 +661,92 @@ the answers review before the write, and its header and warning line
   - log: 2026-08-27T00:00:00Z @kj closed: superseded: the review header no longer carries the path; the project name is in the header on every screen and is cropped from the left behind a ... marker when it does not fit
   - log: 2026-08-29T13:28:39Z @kj edited evidence (added)
   - log: 2026-08-29T15:28:54Z @kj edited test-tags (added)
+
+## copier-ui state `STATE`
+
+Defects in the display-free state engine and its copier adapter
+
+- [x] `DEF-STATE-64` **a typed answer reaches later questions as a raw string** - MAJOR; an int, float or bool answer typed in the survey or given with `--data` reaches later `when`, default and validator expressions uncast: `count == 3` is false for a typed 3, `count * 2` gives 33, `count > 2` raises; copier casts it and asks the question the survey hid
+  - evidence: test_ui_state.py: the four typed-answer tests pass; on a pty copier-tui copy -d count=3 renders 3 exact 6 and exits 0; make test 462 passed
+  - repro: template: count (int, default 3), exact (when count == 3), double (default count * 2); ui.set('count', '3'); read visible_ids and the value of double
+  - test-tags: UNIT
+  - root-cause: 2026-10-06T23:52:56Z @kj `compute_state` threads the explicit value into the next evaluation as given, and `TemplateAdapter._copier_question` puts it in copier's context uncast; copier's own `_ask` casts every answer first
+  - log: 2026-10-06T23:52:56Z @kj added
+  - log: 2026-10-07T00:03:05Z @kj closed
+  - log: 2026-10-07T00:42:44Z @kj review round 2: the adapter's cast by type double-parsed a quoted YAML default and parsed a later answer for an earlier question; replaced by one parse per supplied answer in compute_state, in declaration order
+- [x] `DEF-STATE-71` **a multiselect answer given as list text reaches later questions as text** - MINOR; `-d 'extras=[docs, ci]'`: copier reads the list, the survey handed later questions the text; `extras | length` gave 10 and `join` split it by character, on a visible default; `-d 'extras=[docs]'` hid a question copier then asked; found by review, bug-hunter
+  - evidence: test_ui_state.py::test_a_list_given_as_text_reaches_later_questions_as_a_list passes; make test 465 passed
+  - repro: template: extras (multiselect), count_line (default from extras | length and join); load with data extras='[docs, ci]'; read count_line
+  - test-tags: UNIT
+  - root-cause: 2026-10-07T00:42:44Z @kj no supplied answer was parsed before a later question read it; the round-1 cast by type did not split a multiselect's text
+  - log: 2026-10-07T00:42:44Z @kj added
+  - log: 2026-10-07T00:47:14Z @kj closed
+- [x] `DEF-STATE-72` **a supplied answer of a hidden question is read by the survey and not handed to copier** - MINOR; `-d ver=9` for a `when: false` question is dropped: copier writes 9, copier-tui writes the default; an answer typed and then hidden is still read by a later `when`, copier reads the default and the render stops; same at 529714e; 0 of 12 tried states on the reference templates
+  - evidence: test_ui_render.py::test_a_value_given_as_data_for_a_question_never_asked_reaches_copier and test_ui_state.py::test_a_question_that_left_the_form_counts_as_its_default pass; make test 470 passed
+  - related: ACC-CORE-20, ACC-CORE-33, DEF-STATE-73
+  - repro: template: name, ver (when: false, default 1); copier-tui copy -d ver=9; read the rendered file
+  - test-tags: UNIT
+  - root-cause: 2026-10-07T01:15:40Z @kj `compute_state` keeps a hidden question's supplied value in what later questions read, while `render` sends visible answers only (ACC-CORE-20) and copier uses a data value for a hidden question
+  - log: 2026-10-07T01:15:40Z @kj added
+  - log: 2026-10-07T01:15:47Z @kj left open for the product owner: review round 3 ruled that every remedy changes ACC-CORE-20 or ACC-CORE-33; one decision on what render hands to copier settles this and DEF-STATE-73
+  - log: 2026-10-07T08:15:00Z @kj closed
+- [x] `DEF-STATE-73` **a visible quoted YAML default is parsed a second time by copier at render** - MINOR; a `yaml` or `json` question with a default such as `"'3.10'"`: the survey reads the text 3.10 and hands it to copier as data, copier parses it again to 3.1; a later `when` on it differs and the render stops; same at 529714e; 0 hits in both reference templates
+  - evidence: test_ui_render.py::test_an_untouched_default_is_left_for_copier_to_work_out passes: out.txt holds the text 3.10; both real templates render trees identical to plain copier in 4 answer sets; make test 470 passed
+  - repro: template: release (yaml, default "'3.10'"), legacy (when release != '3.10'); load, render with confirm
+  - test-tags: UNIT
+  - root-cause: 2026-10-07T01:15:47Z @kj `TemplateUI.render` hands copier the value of every visible row as data, defaults included, and copier's `_ask` parses every data value
+  - log: 2026-10-07T01:15:47Z @kj added
+  - log: 2026-10-07T08:15:00Z @kj closed
+- [x] `DEF-STATE-74` **a blank answer to a question with no default failed the render** - MAJOR; a question with no `type`, or `yaml` or `json`, no default, left blank: survey and review accepted it, the render stopped with `Question "<name>" is required` and every answer was lost; 529714e rendered it; introduced with `defaults=True`, found by review round 4, ux-designer
+  - evidence: test_ui_render.py::test_a_blank_answer_to_a_question_with_no_default_is_passed_on passes; the four ui_supplied renders pass with the blank question in the fixture; make test 471 passed
+  - related: ACC-CORE-24, DEF-STATE-73
+  - repro: template: remark (help only, no type, no default); leave it blank; Create
+  - test-tags: UNIT
+  - root-cause: 2026-10-07T09:19:09Z @kj `_passed_on` left an untouched field out of the data and `render` told copier to take its defaults, and copier has no default for that question
+  - log: 2026-10-07T09:19:09Z @kj added
+  - log: 2026-10-07T09:23:34Z @kj closed
+- [-] `DEF-STATE-75` **a refused -d value for a never-asked question fails at the render, not at launch** - MINOR; `-d n=abc` for an int question with `when: false`: survey and review pass, the render ends with copier's own message and the survey answers are lost; standard copier refuses the same value with the same message before asking anything
+  - repro: template: name, n (int, when: false); copier-tui copy -d n=abc; Create
+  - test-tags: MANUAL
+  - root-cause: 2026-10-07T09:19:09Z @kj a `--data` answer of a hidden question is now passed to copier, and `validate_state` checks visible questions only (ACC-CORE-20)
+  - log: 2026-10-07T09:19:09Z @kj added
+  - log: 2026-10-07T09:19:17Z @kj rejected: accepted under the owner's rule of 2026-10-07, we do the same thing as standard copier: standard copier refuses the same value with the same message; only the moment differs, and a check at launch would be new validation for a question that has no row
+- [-] `DEF-STATE-76` **the review can show a default that copier then works out differently** - MINOR; copier works out an untouched default itself, and the form's own value differs for: a random or time-based default; a default that reads a question declared later; one that reads a `-d` key that is not a question; one that reads a hidden question with no default
+  - repro: template: port (int, default from range | random); read the port on the review, render, read the file
+  - test-tags: MANUAL
+  - root-cause: 2026-10-07T09:19:17Z @kj the survey and copier each evaluate the default, and agree only when both read the same inputs; `render` no longer passes the form's value for an untouched default
+  - log: 2026-10-07T09:19:17Z @kj added
+  - log: 2026-10-07T09:19:17Z @kj rejected: accepted by the owner 2026-10-07, in their words: we do the same thing as standard copier. The project gets the value standard copier writes; the owner was shown the three differing rows before deciding
+- [x] `DEF-STATE-77` **a default the form works out as nothing replaced copier's own default** - MAJOR; a question whose default reads a `-d` key that is not a question: the form's value is None, and None was handed to copier as an answer; copier-tui wrote `None` where standard copier writes the list; introduced by the round-4 fix, found by review round 5, three lenses
+  - evidence: test_ui_render.py::test_a_default_the_form_works_out_as_nothing_is_still_left_to_copier passes: out.txt holds [1, 2]|x; the blank-answer test still passes; make test 472 passed
+  - repro: template: conf (yaml, default from seed); copier-tui copy -d seed='[1, 2]'; Create; read the file
+  - test-tags: UNIT
+  - root-cause: 2026-10-07T09:53:25Z @kj `_passed_on` tested the value None where the property was having no default; `FieldState.is_default` was true for a question with no default
+  - log: 2026-10-07T09:53:25Z @kj added
+  - log: 2026-10-07T09:58:09Z @kj closed
+- [x] `DEF-STATE-78` **a -d key that is not a question is not read by the form** - MINOR; `-d seed=5`, `conf: {type: int, default: "{{ seed }}"}`: row `conf` disabled with `invalid literal for int() with base 10: ''`, typing does not clear it, render refused; standard copier writes 5; same for a `when` or validator reading the key; same at 529714e; review round 6
+  - evidence: test_ui_state.py::test_data_that_is_no_questions_answer_is_read_by_every_expression and ::test_the_template_reference_and_external_data_are_read_as_copier_reads_them pass; test_ui_render.py::test_data_that_is_no_questions_answer_renders_what_copier_renders: form and plain copier both write 5|d|2|abc; make test 475 passed
+  - test-tags: UNIT
+  - repro: TemplateUI.from_template(tpl, data={'seed': 5}) on a template whose `conf` default is `{{ seed }}`; ui.validate() names conf
+  - root-cause: 2026-10-07T10:52:37Z @kj `_copier_question` built the answer map from one of the sources copier's `_ask` uses; data that is no question's answer, the template metadata (`_src_path`, `_commit`) and `_external_data` never reached a default, `when`, `choices` or validator
+  - root-cause: 2026-10-07T10:32:31Z @kj `TemplateAdapter._copier_question` builds `AnswersMap(user=answers)` only; data keys that are not questions sit in `TemplateUI._extra`, reach copier at render and never reach the form's evaluation
+  - log: 2026-10-07T10:32:31Z @kj added
+  - log: 2026-10-07T10:52:42Z @kj edited test-tags added "UNIT"
+  - log: 2026-10-07T10:52:42Z @kj closed
+- [x] `DEF-STATE-79` **a help text that fails without answers refuses its row** - MINOR; `help: "Name of the project owned by {{ org.upper() }}"`, `org` an earlier question or a `-d` key: row `name` disabled with `name: 'org' is undefined`, render refused; standard copier shows the help with ACME and renders; same for a templated `placeholder` or `type`; same at 529714e; review round 7
+  - evidence: owner's decision 2026-10-07: a help text or placeholder that fails at load is left out, a templated type stays refused; test_ui_schema.py::test_a_help_text_that_fails_before_the_answers_exist_is_left_out passes, out.txt holds x|acme; make test 477 passed
+  - test-tags: UNIT
+  - repro: TemplateUI.from_template on a template with that help; ui.schema().by_id('name').load_error is set
+  - root-cause: 2026-10-07T11:20:11Z @kj `TemplateAdapter._normalise` builds caption, placeholder, type and multiline once at load against no answers; an expression that fails there becomes a load error, which disables the row and refuses the render
+  - log: 2026-10-07T11:20:11Z @kj added
+  - log: 2026-10-07T13:05:54Z @kj edited test-tags added "UNIT"
+  - log: 2026-10-07T13:05:54Z @kj closed
+- [x] `DEF-STATE-80` **an answers-file key that is no question is not read by the form** - MINOR; `recopy` or `update`, answers file holds `old_count: 7`, no question `old_count`, `new_count: {type: int, default: "{{ old_count }}"}`: row disabled with `invalid literal for int() with base 10: ''`, render refused; standard copier writes 7; `_copier_conf.data` is a second input the form lacks; same at 529714e; review round 7
+  - evidence: test_ui_state.py::test_an_answers_file_key_that_is_no_question_is_read_by_an_expression passes, recopy writes 7; `_copier_conf.data` unchanged, ruled immaterial in review round 7; make test 477 passed
+  - test-tags: UNIT
+  - repro: TemplateUI.from_template(None, dst=dst, operation='recopy') on a destination whose .copier-answers.yml holds old_count: 7; ui.validate() names new_count
+  - root-cause: 2026-10-07T11:20:15Z @kj `_copier_question` passes no `last` to `AnswersMap`; `from_template` keeps only the answers-file keys that are question names; copier's `_ask` passes every key as `last`
+  - log: 2026-10-07T11:20:15Z @kj added
+  - log: 2026-10-07T13:05:54Z @kj edited test-tags added "UNIT"
+  - log: 2026-10-07T13:05:54Z @kj closed
+

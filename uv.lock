@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 
 [manifest]
@@ -304,7 +304,7 @@ wheels = [
 
 [[package]]
 name = "copier-tui"
-version = "1.0.24"
+version = "1.0.25"
 source = { editable = "packages/copier-tui" }
 dependencies = [
     { name = "copier" },
@@ -323,7 +323,7 @@ requires-dist = [
 
 [[package]]
 name = "copier-ui"
-version = "1.0.24"
+version = "1.0.25"
 source = { editable = "packages/copier-ui" }
 dependencies = [
     { name = "copier" },

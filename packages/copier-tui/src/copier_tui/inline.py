@@ -21,49 +21,20 @@ from textual.geometry import Size
 from textual.message import Message
 from textual.widgets import Static
 
-from copier_tui.theme import (
-    CURSOR_BG,
-    CURSOR_FG,
-    CURSOR_PICKED_BG,
-    CURSOR_PICKED_FG,
-    MARK_SHADES,
-    OPTION_BG,
-    OPTION_FG,
-    PICKED_BG,
-    PICKED_FG,
-)
+from copier_tui.theme import color
 from copier_ui import Choice
 
 BOOL_CHOICES = (Choice(label="No", value=False), Choice(label="Yes", value=True))
 """A boolean is a two-option question, and reads better as one than as a toggle whose
 current state has to be inferred from which side a knob sits on."""
 
-GAP = " "
-"""One space between chips on a row that fits on one line."""
+GAP = "  "
+"""Two spaces between chips on a row that fits on one line."""
 
 TAKEN = "\u25cf"
 FREE = "\u25cb"
 """Filled and empty circle: whether an option is the answer, said in the shape as well as in
 the colour. Both measure one cell, so neither shifts the column the labels start in."""
-
-CURSOR = "\u25fc"
-"""Marks the option the cursor is on, and only while the row has the focus.
-
-A solid square that fills its cell, rather than the small triangle it started as: at one row
-per question the mark is the only thing saying where along the options the cursor stands, and
-a glyph a third the height of its cell is a mark the eye has to go looking for. A square also
-cannot be confused with the chip it sits beside, whose own mark is a circle - which rules out
-the large circle, the one shape that reads as strongly at this size.
-
-Every candidate was checked for East Asian width first. This one is N, so no terminal may draw
-it two cells wide. `\u25b6` and `\u25a0` are the obvious triangle and square and both are
-Ambiguous: a terminal set to render ambiguous characters wide gives them two cells while
-`rich.cells.cell_len` counts one, and everything after the mark lands a column out.
-
-The ground alone could not carry this. When the cursor sits on the answer - which is where it
-starts, every time - a ground says "chosen" and has nothing left to say "and you are here", so
-the two facts collapsed into one and the row stopped showing which option was about to move."""
-
 
 CHIP_FLOOR = 6
 """The least room a label is ever wrapped into. Below it the split is one character per line -
@@ -71,10 +42,9 @@ measured, a four-option row 131 lines tall, each carrying a single letter - whic
 rather than wrapping. It happens only under MIN_WIDTH, where the advisory is already up, so the
 row clips instead and the reader is being told to resize."""
 
-CHIP_CHROME = 5
-"""Cells a stacked chip spends on things that are not its label: the cursor mark, the space
-before the shape, the shape itself, the space after it, and the trailing space that closes the
-ground. Named because the wrapper and the height count both subtract it, and they must not
+CHIP_CHROME = 4
+"""Cells a stacked chip spends on things that are not its label: the space before the shape,
+the shape itself, the space after it, and the trailing space that closes the ground. Named because the wrapper and the height count both subtract it, and they must not
 disagree - which is the drift this whole mechanism exists to make impossible."""
 
 
@@ -103,13 +73,8 @@ def _wrapped(label: str, room: int) -> list[str]:
     return lines or [""]
 
 
-def _stack(
-    choices: Sequence[Choice],
-    marks: Sequence[tuple[str, str, str]],
-    width: int,
-    shade: str,
-) -> Text:
-    """Every option on its own line or lines, each chip a rectangle under its own mark.
+def _stack(choices: Sequence[Choice], marks: Sequence[tuple[str, str]], width: int) -> Text:
+    """Every option on its own line or lines, each chip a rectangle behind its own shape.
 
     The wrapping is done here rather than left to Rich, and that is the whole point. It used to
     be modelled - the height reserved by dividing a chip's width by the column's - while the
@@ -118,7 +83,7 @@ def _stack(
     glyph with its label cut off entirely. Reserving and painting from one list of lines is the
     only way they cannot drift, and it was the same drift twice before.
 
-    A continuation line is indented under its own mark and carries the chip's ground for the
+    A continuation line is indented under its own shape and carries the chip's ground for the
     full column, so a wrapped option stays one rectangle. Folded, it resumed at column zero
     with no shape glyph, which read as a further unmarked option - and a reader counts what is
     ticked by counting the filled shapes.
@@ -126,18 +91,17 @@ def _stack(
     room = width - CHIP_CHROME
     text = Text()
     first = True
-    for choice, (cursor, shape, style) in zip(choices, marks, strict=False):
+    for choice, (shape, style) in zip(choices, marks, strict=False):
         for index, line in enumerate(_wrapped(choice.label, room)):
             if not first:
                 text.append("\n")
             first = False
-            text.append(cursor if index == 0 else " ", style=f"bold {shade}")
             body = f" {shape} {line} " if index == 0 else f"   {line} "
             # padded by cells, and one cell short of the column: `str.ljust` counts characters,
             # and the shape glyph is ambiguous width, so a terminal set to render such
             # characters wide draws the chip a cell past its box. The one-line path reserves
             # the same cell per chip and says why
-            text.append(set_cell_size(body, max(width - 2, 1)), style=style)
+            text.append(set_cell_size(body, max(width - 1, 1)), style=style)
     return text
 
 
@@ -192,10 +156,9 @@ class InlineOptions(Static):
         self._multiple = multiple
         # tracked here rather than read from `has_focus`, which is a reactive Textual has not
         # finished setting when it delivers the Focus event: painting from it drew the row as
-        # though it were still blurred, so the cursor mark never appeared on arrival
+        # though it were still blurred, so the cursor's chip never appeared on arrival
         self._has_cursor = False
         self._stacked = False
-        self._mark_shade = MARK_SHADES[0]
         self.set_options(choices, value)
 
     def set_options(self, choices: Sequence[Choice], value: Any) -> None:
@@ -211,7 +174,11 @@ class InlineOptions(Static):
         self.choices = tuple(
             replace(choice, label=" ".join(choice.label.split())) for choice in choices
         )
-        self._value = list(value) if self._multiple and isinstance(value, (list, tuple)) else value
+        if self._multiple:
+            # the ticked options are a list. A value of another shape is one the template
+            # refuses - a number or a mapping from a data file - and ticks nothing
+            value = list(value) if isinstance(value, (list, tuple)) else []
+        self._value = value
         self._cursor = self._initial_cursor()
         self._paint()
 
@@ -224,7 +191,7 @@ class InlineOptions(Static):
     def value(self) -> Any:
         """The value in force: one option's value, or the list of ticked ones."""
         if self._multiple:
-            return [c.value for c in self.choices if c.value in (self._value or [])]
+            return [c.value for c in self.choices if c.value in self._value]
         return self._value
 
     def action_previous(self) -> None:
@@ -251,7 +218,7 @@ class InlineOptions(Static):
             self.post_message(self.Changed(self.value))
             return
         picked = self.choices[self._cursor].value
-        current = list(self._value or [])
+        current = list(self._value)
         if picked in current:
             current.remove(picked)
         else:
@@ -301,10 +268,10 @@ class InlineOptions(Static):
                     text.append(span, style=style)
             self.update(text)
             return
-        self.update(_stack(self.choices, self._marks(), self.size.width, self._mark_shade))
+        self.update(_stack(self.choices, self._marks(), self.size.width))
 
-    def _marks(self) -> list[tuple[str, str, str]]:
-        """Per option: the cursor mark, the shape glyph and the chip's style.
+    def _marks(self) -> list[tuple[str, str]]:
+        """Per option: the shape glyph and the chip's style.
 
         The one place a chip's colour is decided, for both the one-line and the stacked paint.
         It was decided twice, in the same four-way branch written out in both - which is the
@@ -312,35 +279,41 @@ class InlineOptions(Static):
 
         The shape already says which option is chosen, which leaves the ground free to say
         where the cursor is - two facts that hold at once, since the cursor starts on the
-        answer every time. Under the cursor the ground inverts: bright with dark ink, in the
-        cyan over the answer and in a neutral over an alternative. Nothing is dimmed out of
-        legibility: the alternatives are what the reader is deciding against.
+        answer every time. Under the cursor the chip takes the strongest ground of its row
+        and the opposite ink, in a cyan over the answer and in a neutral over an alternative.
+        That inversion is the only thing marking the option the cursor is on: a square used
+        to be drawn beside it, from when the chip under the cursor was one shade off the
+        chip beside it. Nothing is dimmed out of legibility: the alternatives are what the
+        reader is deciding against.
+
+        Both resting chips have a second pair while the row has the cursor, because that row
+        is drawn in the other theme's colours and the resting chips belong to this one.
         """
+
+        def chip(role: str) -> str:
+            return f"{color(self.app, role + '-ink')} on {color(self.app, role)}"
+
+        passed_over = chip("option-focus" if self._has_cursor else "option")
+        picked = chip("picked-focus" if self._has_cursor else "picked")
         marks = []
         for index, choice in enumerate(self.choices):
             chosen = self._in_force(choice)
             here = index == self._cursor and self._has_cursor
             if here and chosen:
-                style = f"bold {CURSOR_PICKED_FG} on {CURSOR_PICKED_BG}"
+                style = f"bold {chip('cursor-picked')}"
             elif here:
-                style = f"bold {CURSOR_FG} on {CURSOR_BG}"
+                style = f"bold {chip('cursor')}"
             elif chosen:
-                style = f"bold {PICKED_FG} on {PICKED_BG}"
+                style = f"bold {picked}"
             else:
-                style = f"{OPTION_FG} on {OPTION_BG}"
-            marks.append((CURSOR if here else " ", TAKEN if chosen else FREE, style))
+                style = passed_over
+            marks.append((TAKEN if chosen else FREE, style))
         return marks
 
     def _chip(self, index: int, choice: Choice) -> list[tuple[str, str]]:
-        """One option as painted: the cursor mark, then the chip with its shape and ground.
-
-        The mark is a separate span so it can sit on the row's own dark ground rather than on
-        the chip: a caret inside the chip has only the chip to contrast against, and the
-        brightest colour tried there managed 2.91:1.
-        """
-        cursor, shape, style = self._marks()[index]
-        mark = (cursor, f"bold {self._mark_shade}") if cursor == CURSOR else (" ", "")
-        return [mark, (f" {shape} {choice.label} ", style)]
+        """One option as painted on a single line: the chip with its shape and ground."""
+        shape, style = self._marks()[index]
+        return [(f" {shape} {choice.label} ", style)]
 
     def get_content_height(self, container: Size, viewport: Size, width: int) -> int:
         """How many lines the options need at `width`, answered before anything is painted.
@@ -388,9 +361,10 @@ class InlineOptions(Static):
         if not width:
             return True
         room = sum(cell_len(span) for spans in chips for span, _ in spans)
-        # one cell per chip for the mark inside its label, which `cell_len` under-counts on a
+        gaps = cell_len(GAP) * (len(chips) - 1)
+        # one cell per chip for the shape inside its label, which `cell_len` under-counts on a
         # terminal set to render ambiguous-width characters wide
-        return room + len(chips) - 1 + len(chips) <= width
+        return room + gaps + len(chips) <= width
 
     def on_resize(self) -> None:
         """Re-decide between one line and a stack now that the real width is known."""
@@ -399,28 +373,15 @@ class InlineOptions(Static):
     def _in_force(self, choice: Choice) -> bool:
         """Whether this option is the answer, or among them."""
         if self._multiple:
-            return choice.value in (self._value or [])
+            return choice.value in self._value
         return choice.value == self._value
 
-    def set_mark_shade(self, shade: str) -> None:
-        """Take the next colour of the row's breath, so mark and bar are never out of phase.
-
-        The row owns the beat rather than the control keeping one of its own: two things
-        breathing on separate timers drift apart, and the pair reads as two signals rather
-        than one row being answered.
-        """
-        if shade == self._mark_shade:
-            return
-        self._mark_shade = shade
-        if self._has_cursor:
-            self._paint()
-
     def on_focus(self) -> None:
-        """Repaint so the cursor mark appears."""
+        """Repaint so the chips take the current row's grounds and the cursor's chip shows."""
         self._has_cursor = True
         self._paint()
 
     def on_blur(self) -> None:
-        """Repaint so the cursor mark goes away with the focus."""
+        """Repaint so the chips rest and the cursor's chip goes away with the focus."""
         self._has_cursor = False
         self._paint()

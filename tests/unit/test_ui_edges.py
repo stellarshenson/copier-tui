@@ -185,3 +185,24 @@ def test_edge_update_on_a_destination_that_is_not_a_repository_says_so(tmp_path:
     with pytest.raises(TemplateLoadError) as refused:
         TemplateUI.from_template(None, dst=dst, operation="update")
     assert "git-tracked" in str(refused.value)
+
+
+def test_edge_update_with_no_answers_file_names_the_answers_file(tmp_path: Path) -> None:
+    """Edge: an update in a clean repository copier never rendered says what is missing.
+
+    With no answers file there is no template to update from. That came out as
+    `Template not found`, which reads as a wrong template path on a command that takes none;
+    copier's own sentence names the file it looked in.
+    """
+    dst = tmp_path / "project"
+    dst.mkdir()
+    _git(dst, "init", "-q", ".")
+    (dst / "committed.txt").write_text("done", encoding="utf-8")
+    _git(dst, "add", "-A")
+    _git(dst, "commit", "-qm", "init")
+
+    with pytest.raises(TemplateLoadError) as refused:
+        TemplateUI.from_template(None, dst=dst, operation="update")
+    assert str(refused.value) == (
+        "Cannot update because cannot obtain old template references from `.copier-answers.yml`."
+    )

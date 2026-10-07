@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Literal
 
@@ -142,6 +142,12 @@ class State:
 
     fields: Mapping[str, FieldState]
     visible_ids: tuple[str, ...]
+    # what copier starts from for each question: the answer when one is passed on to it, the
+    # default otherwise - and `parsed` is the same once copier has parsed it, which is what
+    # the questions declared after it read. `fields` holds what the form shows. Both are kept
+    # out of the repr and of `to_dict`, because they hold the secret answers too
+    given: Mapping[str, Any] = field(repr=False)
+    parsed: Mapping[str, Any] = field(repr=False)
 
     def to_dict(self) -> dict[str, Any]:
         """JSON-compatible dump with secret values replaced by None."""
@@ -167,3 +173,4 @@ class State:
 
 Evaluator = Callable[[str, Mapping[str, Any]], Evaluation]
 FieldValidator = Callable[[str, Any, Mapping[str, Any]], tuple[str, ...]]
+Parser = Callable[[str, Any, Mapping[str, Any]], Any]

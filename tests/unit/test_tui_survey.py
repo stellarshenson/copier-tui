@@ -23,7 +23,7 @@ from copier_tui.widgets import FieldRow
 from copier_ui import TemplateUI
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
-REFERENCE = Path("/home/lab/workspace/private/copier-data-science")
+REFERENCE = Path("/home/lab/workspace/private/copier-projects/copier-data-science")
 
 
 @asynccontextmanager
@@ -73,9 +73,8 @@ async def test_only_visible_askable_questions_are_shown(tmp_path: Path) -> None:
 async def test_a_plain_field_costs_exactly_one_row(tmp_path: Path) -> None:
     """Label, control and status glyph share one line, so a long survey stays short.
 
-    The caption line is measured rather than the row, because the focused row also carries
-    the blank line it keeps either side of itself - that spacing is the point of it, and
-    asserting on the row alone would call the row under the cursor a regression.
+    The caption line is measured rather than the row, because the row under the cursor also
+    carries the help it prints, and asserting on the row alone would call that a regression.
     """
     async with survey(tmp_path / "out", template="tui_kinds") as (app, _):
         for field_id in ("text", "where", "count", "ratio", "enabled", "flavour", "token"):
@@ -160,6 +159,127 @@ async def test_back_and_forward_keep_the_answer(tmp_path: Path) -> None:
         assert app.focused.id == "ctl-name"
         assert app.screen.query_one("#row-name", FieldRow).value == "zed"
         assert app.ui.state().fields["name"].value == "zed"
+
+
+async def test_a_preset_answer_the_template_refuses_is_asked_for(tmp_path: Path) -> None:
+    """A --data answer that fails the template's own rule gets a row, so it can be put right.
+
+    It was validated and never shown: enter was refused with `1 answer needs attention` and
+    no row on the form said which, so the run could only be abandoned. The row stays once
+    the answer is typed, because a row that leaves under the cursor is worse than one extra.
+    """
+    async with survey(tmp_path / "out", data={"name": ""}) as (app, pilot):
+        assert "name" in row_ids(app)
+        await pilot.press("enter")
+        await pilot.pause()
+        assert isinstance(app.screen, SurveyScreen)
+        assert app.focused.id == "ctl-name"
+        assert "name is required" in field_help(app, "name")
+
+        await pilot.press(*"zed")
+        await pilot.pause()
+        assert "name" in row_ids(app)
+        await pilot.press("enter")
+        await pilot.pause()
+        assert isinstance(app.screen, ReviewScreen)
+        assert app.ui.answers()["name"] == "zed"
+
+
+async def test_a_preset_answer_another_answer_makes_wrong_is_asked_for(tmp_path: Path) -> None:
+    """A --data answer that only fails once a later answer reveals it gets its row then.
+
+    `port` is asked for only with `use_docker` on, so 80 given with --data is not looked at
+    until the reader turns docker on in the survey.
+    """
+    async with survey(tmp_path / "out", template="ui_deps", data={"port": 80}) as (app, pilot):
+        assert "port" not in row_ids(app)
+        app.screen.query_one("#ctl-use_docker").focus()
+        await pilot.pause()
+        await pilot.press("space")
+        await pilot.pause()
+        assert app.ui.answers()["use_docker"] is True
+        assert "port" in row_ids(app)
+
+
+@pytest.mark.parametrize("value", [5, True, {"a": 1}])
+async def test_a_refused_multiselect_answer_of_the_wrong_shape_opens_its_row(
+    tmp_path: Path, value: Any
+) -> None:
+    """A data-file value that is no list, given to a multiselect, gets its row with no tick.
+
+    The refused answer is given a row, and the option control read the raw value as the list
+    of ticked options: a number ended the app in a traceback where the form should open.
+    """
+    async with survey(tmp_path / "out", template="tui_kinds", data={"extras": value}) as (app, _):
+        assert "extras" in row_ids(app)
+        assert app.screen.query_one("#ctl-extras", InlineOptions).value == []
+
+
+async def test_a_form_of_preset_answers_still_opens_for_the_one_refused(tmp_path: Path) -> None:
+    """Every answer given with --data and one of them refused: the survey opens on that one.
+
+    With nothing to ask the app goes straight to the review, and from there the render was
+    refused for an answer no screen had shown.
+    """
+    data = {"name": "", "advanced": False, "token": "t0ken"}
+    async with survey(tmp_path / "out", data=data) as (app, _):
+        assert isinstance(app.screen, SurveyScreen)
+        assert row_ids(app) == ["name"]
+
+
+@pytest.mark.parametrize(
+    ("field_id", "key", "expected"),
+    [
+        ("text", "X", "demoX"),
+        ("where", "X", "./hereX"),
+        ("count", "7", "37"),
+        ("ratio", "5", "1.55"),
+        ("token", "X", "s3cretX"),
+    ],
+)
+async def test_typing_on_a_prefilled_answer_adds_to_its_end(
+    tmp_path: Path, field_id: str, key: str, expected: str
+) -> None:
+    """A key typed on arriving at a one-line answer lands after the answer, not before it.
+
+    Every row but the one the form opened on had its caret at the first column, because the
+    form rewrites each control it does not have the cursor on and a rewritten editor starts
+    at the top left. `X` typed on `demo-bucket` gave `Xdemo-bucket`, and the first backspace
+    removed nothing.
+    """
+    async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
+        while app.focused.id != f"ctl-{field_id}":
+            await pilot.press("down")
+            await pilot.pause()
+        await pilot.press(key)
+        await pilot.pause()
+        assert str(app.screen.query_one(f"#row-{field_id}", FieldRow).value) == expected
+
+
+async def test_typing_on_an_answer_another_answer_rewrote_adds_to_its_end(tmp_path: Path) -> None:
+    """A default that another answer recomputes keeps its cursor at the end: number and secret.
+
+    An `Input` moves its cursor to the end for its first value only. Rewritten from 80 to
+    8443 the cursor stayed at 2, so `1` gave 84143; in a secret the mask hides where it went.
+    """
+    async with survey(tmp_path / "out", template="tui_rewrite") as (app, pilot):
+
+        def answer(field_id: str) -> str:
+            return str(app.screen.query_one(f"#row-{field_id}", FieldRow).value)
+
+        await pilot.press("space")
+        await pilot.pause()
+        assert answer("port") == "8443"
+        await pilot.press("down", "1")
+        await pilot.pause()
+        assert answer("port") == "84431"
+
+        await pilot.press("down", "c")
+        await pilot.pause()
+        assert answer("api_key") == "abc-key"
+        await pilot.press("down", "Z")
+        await pilot.pause()
+        assert answer("api_key") == "abc-keyZ"
 
 
 async def test_a_preset_answer_is_not_asked(tmp_path: Path) -> None:
@@ -557,7 +677,7 @@ async def test_a_form_that_fits_neither_scrolls_nor_shows_a_bar(tmp_path: Path) 
 
 
 @pytest.mark.skipif(
-    not Path("/home/lab/workspace/private/copier-data-science").is_dir(),
+    not Path("/home/lab/workspace/private/copier-projects/copier-data-science").is_dir(),
     reason="the reference template is not checked out",
 )
 async def test_a_form_too_tall_for_the_screen_still_scrolls(tmp_path: Path) -> None:

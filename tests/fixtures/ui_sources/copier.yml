@@ -1,0 +1,30 @@
+_subdirectory: template
+
+_external_data:
+    parent: parent.yml
+
+# `seed` is not a question: only a value given as data supplies it, and copier lets a default,
+# a `when` and a validator read it
+conf:
+    type: int
+    default: "{{ seed }}"
+
+gated:
+    type: str
+    default: d
+    when: "{{ seed > 3 }}"
+
+capped:
+    type: int
+    default: 2
+    validator: "{% if capped > seed %}too big{% endif %}"
+
+# the template's own reference, which copier supplies
+origin:
+    type: str
+    default: "{{ _src_path }}"
+
+# read from `parent.yml` in the destination
+owner:
+    type: str
+    default: "{{ _external_data.parent.owner }}"
