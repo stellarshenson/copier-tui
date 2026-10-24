@@ -125,7 +125,7 @@ class InlineOptions(Static):
         # `_move` commits the value on every step, so holding `down` to walk the form
         # rewrote every stacked answer it passed - twelve of twenty-three at 60 columns,
         # silently, with no way to arrow back to what had been there. `down` belongs to the
-        # form. Which keys DO answer the question is said on the row's own help line.
+        # form.
     ]
 
     DEFAULT_CSS = """

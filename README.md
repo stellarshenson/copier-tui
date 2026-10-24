@@ -63,7 +63,7 @@ The render names each file as copier writes it, asks copier's `Overwrite <path>?
 |-----|--------------|
 | `up` / `down` | move between fields, stopping at the first and the last; inside a multiline editor they move its cursor and hand focus on at its first and last line |
 | `left` / `right` | move along a question's options, taking the one they land on |
-| `space` | cycle a choice forward, or tick the option under the cursor in a multiselect; a switch is left to the arrows |
+| `space` | cycle a choice forward, or tick the option under the cursor in a multiselect - the status line names it while a multiselect has the cursor; a switch is left to the arrows |
 | `enter` | confirm the screen; inside a multiline editor it breaks the line |
 | `y` / `n` | answer copier's `Overwrite <path>?` on the render screen |
 | `esc` | go back, or cancel - on the survey it arms first and quits on a second press |

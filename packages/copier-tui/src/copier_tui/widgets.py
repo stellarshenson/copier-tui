@@ -859,12 +859,6 @@ def _help_text(question: Question, field: FieldState) -> Text:
         # footer while the cursor is here - leaving two keys on screen and both abandon the run
         move = "arrows leave the row to review"
         help = f"{help}  -  {move}" if help else move
-    elif question.kind is Kind.MULTISELECT:
-        pick = "space ticks an option"
-        help = f"{help}  -  {pick}" if help else pick
-    elif question.kind is Kind.CHOICE:
-        pick = "space cycles the answer"
-        help = f"{help}  -  {pick}" if help else pick
     # the example is what a reader needs before answering and the key names are what they need
     # while answering; both at once overflowed the two-line box from 60 to 83 columns and the
     # example - the half that was there first - was the half that got cut

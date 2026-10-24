@@ -2,6 +2,12 @@
 
 `copier-ui` and `copier-tui` share one version and are published to PyPI in lockstep, so every entry below covers both packages.
 
+## v1.0.26 (2026-10-24) - Key hints off the rows
+
+- A single-choice row no longer prints `space cycles the answer` under itself; the row shows its options, and space still cycles them
+- A multiselect row no longer prints `space ticks an option` under itself; the status line under the form shows it on its right while the cursor is on a multiselect's options, and not on a multiselect drawn as a masked field or a text editor, where space types a space. A refusal or the escape warning still takes that place while it stands
+- The test of an update outside git sets `GIT_CEILING_DIRECTORIES` through plumbum's environment, which copier's git calls read, so it passes on a machine where a directory above the temporary directory is a git repository
+
 ## v1.0.25 (2026-10-07) - Two themes, and the project standard copier writes
 
 - Two themes, `stellars-tech-dark` and `stellars-tech-light`, chosen from the terminal's background before the survey opens: `TEXTUAL_THEME` naming one of them, then the terminal's answer to an OSC 11 query, then `COLORFGBG`, then dark. Every colour is a `$st-<role>` theme variable, and every text ink holds 4.5:1 on its ground in both themes

@@ -559,6 +559,7 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
   - log: 2026-08-29T13:27:32Z @kj edited importance
   - log: 2026-08-29T13:28:31Z @kj edited test (added) and test-tags (added) and evidence (added)
 - [x] `ACC-TUI-56` **Line under the form** - MEDIUM; the line below the form is reserved, not filled - it stays blank, and carries the cancel arming warning while that is up and a count of the answers still needing attention after a refused enter; the keys are named in the footer, and a field's own help, its example and the reason its answer was refused all print under the row they concern, which is where the question is
+  - overridden-by: ACC-TUI-161-STATUSHINT
   - evidence: built - tests/unit/test_tui_survey.py (v0.6.5)
   - test-tags: UNIT
   - test: run tests/unit/test_tui_survey.py
@@ -1223,6 +1224,7 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
   - log: 2026-08-29T13:27:37Z @kj edited importance
   - log: 2026-08-29T13:28:36Z @kj edited test (added) and test-tags (added) and evidence (added)
 - [x] `ACC-TUI-131` **Every question is answerable by a key the interface names** - MEDIUM; a multiselect names `space` under itself while it has the focus, because nothing else on the screen does: the arrows walk its options without ticking any, the footer names only the keys that work everywhere, and the key legend and the command palette's key panel - the two places that used to name it - are both gone; the hint costs no row, because a row's help opens a line only while the cursor is on it
+  - overridden-by: ACC-TUI-161-STATUSHINT
   - evidence: built - see the log above
   - test-tags: UNIT
   - test: run tests/unit/test_tui_survey.py
@@ -1249,11 +1251,15 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
   - log: 2026-08-29T13:27:37Z @kj edited importance
   - log: 2026-10-06T21:25:18Z @kj closed: verified
 - [x] `ACC-TUI-134` **a switch names no key it does not need** - LOW; two options are read off the row itself, so the focused row of a bool question names no key; a multiselect still names `space` because ticking is not visible in its options, and a choice still says the key cycles them
+  - overridden-by: ACC-TUI-160-NOCYCLEHINT
+  - overridden-by: ACC-TUI-161-STATUSHINT
   - evidence: the bool branch is gone from _help_text and tests/unit/test_tui_appearance.py asserts a focused switch names no key; 366 unit tests green
   - test: focus a bool row and read its help line
   - test-tags: UNIT
   - log: 2026-08-29T13:46:16Z @kj added
   - log: 2026-08-29T13:46:23Z @kj closed
+  - log: 2026-10-24T19:06:28Z @kj overridden-by ACC-TUI-161-STATUSHINT removed - re-linked with a note naming the part it replaces
+  - log: 2026-10-24T19:06:28Z @kj overridden-by ACC-TUI-160-NOCYCLEHINT removed - re-linked with a note naming the part it replaces
 - [x] `ACC-TUI-135` **an answer box is as tall as its answer needs** - MEDIUM; a free-text answer shows every line it wraps onto - five where it wraps to five, ten where it wraps to ten - rather than a fixed three with the rest scrolled out of sight; the row grows with the answer and the form scrolls; the structured editor keeps a cap of its own, being multiline by nature and holding a document rather than a sentence; `packages/copier-tui/src/copier_tui/widgets.py`, `packages/copier-tui/src/copier_tui/theme.py`
   - evidence: test_the_answer_box_is_as_tall_as_the_answer_needs and test_a_document_answer_keeps_its_cap pass; released in 1.0.24
   - related: ACC-TUI-94 - the criterion whose three-line limit this replaces
@@ -1390,3 +1396,31 @@ Terminal renderer over `copier_ui`, built with Textual and Rich. Deliberately bo
   - log: 2026-10-07T15:23:49Z @kj added
   - log: 2026-10-07T15:28:52Z @kj closed
   - log: 2026-10-07T15:38:03Z @kj edited text "a second `Confirmed` from the survey before the review is on top, or while the render runs, opens no second review; left with back, the review opens again on the next enter; two enters in one read leave the app running on the review" -> "a second `Confirmed` from the survey before the review is on top, or while the render runs, opens no second review; left with back, the review opens again on the next enter; two enters in one read leave the app running and the run ends with exit 0"
+- [x] `ACC-TUI-160-NOCYCLEHINT` **a single-choice row names no key** - LOW; the choice row's help ended with `space cycles the answer` while the multiselect row's ends with `space ticks an option`; the single-choice row now shows only the question's own help or example and names no key, the multiselect row keeps its text, and the keys themselves are unchanged; `packages/copier-tui/src/copier_tui/widgets.py`
+  - evidence: test_tui_survey.py::test_the_same_sentence_is_never_printed_twice now asserts field_help == "" for a choice question; the multiselect branch and its text are untouched; suite 479 passed, 1 failed, that one failure reproducing identically with the source change reverted
+  - overrides: DEF-SRVY-41 - the choice row no longer names a key
+  - overrides: ACC-TUI-134 - only its choice clause: a single choice names no key
+  - overridden-by: ACC-TUI-161-STATUSHINT
+  - test: render a survey with a choice question and a multiselect question and assert the choice row's help carries no key name while the multiselect row's still does
+  - test-tags: UNIT
+  - log: 2026-10-24T17:25:43Z @kj added
+  - log: 2026-10-24T17:26:06Z @kj closed: choice row help emptied
+  - log: 2026-10-24T18:19:29Z @kj edited text "the choice row's help ended with `space cycles` while the multiselect row's ends with `space ticks an option`; the single-choice row now shows only the question's own help or example and names no key, the multiselect row keeps its text, and the keys themselves are unchanged; `packages/copier-tui/src/copier_tui/widgets.py`" -> "the choice row's help ended with `space cycles the answer` while the multiselect row's ends with `space ticks an option`; the single-choice row now shows only the question's own help or example and names no key, the multiselect row keeps its text, and the keys themselves are unchanged; `packages/copier-tui/src/copier_tui/widgets.py`"
+  - log: 2026-10-24T19:06:28Z @kj overridden-by ACC-TUI-161-STATUSHINT removed - re-linked with a note naming the part it replaces
+  - log: 2026-10-24T19:06:28Z @kj overrides ACC-TUI-134 removed - re-linked with a note naming the part it replaces
+- [x] `ACC-TUI-161-STATUSHINT` **the multiselect key hint sits in the status line** - MEDIUM; a multiselect row's help line no longer ends with `space ticks an option`; while the cursor is on a multiselect row the status line under the form shows that text on its right, and on no other row; a refusal or the escape warning takes its place while it stands; the space key is unchanged; a multiselect drawn as an editor or a masked field, where space types, does not name the key
+  - overrides: ACC-TUI-134 - only its multiselect clause: `space` is named on the status line, not under the row
+  - overrides: ACC-TUI-160-NOCYCLEHINT - only its multiselect half: the tick hint leaves the row for the status line
+  - overrides: ACC-TUI-131 - only where a multiselect names `space`: on the status line, not under the row
+  - overrides: ACC-TUI-56 - only `it stays blank`: on a multiselect row the line names the tick key
+  - overrides: DEF-SRVY-41 - only its multiselect half: the tick key is named on the status line, not on the row
+  - evidence: tests/unit/test_tui_survey.py::test_a_multiselect_names_the_key_that_ticks_an_option, ::test_the_escape_warning_gives_the_tick_key_back_when_it_lapses and ::test_a_multiselect_drawn_as_an_editor_does_not_name_the_tick_key read #survey-hint and pass; unit 482 passed, functional 9 passed (logs/functional-choice-hint-4.log)
+  - test: focus a multiselect row and read its help line and the status line, then focus a string row and read the status line
+  - test-tags: UNIT
+  - log: 2026-10-24T18:32:18Z @kj added; reason: the product owner's wording, filed verbatim
+  - log: 2026-10-24T18:50:25Z @kj closed
+  - log: 2026-10-24T19:06:28Z @kj edited evidence "tests/unit/test_tui_survey.py and tests/unit/test_tui_appearance.py assert the multiselect hint in the status line only on multiselect rows; unit 481 passed, 1 warning in 292.89s; functional 9 passed in 5.93s" -> "tests/unit/test_tui_survey.py::test_a_multiselect_names_the_key_that_ticks_an_option, ::test_the_escape_warning_gives_the_tick_key_back_when_it_lapses and ::test_a_multiselect_drawn_as_an_editor_does_not_name_the_tick_key read #survey-hint and pass; unit 481 passed, 1 warning in 292.89s; functional 9 passed in 5.93s"
+  - log: 2026-10-24T19:06:28Z @kj edited text "a multiselect row's help line no longer ends with `space ticks an option`; while the cursor is on a multiselect row the status line under the form shows that text on its right, and on no other row; a refusal or the escape warning takes its place while it stands; the space key is unchanged" -> "a multiselect row's help line no longer ends with `space ticks an option`; while the cursor is on a multiselect row the status line under the form shows that text on its right, and on no other row; a refusal or the escape warning takes its place while it stands; the space key is unchanged; a multiselect drawn as an editor or a masked field, where space types, does not name the key"; reason: the existing criterion text is kept whole and one clause is appended
+  - log: 2026-10-24T19:06:28Z @kj overrides ACC-TUI-134 removed - re-linked with a note naming the part it replaces
+  - log: 2026-10-24T19:06:28Z @kj overrides ACC-TUI-160-NOCYCLEHINT removed - re-linked with a note naming the part it replaces
+  - log: 2026-10-24T19:32:18Z @kj edited evidence "tests/unit/test_tui_survey.py::test_a_multiselect_names_the_key_that_ticks_an_option, ::test_the_escape_warning_gives_the_tick_key_back_when_it_lapses and ::test_a_multiselect_drawn_as_an_editor_does_not_name_the_tick_key read #survey-hint and pass; unit 481 passed, 1 warning in 292.89s; functional 9 passed in 5.93s" -> "tests/unit/test_tui_survey.py::test_a_multiselect_names_the_key_that_ticks_an_option, ::test_the_escape_warning_gives_the_tick_key_back_when_it_lapses and ::test_a_multiselect_drawn_as_an_editor_does_not_name_the_tick_key read #survey-hint and pass; unit 482 passed, functional 9 passed (logs/functional-choice-hint-4.log)"

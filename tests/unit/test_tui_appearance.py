@@ -702,15 +702,17 @@ async def test_the_tree_runs_down_a_row_taller_than_its_caption(tmp_path: Path) 
             painted = "".join(segment.text for segment in head.render_line(0))
             assert RAIL not in painted, f"{field_id} draws a line with nothing under it"
 
-        app.screen.set_focus(app.screen.query_one("#ctl-storage"))
+        # `mode` is the tall row that has something to print under itself: nothing is ticked,
+        # so it prints its placeholder as an example; a row with an answer has no line to cross
+        app.screen.set_focus(app.screen.query_one("#ctl-mode"))
         await pilot.pause()
-        assert set(under_caption("storage")) == {(f" {RAIL}", P["rail-focus"])}
-        crossed = by_id["storage"].query_one(".field-help", Static)
+        assert set(under_caption("mode")) == {(f" {RAIL}", P["rail-focus"])}
+        crossed = by_id["mode"].query_one(".field-help", Static)
         assert crossed.display and crossed.styles.border_left[0] == "solid"
         assert crossed.styles.border_left[1].hex.lower() == P["rail-focus"]
-        assert crossed.region.y == by_id["bucket"].region.y - 1
+        assert crossed.region.y == by_id["region"].region.y - 1
 
-        answer = app.screen.query_one("#ctl-storage")
+        answer = app.screen.query_one("#ctl-mode")
         assert crossed.content_region.x == answer.region.x, "the line moved the help text"
 
 
@@ -1022,8 +1024,8 @@ async def test_the_header_leads_with_the_project_and_ends_with_the_tool(tmp_path
 async def test_a_bool_row_names_no_key_it_does_not_need(tmp_path: Path) -> None:
     """Help: two options are read off the row itself, so naming the key that flips them is noise.
 
-    A multiselect still names `space` - ticking is not visible in its options - and a choice
-    still says the key cycles them. A switch says neither, having nothing the row does not show.
+    A multiselect's `space` is named on the status line, not on the row, as ticking is not
+    visible in its options. A switch and a single choice name no key anywhere.
     """
     async with survey(tmp_path / "out") as (app, pilot):
         row = {r.question.id: r for r in rows(app)}["advanced"]

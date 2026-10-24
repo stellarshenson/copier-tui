@@ -311,11 +311,9 @@ async def test_the_same_sentence_is_never_printed_twice(tmp_path: Path) -> None:
         await pilot.pause()
         shown = field_help(app, "flavour")
         assert app.screen.query(FieldRow).first().question.label not in shown
-        # what it does carry is the one key that answers a picking question, which the footer
-        # cannot name because it means something else on every other row. One clause, not two
-        # joined by a hyphen: the pair wrapped at the narrow sizes and left the hyphen hanging
-        # at the end of a line, reading as a subtraction
-        assert shown == "space cycles the answer", shown
+        # the caption is the whole of this question's help, so with the repeat cut there is
+        # nothing left for the row to print
+        assert shown == "", shown
 
 
 async def test_the_line_under_the_form_stays_blank_until_it_has_something_to_say(
@@ -734,24 +732,71 @@ async def test_the_cursor_stops_at_the_first_field(tmp_path: Path) -> None:
 
 
 async def test_a_multiselect_names_the_key_that_ticks_an_option(tmp_path: Path) -> None:
-    """The focused multiselect says `space` under itself; no other question does.
+    """The status line says `space` while a multiselect has the cursor; no other row does.
 
     A multiselect answers to nothing else - the arrows walk its options without ticking any of
     them - and the key was named in exactly two places, the key legend and the command
     palette's key panel, both since removed. That left a question no key the interface names
-    can answer.
+    can answer. The row's own help line is left to the question.
     """
     async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
         screen = app.screen
         screen.set_focus(screen.query_one("#ctl-extras", InlineOptions))
         await pilot.pause()
-        assert "space ticks" in field_help(app, "extras")
+        assert "space" not in field_help(app, "extras")
+        assert hint(app) == "space ticks an option"
+
+        screen.set_focus(screen.query_one("#ctl-text"))
+        await pilot.pause()
+        assert hint(app) == ""
 
         screen.set_focus(screen.query_one("#ctl-flavour", InlineOptions))
         await pilot.pause()
-        # a single choice names space too - it cycles the answer, and a reader who has just
-        # learned it on a multiselect row will try it here
-        assert "space cycles" in field_help(app, "flavour")
+        assert "space" not in field_help(app, "flavour")
+        assert hint(app) == ""
+
+
+async def test_the_escape_warning_gives_the_tick_key_back_when_it_lapses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The warning borrows the status line from a multiselect, and returns it as it found it."""
+    monkeypatch.setattr(survey_screen, "CANCEL_WINDOW", 0.5)
+    async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
+        app.screen.set_focus(app.screen.query_one("#ctl-extras", InlineOptions))
+        await pilot.pause()
+        await pilot.press("escape")
+        await pilot.pause()
+        assert hint(app) == CANCEL_HINT
+
+        await pilot.pause(0.8)
+        assert hint(app) == "space ticks an option"
+
+
+async def test_a_multiselect_drawn_as_an_editor_does_not_name_the_tick_key(
+    tmp_path: Path,
+) -> None:
+    """A multiselect that is also secret or multiline gets a masked field or an editor.
+
+    There space types a space, so the status line must not say it ticks an option.
+    """
+    (tmp_path / "template").mkdir()
+    (tmp_path / "template" / "README.md").write_text("x\n")
+    (tmp_path / "copier.yml").write_text(
+        "_subdirectory: template\n"
+        "secret_multi:\n  type: str\n  secret: true\n  multiselect: true\n  default: []\n"
+        "  choices:\n    - alpha\n    - beta\n"
+        "doc_multi:\n  type: str\n  multiline: true\n  multiselect: true\n  default: []\n"
+        "  choices:\n    - x\n    - y\n"
+    )
+    dst = tmp_path / "out"
+    with TemplateUI.from_template(str(tmp_path), dst=dst) as ui:
+        app = SurveyApp(ui, dst, {"quiet": True})
+        async with app.run_test(size=(100, 40)) as pilot:
+            await pilot.pause()
+            for field_id in ("secret_multi", "doc_multi"):
+                app.screen.set_focus(app.screen.query_one(f"#ctl-{field_id}"))
+                await pilot.pause()
+                assert hint(app) == "", field_id
 
 
 async def test_the_tick_key_still_works_where_it_is_not_named(tmp_path: Path) -> None:
@@ -778,13 +823,13 @@ async def test_help_belongs_to_the_focused_row_and_costs_the_others_nothing(
     async with survey(tmp_path / "out", template="tui_kinds") as (app, pilot):
         screen = app.screen
         rows = {row.question.id: row for row in screen.query(FieldRow)}
-        screen.set_focus(screen.query_one("#ctl-extras", InlineOptions))
+        screen.set_focus(screen.query_one("#ctl-notes", TextArea))
         await pilot.pause()
-        focused = rows["extras"].region.height
+        focused = rows["notes"].region.height
 
         screen.set_focus(screen.query_one("#ctl-flavour", InlineOptions))
         await pilot.pause()
-        assert rows["extras"].region.height < focused, (
+        assert rows["notes"].region.height < focused, (
             "the help line must close again when the cursor leaves the row"
         )
 

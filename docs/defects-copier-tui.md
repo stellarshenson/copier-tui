@@ -66,6 +66,8 @@ the questionnaire form: rows, captions, controls, the status line and the destin
   - log: 2026-08-29T13:29:57Z @kj edited repro (added)
   - log: 2026-08-29T13:30:45Z @kj edited test-tags (added)
 - [x] `DEF-SRVY-41` **two keys that answer a question were named nowhere** - MEDIUM; a stacked multiselect named the key that ticks an option and none that moves between them, so options past the first were reachable only by guessing; and `space` cycles a single choice, which a reader who has just learned it on a multiselect will try on the row below, with no warning that it changes the answer; fix: the row's help names every key that answers the question - `left right move - space ticks` and `left right choose - space cycles`; `packages/copier-tui/src/copier_tui/widgets.py`
+  - overridden-by: ACC-TUI-160-NOCYCLEHINT
+  - overridden-by: ACC-TUI-161-STATUSHINT
   - test-tags: UNIT
   - repro: focus a stacked multiselect and look for a named key that moves between its options
   - evidence: fixed; the placeholder example also came back, having been suppressed by the empty multiselect's new `none selected` reading as an answer
@@ -749,4 +751,12 @@ Defects in the display-free state engine and its copier adapter
   - log: 2026-10-07T11:20:15Z @kj added
   - log: 2026-10-07T13:05:54Z @kj edited test-tags added "UNIT"
   - log: 2026-10-07T13:05:54Z @kj closed
+- [x] `DEF-STATE-82-GITCEILING` **the not-a-repository update test fails when /tmp is a git repository** - MEDIUM; test_edge_update_on_a_destination_that_is_not_a_repository_says_so expects the not git-tracked refusal, but gets the answers-file refusal when a directory above tmp_path is a git repository.
+  - evidence: test_edge_update_on_a_destination_that_is_not_a_repository_says_so in tests/unit/test_ui_edges.py passes with /tmp a git repository; unit 481 passed, 1 warning in 292.89s; functional 9 passed in 5.93s
+  - repro: git -C /tmp init, then uv run pytest tests/unit/test_ui_edges.py
+  - test-tags: UNIT
+  - root-cause: 2026-10-24T18:39:17Z @kj copier runs git through plumbum, whose local.env is a copy of os.environ taken at import, so monkeypatch.setenv of GIT_CEILING_DIRECTORIES never reached git; git found /tmp/.git above tmp_path and counted the destination as git-tracked. The test now sets the ceiling through plumbum's scoped local.env.
+  - root-cause: 2026-10-24T18:19:27Z @kj git finds /tmp/.git above tmp_path, so the destination counts as git-tracked and the test was not hermetic.
+  - log: 2026-10-24T18:19:27Z @kj added
+  - log: 2026-10-24T18:50:25Z @kj closed
 

@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 
+from plumbum import local
 import pytest
 from ui_support import FIXTURES, load
 
@@ -182,7 +183,11 @@ def test_edge_update_on_a_destination_that_is_not_a_repository_says_so(tmp_path:
     """Edge: an update outside git is refused for that reason, not as a missing template."""
     dst = tmp_path / "loose"
     dst.mkdir()
-    with pytest.raises(TemplateLoadError) as refused:
+    # copier's git calls read plumbum's environment, and a parent of tmp_path may be a repository
+    with (
+        local.env(GIT_CEILING_DIRECTORIES=str(tmp_path)),
+        pytest.raises(TemplateLoadError) as refused,
+    ):
         TemplateUI.from_template(None, dst=dst, operation="update")
     assert "git-tracked" in str(refused.value)
 

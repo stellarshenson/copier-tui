@@ -19,10 +19,11 @@ from textual.timer import Timer
 from textual.widget import Widget
 from textual.widgets import Footer, Static, TextArea
 
+from copier_tui.inline import InlineOptions
 from copier_tui.paths import fit_path, project_name, shown_path
 from copier_tui.theme import color
 from copier_tui.widgets import BRANCH_LAST, BRANCH_MORE, HEADER_PATH_FLOOR, FieldRow, HeaderBar
-from copier_ui import State, TemplateUI
+from copier_ui import Kind, State, TemplateUI
 
 _ACTION_KEY = {
     "confirm": "enter",
@@ -44,6 +45,9 @@ _ARROW_OWNERS = (TextArea,)
 
 CANCEL_HINT = "press escape again to discard every answer and quit"
 """Shown by the first escape; a second one within the arming window quits."""
+
+TICK_HINT = "space ticks an option"
+"""Shown while the cursor is on a multiselect row, whose options do not show the key."""
 
 _WHERE_CHROME = len("destination: ")
 """What the destination line spends on things that are not the path: the word that
@@ -422,18 +426,25 @@ class SurveyScreen(Screen[None]):
         self._show_position()
 
     def _clear_hint(self) -> None:
-        """Empty the line the arming warning and the validation message are printed on.
+        """Reset the line the arming warning and the validation message are printed on.
 
         It carried a legend of every key that moves or changes something. The footer names
         those keys already, the focused row prints its own help under itself, and a line that
         never changes is one more thing between the reader and the questions - so the row is
-        kept, at its one line, and stays blank until there is something to say on it.
+        kept, at its one line, and stays blank until there is something to say on it. On a
+        multiselect row there is: the key that ticks an option, which the options do not show.
         """
         if self._armed:
             return
-        # back to the refusal if one still stands, not to blank. The cancel warning borrows
-        # this line for three seconds and has to give it back to whatever it interrupted
-        self._hint.update(self._blocked or Text(""))
+        row = self._focused_owner((FieldRow,))
+        tick = (
+            isinstance(self.focused, InlineOptions)
+            and isinstance(row, FieldRow)
+            and row.question.kind is Kind.MULTISELECT
+        )
+        # back to the refusal if one still stands, not to the resting text. The cancel warning
+        # borrows this line for three seconds and has to give it back to whatever it interrupted
+        self._hint.update(self._blocked or Text(TICK_HINT if tick else ""))
 
     def _show_position(self) -> None:
         """Say which field of how many; the header keeps the template name beside it.

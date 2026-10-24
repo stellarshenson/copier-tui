@@ -16,7 +16,9 @@ bucket:
 
 mode:
     type: str
-    default: fast
+    multiselect: true
+    default: []
+    placeholder: fast
     when: "{{ storage == 's3' }}"
     choices:
         Fast and without any checksum verification: fast
